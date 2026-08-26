@@ -766,8 +766,6 @@ function App() {
             <PageHeader
               mod={mod}
               total={filtered.length}
-              canAdd={mod.fields.length > 0}
-              onAdd={() => setModal({ mode: "create" })}
             />
 
             <section className="data-card">
@@ -976,13 +974,9 @@ function App() {
 function PageHeader({
   mod,
   total,
-  onAdd,
-  canAdd,
 }: {
   mod: (typeof modules)[string];
   total: number;
-  onAdd: () => void;
-  canAdd: boolean;
 }) {
   return (
     <section className="page-head">
@@ -992,14 +986,6 @@ function PageHeader({
         <p>
           {mod?.description} · {total} records in database
         </p>
-      </div>
-      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-        {canAdd && (
-          <button onClick={onAdd}>
-            <Plus />
-            Add Entry
-          </button>
-        )}
       </div>
     </section>
   );
