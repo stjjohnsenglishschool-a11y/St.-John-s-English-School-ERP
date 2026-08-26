@@ -1,6 +1,6 @@
 import {
+  ChangeEvent,
   FormEvent,
-  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -9,13 +9,12 @@ import {
 } from "react";
 import {
   Activity,
-  ArrowDownRight,
-  ArrowUpRight,
+  ArrowUpDown,
   Bell,
   BookOpenCheck,
-  CalendarDays,
-  Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleHelp,
   ClipboardCheck,
   Cloud,
@@ -27,10 +26,8 @@ import {
   IndianRupee,
   LayoutDashboard,
   LogIn,
-  Mail,
   Menu,
   MessageCircle,
-  MoreHorizontal,
   Plus,
   Printer,
   RefreshCw,
@@ -42,68 +39,22 @@ import {
   X,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
-import { isSupabaseConfigured, supabase } from "./lib/supabase";
+import {
+  isSupabaseConfigured,
+  logActivity,
+  supabase,
+  uploadToSupabaseStorage,
+} from "./lib/supabase";
 import { Field, label, moduleName, modules, navGroups } from "./modules";
 import IDCardStudio from "./IDCardStudio";
 import PortalLogin from "./PortalLogin";
 import ProductionDashboard from "./ProductionDashboard";
+
 type Row = Record<string, unknown>;
+
 const logo =
   "https://res.cloudinary.com/oilisvfi/image/upload/v1786000074/logo_final_frchld.jpg";
-const demo: Record<string, Row[]> = {
-  student_master: [
-    {
-      student_id: "1",
-      admission_no: "SJES-0412",
-      roll_no: "12",
-      full_name: "Aarav Sharma",
-      academic_year: "2026-27",
-      mobile_primary: "9674368297",
-      is_active: true,
-    },
-  ],
-  employee_master: [
-    {
-      emp_id: "1",
-      emp_code: "EMP-001",
-      first_name: "Ananya",
-      last_name: "Sen",
-      designation: "Principal",
-      employment_status: "Active",
-      is_active: true,
-    },
-  ],
-  fees_collection: [
-    {
-      fee_id: "1",
-      receipt_number: "RCPT-260812",
-      student_name: "Aarav Sharma",
-      amount_due: 2450,
-      amount_paid: 2450,
-      payment_mode: "UPI",
-      status: "paid",
-    },
-  ],
-  student_attendance: [
-    {
-      attendance_id: "1",
-      student_name: "Aarav Sharma",
-      attendance_date: "2026-08-19",
-      status: "present",
-    },
-  ],
-};
-function loadDemo(table: string) {
-  try {
-    return (
-      JSON.parse(localStorage.getItem(`sjes:${table}`) || "null") ||
-      demo[table] ||
-      []
-    );
-  } catch {
-    return demo[table] || [];
-  }
-}
+
 function NavGroupIcon({ name }: { name: string }) {
   switch (name) {
     case "Masters":
@@ -126,42 +77,69 @@ function NavGroupIcon({ name }: { name: string }) {
       return <Activity />;
   }
 }
+
 function parseCsv(text: string) {
   const rows: string[][] = [];
-  let row: string[] = [], cell = "", quoted = false;
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index];
     if (character === '"') {
-      if (quoted && text[index + 1] === '"') { cell += '"'; index += 1; } else quoted = !quoted;
-    } else if (character === "," && !quoted) { row.push(cell.trim()); cell = ""; }
-    else if ((character === "\n" || character === "\r") && !quoted) {
+      if (quoted && text[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === "," && !quoted) {
+      row.push(cell.trim());
+      cell = "";
+    } else if ((character === "\n" || character === "\r") && !quoted) {
       if (character === "\r" && text[index + 1] === "\n") index += 1;
-      row.push(cell.trim()); if (row.some(Boolean)) rows.push(row); row = []; cell = "";
-    } else cell += character;
+      row.push(cell.trim());
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += character;
+    }
   }
-  row.push(cell.trim()); if (row.some(Boolean)) rows.push(row);
+  row.push(cell.trim());
+  if (row.some(Boolean)) rows.push(row);
   return rows;
 }
-const normaliseCsvHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const normaliseCsvHeader = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]/g, "");
+
 function App() {
-  const [active, setActive] = useState("Overview"),
-    [navOpen, setNavOpen] = useState(""),
-    [mobile, setMobile] = useState(false),
-    [session, setSession] = useState<Session | null>(null),
-    [loginOpen, setLoginOpen] = useState(false),
-    [role, setRole] = useState("Administrator"),
-    [query, setQuery] = useState(""),
-    [rows, setRows] = useState<Row[]>([]),
-    [loading, setLoading] = useState(false),
-    [modal, setModal] = useState<{
-      mode: "create" | "edit" | "view";
-      row?: Row;
-    } | null>(null),
-    [toast, setToast] = useState("");
+  const [active, setActive] = useState("Overview");
+  const [navOpen, setNavOpen] = useState("");
+  const [mobile, setMobile] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [role, setRole] = useState("Administrator");
+  const [query, setQuery] = useState("");
+  const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [modal, setModal] = useState<{
+    mode: "create" | "edit" | "view";
+    row?: Row;
+  } | null>(null);
+  const [toast, setToast] = useState("");
   const [authReady, setAuthReady] = useState(false);
+
+  // Sorting & Pagination
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortAsc, setSortAsc] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
   const searchRef = useRef<HTMLInputElement>(null);
   const csvImportRef = useRef<HTMLInputElement>(null);
   const mod = modules[active];
+
   useEffect(() => {
     supabase?.auth.getSession().then((x) => {
       setSession(x.data.session);
@@ -173,6 +151,7 @@ function App() {
     });
     return () => sub?.data.subscription.unsubscribe();
   }, []);
+
   useEffect(() => {
     if (!session || !supabase) return;
     supabase
@@ -187,20 +166,57 @@ function App() {
         }
       });
   }, [session]);
+
   const refresh = useCallback(async () => {
-    if (!mod) return;
+    if (!mod || !supabase) {
+      setRows([]);
+      return;
+    }
     setLoading(true);
-    if (session && supabase) {
-      const req = supabase.from(mod.table).select("*").limit(200);
+    try {
+      const req = supabase
+        .from(mod.table)
+        .select("*")
+        .order(mod.primaryKey, { ascending: false })
+        .limit(1000);
       const { data, error } = await req;
-      if (error) setToast(error.message);
-      setRows(data || []);
-    } else setRows(loadDemo(mod.table));
-    setLoading(false);
-  }, [mod, session]);
+      if (error) {
+        setToast(error.message);
+        setRows([]);
+      } else {
+        setRows(data || []);
+      }
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Failed to load records");
+    } finally {
+      setLoading(false);
+    }
+  }, [mod]);
+
   useEffect(() => {
     refresh();
+    setPage(1);
   }, [refresh]);
+
+  // Realtime updates on active table
+  useEffect(() => {
+    if (!supabase || !mod) return;
+    const channel = supabase
+      .channel(`table-${mod.table}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: mod.table },
+        () => {
+          refresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [mod, refresh]);
+
   useEffect(() => {
     const focusSearch = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -211,76 +227,164 @@ function App() {
     window.addEventListener("keydown", focusSearch);
     return () => window.removeEventListener("keydown", focusSearch);
   }, []);
+
   const choose = (name: string) => {
     setActive(name);
     setNavOpen(
       name === "Overview"
         ? ""
-        : navGroups.find((group) => group.items.includes(name))?.label || "",
+        : navGroups.find((group) => group.items.includes(name))?.label || ""
     );
     setMobile(false);
     setQuery("");
+    setSortCol(null);
   };
-  const filtered = useMemo(
-    () =>
-      rows.filter((r) =>
-        JSON.stringify(r).toLowerCase().includes(query.toLowerCase()),
-      ),
-    [rows, query],
-  );
+
+  const filtered = useMemo(() => {
+    let list = rows;
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter((r) =>
+        Object.values(r).some((v) =>
+          String(v ?? "")
+            .toLowerCase()
+            .includes(q)
+        )
+      );
+    }
+    if (sortCol) {
+      list = [...list].sort((a, b) => {
+        const valA = a[sortCol];
+        const valB = b[sortCol];
+        if (valA === valB) return 0;
+        if (valA === null || valA === undefined) return sortAsc ? 1 : -1;
+        if (valB === null || valB === undefined) return sortAsc ? -1 : 1;
+        if (typeof valA === "number" && typeof valB === "number") {
+          return sortAsc ? valA - valB : valB - valA;
+        }
+        return sortAsc
+          ? String(valA).localeCompare(String(valB))
+          : String(valB).localeCompare(String(valA));
+      });
+    }
+    return list;
+  }, [rows, query, sortCol, sortAsc]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
+
+  const handleSort = (col: string) => {
+    if (sortCol === col) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortCol(col);
+      setSortAsc(true);
+    }
+  };
+
   if (isSupabaseConfigured && !authReady)
-    return <div className="auth-loading">Loading secure portal…</div>;
+    return <div className="auth-loading">Connecting to Supabase…</div>;
   if (isSupabaseConfigured && !session) return <PortalLogin />;
+
   const save = async (values: Row) => {
-    if (!mod) return;
+    if (!mod || !supabase) return;
     setLoading(true);
-    if (session && supabase) {
+    try {
       const payload: Row = Object.fromEntries(
         Object.entries(values)
           .filter(([, value]) => modal?.mode === "edit" || value !== "")
           .map(([key, value]) => [
             key,
             modal?.mode === "edit" && value === "" ? null : value,
-          ]),
+          ])
       );
-      if (mod.table === "user_master" && modal?.mode !== "edit")
+
+      if (mod.table === "user_master" && modal?.mode !== "edit") {
         payload.password = "SUPABASE_AUTH";
+      }
+
+      // Auto-generate codes if blank
+      if (mod.table === "department_master" && modal?.mode !== "edit") {
+        if (!payload.department_code || String(payload.department_code).trim() === "") {
+          const raw = String(payload.department_name || "")
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, "");
+          const abbr = raw.slice(0, 4) || "GEN";
+          payload.department_code = `DEPT-${abbr}`;
+        }
+      }
+      if (mod.table === "vendor_master" && modal?.mode !== "edit") {
+        if (!payload.vendor_code || String(payload.vendor_code).trim() === "") {
+          const raw = String(payload.vendor_name || "")
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, "");
+          payload.vendor_code = `VND-${raw.slice(0, 4) || "001"}`;
+        }
+      }
+      if (mod.table === "asset_master" && modal?.mode !== "edit") {
+        if (!payload.asset_code || String(payload.asset_code).trim() === "") {
+          const raw = String(payload.asset_name || "")
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, "");
+          payload.asset_code = `AST-${raw.slice(0, 4) || "001"}`;
+        }
+      }
+      if (mod.table === "inventory_master" && modal?.mode !== "edit") {
+        if (!payload.item_code || String(payload.item_code).trim() === "") {
+          const raw = String(payload.item_name || "")
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, "");
+          payload.item_code = `ITM-${raw.slice(0, 4) || "001"}`;
+        }
+      }
+      if (mod.table === "fees_collection" && modal?.mode !== "edit") {
+        if (!payload.receipt_number || String(payload.receipt_number).trim() === "") {
+          const todayIso = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+          const rand = Math.floor(1000 + Math.random() * 9000);
+          payload.receipt_number = `RCPT-${todayIso}-${rand}`;
+        }
+      }
+
       const rowId = modal?.row?.[mod.primaryKey];
-      const result =
-        modal?.mode === "edit" && rowId
-          ? await supabase
-              .from(mod.table)
-              .update(payload)
-              .eq(mod.primaryKey, String(rowId))
-          : await supabase.from(mod.table).insert(payload);
+      const isEdit = modal?.mode === "edit" && rowId;
+
+      const result = isEdit
+        ? await supabase
+            .from(mod.table)
+            .update(payload)
+            .eq(mod.primaryKey, String(rowId))
+        : await supabase.from(mod.table).insert(payload);
+
       if (result.error) {
         setToast(result.error.message);
         setLoading(false);
         return;
       }
-    } else {
-      const list = loadDemo(mod.table);
-      const rowId = modal?.row?.[mod.primaryKey];
-      const next =
-        modal?.mode === "edit" && rowId
-          ? list.map((r: Row) =>
-              r[mod.primaryKey] === rowId ? { ...r, ...values } : r,
-            )
-          : [
-              { [mod.primaryKey]: crypto.randomUUID(), ...values },
-              ...list,
-            ];
-      localStorage.setItem(`sjes:${mod.table}`, JSON.stringify(next));
+
+      await logActivity({
+        action: `${isEdit ? "Updated" : "Created"} record in ${mod.table}`,
+        module: mod.table,
+      });
+
+      setModal(null);
+      setToast(isEdit ? "Record updated in database" : "Record created in database");
+      await refresh();
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setLoading(false);
     }
-    setModal(null);
-    setToast(modal?.mode === "edit" ? "Record updated" : "Record created");
-    await refresh();
   };
+
   const remove = async (row: Row) => {
-    if (!mod || !confirm("Delete this record? This cannot be undone.")) return;
+    if (!mod || !supabase || !confirm("Delete this record? This will delete from Supabase."))
+      return;
     const rowId = row[mod.primaryKey];
     if (!rowId) return setToast("Record identifier is missing");
-    if (session && supabase) {
+    try {
       const { error } = await supabase
         .from(mod.table)
         .delete()
@@ -289,19 +393,17 @@ function App() {
         setToast(error.message);
         return;
       }
-    } else {
-      localStorage.setItem(
-        `sjes:${mod.table}`,
-        JSON.stringify(
-          loadDemo(mod.table).filter(
-            (r: Row) => r[mod.primaryKey] !== rowId,
-          ),
-        ),
-      );
+      await logActivity({
+        action: `Deleted record from ${mod.table} (ID: ${rowId})`,
+        module: mod.table,
+      });
+      setToast("Record deleted from database");
+      refresh();
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Delete failed");
     }
-    setToast("Record deleted");
-    refresh();
   };
+
   const exportCsv = () => {
     if (!mod) return;
     const cols = mod.columns;
@@ -311,8 +413,8 @@ function App() {
         cols.map((c) =>
           String(r[c] ?? "")
             .split('"')
-            .join('""'),
-        ),
+            .join('""')
+        )
       ),
     ]
       .map((x) => x.map((y) => `"${y}"`).join(","))
@@ -323,42 +425,100 @@ function App() {
     a.click();
     setToast("CSV downloaded");
   };
+
   const importCsv = async (file?: File) => {
-    if (!file || !mod) return;
+    if (!file || !mod || !supabase) return;
     setLoading(true);
     try {
       const [headers, ...sourceRows] = parseCsv(await file.text());
-      if (!headers || !sourceRows.length) throw new Error("Use a CSV file with a header row and at least one record.");
+      if (!headers || !sourceRows.length)
+        throw new Error(
+          "Use a CSV file with a header row and at least one record."
+        );
       const validKeys = new Map<string, string>();
-      [...mod.fields.map((field) => [field.key, field.label] as const), ...mod.columns.map((column) => [column, label(column)] as const)].forEach(([key, name]) => {
-        validKeys.set(normaliseCsvHeader(key), key); validKeys.set(normaliseCsvHeader(name), key);
+      [
+        ...mod.fields.map((field) => [field.key, field.label] as const),
+        ...mod.columns.map((column) => [column, label(column)] as const),
+      ].forEach(([key, name]) => {
+        validKeys.set(normaliseCsvHeader(key), key);
+        validKeys.set(normaliseCsvHeader(name), key);
       });
-      const mappedHeaders = headers.map((header) => validKeys.get(normaliseCsvHeader(header)) || "");
-      if (!mappedHeaders.some(Boolean)) throw new Error("The CSV headers do not match this module. Export a CSV first to use its column names.");
-      const records = sourceRows.map((source) => {
-        const record: Row = {};
-        source.forEach((value, index) => {
-          const key = mappedHeaders[index]; if (!key || value === "") return;
-          const field = mod.fields.find((item) => item.key === key);
-          record[key] = field?.type === "boolean" ? ["true", "yes", "1"].includes(value.toLowerCase()) : field?.type === "number" ? Number(value) : field?.type === "array" ? value.split(";").map((item) => item.trim()).filter(Boolean) : value;
-        }); return record;
-      }).filter((record) => Object.keys(record).length);
-      if (!records.length) throw new Error("No usable records were found in this CSV.");
-      if (session && supabase) { const { error } = await supabase.from(mod.table).insert(records); if (error) throw error; }
-      else localStorage.setItem(`sjes:${mod.table}`, JSON.stringify([...records, ...loadDemo(mod.table)]));
-      setToast(`${records.length} record${records.length === 1 ? "" : "s"} uploaded successfully`);
+      const mappedHeaders = headers.map(
+        (header) => validKeys.get(normaliseCsvHeader(header)) || ""
+      );
+      if (!mappedHeaders.some(Boolean))
+        throw new Error(
+          "The CSV headers do not match this module. Export a CSV first to check column names."
+        );
+      const records = sourceRows
+        .map((source) => {
+          const record: Row = {};
+          source.forEach((value, index) => {
+            const key = mappedHeaders[index];
+            if (!key || value === "") return;
+            const field = mod.fields.find((item) => item.key === key);
+            record[key] =
+              field?.type === "boolean"
+                ? ["true", "yes", "1"].includes(value.toLowerCase())
+                : field?.type === "number"
+                ? Number(value)
+                : field?.type === "array"
+                ? value
+                    .split(";")
+                    .map((item) => item.trim())
+                    .filter(Boolean)
+                : value;
+          });
+          return record;
+        })
+        .filter((record) => Object.keys(record).length);
+
+      if (!records.length)
+        throw new Error("No usable records were found in this CSV.");
+
+      const { error } = await supabase.from(mod.table).insert(records);
+      if (error) throw error;
+
+      await logActivity({
+        action: `Imported ${records.length} records into ${mod.table} via CSV`,
+        module: mod.table,
+      });
+
+      setToast(
+        `${records.length} record${
+          records.length === 1 ? "" : "s"
+        } imported to Supabase successfully`
+      );
       await refresh();
-    } catch (error) { setToast(error instanceof Error ? error.message : "CSV upload failed"); }
-    finally { setLoading(false); }
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "CSV import failed");
+    } finally {
+      setLoading(false);
+    }
   };
+
   return (
     <div className="app">
-      <input className="csv-upload-input" ref={csvImportRef} type="file" accept=".csv,text/csv" onChange={(event) => { void importCsv(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+      <input
+        className="csv-upload-input"
+        ref={csvImportRef}
+        type="file"
+        accept=".csv,text/csv"
+        style={{ display: "none" }}
+        onChange={(event) => {
+          void importCsv(event.target.files?.[0]);
+          event.currentTarget.value = "";
+        }}
+      />
       <header className="masthead">
-        <button className="mobile-trigger" onClick={() => setMobile(!mobile)} aria-label="Open navigation">
+        <button
+          className="mobile-trigger"
+          onClick={() => setMobile(!mobile)}
+          aria-label="Open navigation"
+        >
           <Menu />
         </button>
-        <div className="identity">
+        <div className="identity" onClick={() => choose("Overview")} style={{ cursor: "pointer" }}>
           <img src={logo} alt="St. John's English School" />
           <div>
             <b>ST. JOHN'S</b>
@@ -371,182 +531,294 @@ function App() {
             ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search the current workspace..."
+            placeholder="Search active records across all fields... (Ctrl+K)"
           />
           <kbd>Ctrl K</kbd>
         </div>
         <div className="head-actions">
-          <a href="https://wa.me/919674368297" aria-label="Contact school on WhatsApp" title="WhatsApp">
+          <a
+            href="https://wa.me/919674368297"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Contact school on WhatsApp"
+            title="WhatsApp Support"
+          >
             <MessageCircle />
           </a>
-          <button aria-label="Notifications" title="Notifications">
+          <button
+            aria-label="Audit Activity Log"
+            title="Activity Log"
+            onClick={() => choose("userlog_master")}
+          >
             <Bell />
             <i />
           </button>
           <button className="user-chip" onClick={() => setLoginOpen(true)}>
             <span>
-              {session ? session.user.email?.slice(0, 2).toUpperCase() : "AM"}
+              {session?.user?.email?.slice(0, 2).toUpperCase() || "AM"}
             </span>
             <div>
-              <b>{session?.user.user_metadata.full_name || "School Administrator"}</b>
+              <b>
+                {session?.user?.user_metadata?.full_name ||
+                  session?.user?.email ||
+                  "Administrator"}
+              </b>
               <small>{role}</small>
             </div>
             <ChevronDown />
           </button>
         </div>
       </header>
-      {mobile && <button className="sidebar-backdrop" onClick={() => setMobile(false)} aria-label="Close navigation" />}
-      <nav className={mobile ? "sidebar show" : "sidebar"} aria-label="ERP navigation">
+
+      {mobile && (
+        <button
+          className="sidebar-backdrop"
+          onClick={() => setMobile(false)}
+          aria-label="Close navigation"
+        />
+      )}
+
+      <nav
+        className={mobile ? "sidebar show" : "sidebar"}
+        aria-label="ERP navigation"
+      >
         <div className="sidebar-heading">
-          <span>MAIN MENU</span>
-          <button onClick={() => setMobile(false)} aria-label="Close navigation"><X /></button>
+          <span>MAIN NAVIGATION</span>
+          <button onClick={() => setMobile(false)} aria-label="Close navigation">
+            <X />
+          </button>
         </div>
         <div className="sidebar-menu">
           <button
             className={`sidebar-link ${active === "Overview" ? "active" : ""}`}
             onClick={() => choose("Overview")}
           >
-            <span className="sidebar-icon"><LayoutDashboard /></span>
-            <span>Overview</span>
+            <span className="sidebar-icon">
+              <LayoutDashboard />
+            </span>
+            <span>Dashboard</span>
           </button>
           {navGroups.slice(1).map((g) => {
             const open = navOpen === g.label;
             const groupActive = g.items.includes(active);
-            return <div className={`side-group ${open ? "open" : ""}`} data-group={g.label} key={g.label}>
-              <button
-                className={`side-group-button ${groupActive ? "active" : ""}`}
-                onClick={() => setNavOpen(open ? "" : g.label)}
-                aria-expanded={open}
+            return (
+              <div
+                className={`side-group ${open ? "open" : ""}`}
+                data-group={g.label}
+                key={g.label}
               >
-                <span className="sidebar-icon"><NavGroupIcon name={g.label} /></span>
-                <span>{g.label}</span>
-                <ChevronDown className="side-chevron" />
-              </button>
-              {open && <div className="side-submenu">
-                {g.items.map((item) => (
-                  <button className={active === item ? "active" : ""} key={item} onClick={() => choose(item)}>
-                    <i />
-                    <span>{moduleName(item)}</span>
-                  </button>
-                ))}
-              </div>}
-            </div>;
+                <button
+                  className={`side-group-button ${groupActive ? "active" : ""}`}
+                  onClick={() => setNavOpen(open ? "" : g.label)}
+                  aria-expanded={open}
+                >
+                  <span className="sidebar-icon">
+                    <NavGroupIcon name={g.label} />
+                  </span>
+                  <span>{g.label}</span>
+                  <ChevronDown className="side-chevron" />
+                </button>
+                {open && (
+                  <div className="side-submenu">
+                    {g.items.map((item) => (
+                      <button
+                        className={active === item ? "active" : ""}
+                        key={item}
+                        onClick={() => choose(item)}
+                      >
+                        <i />
+                        <span>{moduleName(item)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
           })}
         </div>
-        <button className="sidebar-help" onClick={() => window.open("https://wa.me/919674368297", "_blank")}>
+        <button
+          className="sidebar-help"
+          onClick={() => window.open("https://wa.me/919674368297", "_blank")}
+        >
           <CircleHelp />
-          <span><b>Need help?</b><small>Contact school support</small></span>
+          <span>
+            <b>Need help?</b>
+            <small>Contact school technical team</small>
+          </span>
         </button>
       </nav>
+
       <div className="contextbar">
         <div className="crumb">
-          <span>St. John's ERP</span>
+          <span>St. John's English School</span>
           <b>/</b>
-          <strong>{active === "Overview" ? active : moduleName(active)}</strong>
+          <strong>{active === "Overview" ? "Dashboard" : moduleName(active)}</strong>
         </div>
         <div>
-          <span className={isSupabaseConfigured ? "live" : "preview"}>
-            <i />
-            {isSupabaseConfigured ? "Supabase connected" : "Preview mode"}
-          </span>
-          <button>
-            <CalendarDays />
-            2026–27
-            <ChevronDown />
+          <button onClick={refresh} title="Refresh from database">
+            <RefreshCw className={loading ? "spin" : ""} />
+            <span>Sync</span>
           </button>
+          <span className="live">
+            <i />
+            Live Supabase
+          </span>
         </div>
       </div>
+
       <main>
         {active === "Overview" ? (
           <ProductionDashboard choose={choose} />
-        ) : active === "student_idcard" ? (
-          <>
-            <PageHeader
-              mod={mod}
-              total={rows.length}
-              onAdd={() => {}}
-              canAdd={false}
-            />
-            <IDCardStudio setToast={setToast} onUploadCsv={() => csvImportRef.current?.click()} />
-          </>
+        ) : active === "student_idcard" || active === "teacher_idcard" ? (
+          <IDCardStudio
+            setToast={setToast}
+            onUploadCsv={() => csvImportRef.current?.click()}
+          />
         ) : (
           <>
             <PageHeader
               mod={mod}
-              total={rows.length}
+              total={filtered.length}
+              canAdd={mod.fields.length > 0}
               onAdd={() => setModal({ mode: "create" })}
-              canAdd={Boolean(mod?.fields.length)}
             />
-            <div className="stats-strip">
-              <Stat
-                label="Total records"
-                value={String(rows.length)}
-                change="Live"
-                tone="amber"
-                icon={<FileBarChart />}
-              />
-              <Stat
-                label="Visible results"
-                value={String(filtered.length)}
-                change="Filtered"
-                tone="green"
-                icon={<Search />}
-              />
-              <Stat
-                label="Data source"
-                value={session ? "Supabase" : "Preview"}
-                change={session ? "Synced" : "Local"}
-                tone="blue"
-                icon={<Cloud />}
-              />
-              <Stat label="Last refresh" value="Just now" change="Current" tone="violet" icon={<RefreshCw />} />
-            </div>
+
             <section className="data-card">
               <div className="toolbar">
                 <div className="table-search">
                   <Search />
                   <input
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder={`Search ${moduleName(mod.table).toLowerCase()}...`}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder={`Filter ${moduleName(mod.table)}... (${filtered.length} records)`}
                   />
                 </div>
-                <button onClick={refresh}>
-                  <RefreshCw />
-                  Refresh
-                </button>
-                <button onClick={exportCsv}>
+                <button onClick={exportCsv} title="Export current rows to CSV">
                   <Download />
-                  Export
+                  Export CSV
                 </button>
-                <button onClick={() => csvImportRef.current?.click()}>
-                  <Upload />
-                  Upload CSV
-                </button>
-                <button onClick={() => window.print()}>
-                  <Printer />
-                  Print
-                </button>
+                {mod.fields.length > 0 && (
+                  <button
+                    onClick={() => csvImportRef.current?.click()}
+                    title="Import records from CSV"
+                  >
+                    <Upload />
+                    Import CSV
+                  </button>
+                )}
+                {mod.fields.length > 0 && (
+                  <button
+                    onClick={() => setModal({ mode: "create" })}
+                    style={{
+                      background: "var(--blue)",
+                      color: "#fff",
+                      border: "none",
+                    }}
+                  >
+                    <Plus />
+                    Add Record
+                  </button>
+                )}
               </div>
+
               <DataTable
                 mod={mod}
-                rows={filtered}
+                rows={paginatedRows}
                 loading={loading}
-                view={(r) => setModal({ mode: "view", row: r })}
-                edit={(r) => setModal({ mode: "edit", row: r })}
+                sortCol={sortCol}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+                view={(row) => setModal({ mode: "view", row })}
+                edit={(row) => setModal({ mode: "edit", row })}
                 remove={remove}
               />
+
+              {/* Pagination Controls */}
+              {filtered.length > 0 && (
+                <div
+                  style={{
+                    padding: "12px 16px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    borderTop: "1px solid var(--line)",
+                    background: "#fbfcfe",
+                    fontSize: "12px",
+                    color: "var(--muted)",
+                  }}
+                >
+                  <div>
+                    Showing{" "}
+                    <b>
+                      {(page - 1) * pageSize + 1}–
+                      {Math.min(page * pageSize, filtered.length)}
+                    </b>{" "}
+                    of <b>{filtered.length}</b> records
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      Rows:
+                      <select
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value));
+                          setPage(1);
+                        }}
+                        style={{
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          border: "1px solid #d8e1eb",
+                        }}
+                      >
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                      </select>
+                    </label>
+                    <div style={{ display: "flex", gap: "4px" }}>
+                      <button
+                        disabled={page <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid #d8e1eb",
+                          background: page <= 1 ? "#f5f7fa" : "#fff",
+                          cursor: page <= 1 ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      <span style={{ padding: "4px 8px", fontWeight: 700 }}>
+                        {page} / {totalPages}
+                      </span>
+                      <button
+                        disabled={page >= totalPages}
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid #d8e1eb",
+                          background: page >= totalPages ? "#f5f7fa" : "#fff",
+                          cursor: page >= totalPages ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
           </>
         )}
-        <footer>
-          <span>
-            © 2026 St. John's English School · Dankuni, Hooghly 712311
-          </span>
-          <span>Privacy · Security · Support</span>
-        </footer>
       </main>
-      {modal && mod && (
+
+      {modal && (
         <RecordModal
           mode={modal.mode}
           mod={mod}
@@ -554,18 +826,19 @@ function App() {
           close={() => setModal(null)}
           save={save}
         />
-      )}{" "}
+      )}
+
       {loginOpen && (
         <Login
           close={() => setLoginOpen(false)}
           session={session}
           setToast={setToast}
         />
-      )}{" "}
+      )}
+
       {toast && (
         <div className="toast">
-          <Check />
-          {toast}
+          <span>{toast}</span>
           <button onClick={() => setToast("")}>
             <X />
           </button>
@@ -574,164 +847,7 @@ function App() {
     </div>
   );
 }
-function Dashboard({ choose }: { choose: (x: string) => void }) {
-  return (
-    <>
-      <section className="hero">
-        <div>
-          <span className="overline">WEDNESDAY · 19 AUGUST 2026</span>
-          <h1>Good morning, Ananya.</h1>
-          <p>
-            Your school is running smoothly. Here’s what needs your attention
-            today.
-          </p>
-        </div>
-        <button onClick={() => choose("New Admission")}>
-          <Plus />
-          Quick create
-          <ChevronDown />
-        </button>
-      </section>
-      <section className="kpi-grid">
-        <Kpi
-          icon={<GraduationCap />}
-          title="Total students"
-          value="1,248"
-          delta="4.2%"
-          positive
-        />
-        <Kpi
-          icon={<ClipboardCheck />}
-          title="Attendance today"
-          value="93.8%"
-          delta="1.6%"
-          positive
-        />
-        <Kpi
-          icon={<IndianRupee />}
-          title="Fees collected"
-          value="₹8.42L"
-          delta="₹3.26L due"
-        />
-        <Kpi
-          icon={<Users />}
-          title="Staff present"
-          value="59/64"
-          delta="5 on leave"
-        />
-      </section>
-      <section className="dash-grid">
-        <div className="visual-card wide">
-          <CardHead title="Attendance overview" note="Last 30 school days" />
-          <div className="chart-area">
-            <div className="chart-number">
-              <b>93.8%</b>
-              <span>
-                <ArrowUpRight />
-                1.6% vs last month
-              </span>
-            </div>
-            <svg viewBox="0 0 700 170" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stopColor="#2463eb" stopOpacity=".24" />
-                  <stop offset="1" stopColor="#2463eb" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path
-                className="area"
-                d="M0 105 C45 90 60 115 105 91 S175 73 215 86 S280 112 325 79 S390 63 435 72 S510 96 550 59 S625 44 700 35 L700 170 L0 170Z"
-              />
-              <path
-                className="line"
-                d="M0 105 C45 90 60 115 105 91 S175 73 215 86 S280 112 325 79 S390 63 435 72 S510 96 550 59 S625 44 700 35"
-              />
-            </svg>
-            <div className="chart-days">
-              <span>1 Aug</span>
-              <span>5 Aug</span>
-              <span>9 Aug</span>
-              <span>13 Aug</span>
-              <span>17 Aug</span>
-              <span>Today</span>
-            </div>
-          </div>
-        </div>
-        <div className="visual-card">
-          <CardHead title="Fee collection" note="August 2026" />
-          <div className="donut-wrap">
-            <div className="donut">
-              <span>
-                <b>72%</b>
-                <small>Collected</small>
-              </span>
-            </div>
-            <div className="legend">
-              <p>
-                <i className="blue" />
-                Collected <b>₹8.42L</b>
-              </p>
-              <p>
-                <i className="gold" />
-                Outstanding <b>₹3.26L</b>
-              </p>
-              <p>
-                <i className="pale" />
-                Concession <b>₹0.48L</b>
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="visual-card">
-          <CardHead title="Quick actions" note="Common workflows" />
-          <div className="action-grid">
-            {[
-              ["New Admission", UserRoundCheck],
-              ["student_attendance", ClipboardCheck],
-              ["fees_collection", IndianRupee],
-              ["Marks Entry", BookOpenCheck],
-              ["Email & Gmail", Mail],
-              ["Reports", FileBarChart],
-            ].map(([x, I]) => (
-              <button key={x as string} onClick={() => choose(x as string)}>
-                <I />
-                <span>{x as string}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="visual-card wide">
-          <CardHead title="Recent activity" note="Across your school" />
-          <div className="activity-list">
-            {[
-              ["Admission", "New application from Riya Ghosh", "2 min ago"],
-              ["Payment", "₹2,450 received from Aarav Sharma", "18 min ago"],
-              ["Attendance", "Class VIII-A attendance completed", "34 min ago"],
-              [
-                "Results",
-                "Unit Test marks published for Class VII",
-                "1 hr ago",
-              ],
-            ].map((x, i) => (
-              <div key={x[1]}>
-                <span className={`act a${i}`}>
-                  <Activity />
-                </span>
-                <p>
-                  <b>{x[0]}</b>
-                  {x[1]}
-                </p>
-                <small>{x[2]}</small>
-                <MoreHorizontal />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    </>
-  );
-}
-void Dashboard;
+
 function PageHeader({
   mod,
   total,
@@ -749,7 +865,7 @@ function PageHeader({
         <span className="overline">{mod?.group?.toUpperCase()} WORKSPACE</span>
         <h1>{moduleName(mod.table)}</h1>
         <p>
-          {mod?.description} · {total} records
+          {mod?.description} · {total} records in database
         </p>
       </div>
       {canAdd && (
@@ -761,78 +877,14 @@ function PageHeader({
     </section>
   );
 }
-function Stat({
-  label: txt,
-  value,
-  change,
-  tone,
-  icon,
-}: {
-  label: string;
-  value: string;
-  change: string;
-  tone: "amber" | "green" | "blue" | "violet";
-  icon: ReactNode;
-}) {
-  return (
-    <div className={`stat-card ${tone}`}>
-      <span className="stat-icon">{icon}</span>
-      <span className="stat-copy">
-        <span>{txt}</span>
-        <b>{value}</b>
-        <small>{change}</small>
-      </span>
-      <svg className="stat-spark" viewBox="0 0 54 28" aria-hidden="true">
-        <path d="M2 24c8 0 10-18 18-13s8 10 15 5 9-12 17-14" />
-      </svg>
-    </div>
-  );
-}
-function Kpi({
-  icon,
-  title,
-  value,
-  delta,
-  positive,
-}: {
-  icon: ReactNode;
-  title: string;
-  value: string;
-  delta: string;
-  positive?: boolean;
-}) {
-  return (
-    <div className="kpi">
-      <span className="kpi-icon">{icon}</span>
-      <div>
-        <small>{title}</small>
-        <b>{value}</b>
-        <em className={positive ? "up" : ""}>
-          {positive ? <ArrowUpRight /> : <ArrowDownRight />}
-          {delta}
-        </em>
-      </div>
-      <MoreHorizontal />
-    </div>
-  );
-}
-function CardHead({ title, note }: { title: string; note: string }) {
-  return (
-    <div className="card-head">
-      <div>
-        <h2>{title}</h2>
-        <p>{note}</p>
-      </div>
-      <button>
-        <MoreHorizontal />
-      </button>
-    </div>
-  );
-}
+
 function DataTable({
   mod,
   rows,
   loading,
+  sortCol,
+  sortAsc,
+  onSort,
   view,
   edit,
   remove,
@@ -840,6 +892,9 @@ function DataTable({
   mod: (typeof modules)[string];
   rows: Row[];
   loading: boolean;
+  sortCol: string | null;
+  sortAsc: boolean;
+  onSort: (col: string) => void;
   view: (r: Row) => void;
   edit: (r: Row) => void;
   remove: (r: Row) => void;
@@ -848,26 +903,44 @@ function DataTable({
     return (
       <div className="empty">
         <RefreshCw className="spin" />
-        Loading records...
+        <h3>Loading from Supabase...</h3>
+        <p>Querying real-time database records.</p>
       </div>
     );
   if (!rows.length)
     return (
       <div className="empty">
         <Cloud />
-        <h3>No records yet</h3>
-        <p>Create the first record or adjust your search.</p>
+        <h3>No records found</h3>
+        <p>There are no rows in this table yet. Click "Add record" or import a CSV to get started.</p>
       </div>
     );
+
   return (
     <div className="table-wrap">
       <table>
         <thead>
           <tr>
             {mod.columns.map((c) => (
-              <th key={c}>{label(c)}</th>
+              <th
+                key={c}
+                onClick={() => onSort(c)}
+                style={{ cursor: "pointer", userSelect: "none" }}
+                title={`Sort by ${label(c)}`}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                  <span>{label(c)}</span>
+                  <ArrowUpDown
+                    size={12}
+                    style={{
+                      opacity: sortCol === c ? 1 : 0.3,
+                      color: sortCol === c ? "var(--blue)" : "inherit",
+                    }}
+                  />
+                </div>
+              </th>
             ))}
-            <th>Actions</th>
+            <th style={{ width: "110px", textAlign: "right" }}>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -876,22 +949,80 @@ function DataTable({
               {mod.columns.map((c) => (
                 <td key={c}>
                   {c.includes("status") || c === "is_active" ? (
-                    <span className="status">
-                      <i />
-                      {String(r[c] ?? "Active")}
+                    <span
+                      className="status"
+                      style={{
+                        background:
+                          String(r[c]) === "false" ||
+                          String(r[c]).toLowerCase() === "absent" ||
+                          String(r[c]).toLowerCase() === "rejected" ||
+                          String(r[c]).toLowerCase() === "cancelled"
+                            ? "#fff0f0"
+                            : String(r[c]).toLowerCase() === "pending" ||
+                              String(r[c]).toLowerCase() === "partial" ||
+                              String(r[c]).toLowerCase() === "draft"
+                            ? "#fff7e6"
+                            : "#e9f8f1",
+                        color:
+                          String(r[c]) === "false" ||
+                          String(r[c]).toLowerCase() === "absent" ||
+                          String(r[c]).toLowerCase() === "rejected" ||
+                          String(r[c]).toLowerCase() === "cancelled"
+                            ? "#c44558"
+                            : String(r[c]).toLowerCase() === "pending" ||
+                              String(r[c]).toLowerCase() === "partial" ||
+                              String(r[c]).toLowerCase() === "draft"
+                            ? "#b5731c"
+                            : "#187454",
+                      }}
+                    >
+                      <i
+                        style={{
+                          background:
+                            String(r[c]) === "false" ||
+                            String(r[c]).toLowerCase() === "absent"
+                              ? "#c44558"
+                              : String(r[c]).toLowerCase() === "pending"
+                              ? "#b5731c"
+                              : "#1fa472",
+                        }}
+                      />
+                      {String(r[c] ?? (c === "is_active" ? "Active" : "—"))}
                     </span>
+                  ) : c.includes("amount") ||
+                    c.includes("salary") ||
+                    c.includes("price") ||
+                    c.includes("cost") ? (
+                    typeof r[c] === "number" ? (
+                      `₹${Number(r[c]).toLocaleString("en-IN")}`
+                    ) : (
+                      String(r[c] ?? "—")
+                    )
+                  ) : c.includes("photo_url") || c.includes("file_url") ? (
+                    r[c] ? (
+                      <a
+                        href={String(r[c])}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: "var(--blue)", textDecoration: "underline" }}
+                      >
+                        View Attachment
+                      </a>
+                    ) : (
+                      "—"
+                    )
                   ) : (
                     String(r[c] ?? "—")
                   )}
                 </td>
               ))}
               <td>
-                <div className="row-actions">
-                  <button onClick={() => view(r)} title="View">
+                <div className="row-actions" style={{ justifyContent: "flex-end" }}>
+                  <button onClick={() => view(r)} title="View details">
                     <Eye />
                   </button>
                   {mod.fields.length > 0 && (
-                    <button onClick={() => edit(r)} title="Edit">
+                    <button onClick={() => edit(r)} title="Edit record">
                       <Edit3 />
                     </button>
                   )}
@@ -899,7 +1030,7 @@ function DataTable({
                     <button
                       className="danger"
                       onClick={() => remove(r)}
-                      title="Delete"
+                      title="Delete record"
                     >
                       <Trash2 />
                     </button>
@@ -913,6 +1044,7 @@ function DataTable({
     </div>
   );
 }
+
 function RecordModal({
   mode,
   mod,
@@ -932,13 +1064,104 @@ function RecordModal({
         x.key,
         row?.[x.key] ??
           (x.type === "boolean" ? true : x.type === "array" ? [] : ""),
-      ]),
-    ),
+      ])
+    )
   );
+
+  // Business logic auto calculations
+  const updateField = (key: string, v: unknown) => {
+    setValues((prev) => {
+      const next = { ...prev, [key]: v };
+
+      // Department Code auto generator
+      if (mod.table === "department_master" && key === "department_name" && mode === "create") {
+        const raw = String(v || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+        if (raw.length > 0) {
+          next.department_code = `DEPT-${raw.slice(0, 4)}`;
+        }
+      }
+
+      // Vendor Code auto generator
+      if (mod.table === "vendor_master" && key === "vendor_name" && mode === "create") {
+        const raw = String(v || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+        if (raw.length > 0) {
+          next.vendor_code = `VND-${raw.slice(0, 4)}`;
+        }
+      }
+
+      // Salary slip auto calculation: Gross, Deductions, Net
+      if (mod.table === "salary_slip") {
+        const basic = Number(key === "basic_salary" ? v : next.basic_salary) || 0;
+        const hra = Number(key === "hra" ? v : next.hra) || 0;
+        const da = Number(key === "da" ? v : next.da) || 0;
+        const otherA = Number(key === "other_allowances" ? v : next.other_allowances) || 0;
+        const gross = basic + hra + da + otherA;
+        next.gross_salary = gross;
+
+        const pf = Number(key === "pf_deduction" ? v : next.pf_deduction) || 0;
+        const esi = Number(key === "esi_deduction" ? v : next.esi_deduction) || 0;
+        const tds = Number(key === "tds" ? v : next.tds) || 0;
+        const otherD = Number(key === "other_deductions" ? v : next.other_deductions) || 0;
+        const deductions = pf + esi + tds + otherD;
+        next.total_deductions = deductions;
+        next.net_salary = Math.max(0, gross - deductions);
+      }
+
+      // Fees collection status auto update
+      if (mod.table === "fees_collection") {
+        const due = Number(key === "amount_due" ? v : next.amount_due) || 0;
+        const paid = Number(key === "amount_paid" ? v : next.amount_paid) || 0;
+        if (due > 0 && paid >= due) {
+          next.status = "paid";
+        } else if (paid > 0 && paid < due) {
+          next.status = "partial";
+        }
+      }
+
+      // Leave calculation
+      if (mod.table === "leave_application" && (key === "from_date" || key === "to_date")) {
+        const from = String(key === "from_date" ? v : next.from_date);
+        const to = String(key === "to_date" ? v : next.to_date);
+        if (from && to) {
+          const diff = Math.ceil(
+            (new Date(to).getTime() - new Date(from).getTime()) / (1000 * 3600 * 24)
+          ) + 1;
+          if (diff > 0) next.total_days = diff;
+        }
+      }
+
+      return next;
+    });
+  };
+
+  const onSelectRelationDetails = (record: Record<string, unknown>) => {
+    // When student is selected in fees or attendance
+    if (mod.table === "fees_collection" || mod.table === "student_attendance") {
+      setValues((prev) => ({
+        ...prev,
+        student_name: record.full_name || record.student_name || prev.student_name,
+        admission_no: record.admission_no || prev.admission_no,
+        class_name: record.class_name || prev.class_name,
+      }));
+    }
+    // When employee is selected in salary slip or leave
+    if (mod.table === "salary_slip" || mod.table === "leave_application") {
+      setValues((prev) => ({
+        ...prev,
+        employee_name:
+          record.full_name ||
+          `${record.first_name || ""} ${record.last_name || ""}`.trim() ||
+          prev.employee_name,
+        basic_salary: record.basic_salary || prev.basic_salary,
+      }));
+    }
+  };
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
     save(values);
   };
+
   return (
     <div className="modal-bg">
       <form className="record-modal" onSubmit={submit}>
@@ -948,14 +1171,15 @@ function RecordModal({
             <h2>{moduleName(mod.table)}</h2>
             <p>
               {mode === "view"
-                ? "Review all saved information."
-                : "Complete the fields below. Required fields are marked."}
+                ? "Review saved database record."
+                : "Complete the fields below. Changes persist directly to Supabase."}
             </p>
           </div>
-          <button type="button" onClick={close}>
+          <button type="button" onClick={close} aria-label="Close modal">
             <X />
           </button>
         </header>
+
         <div className="form-grid">
           {mod.fields.map((field) => (
             <FormField
@@ -963,16 +1187,18 @@ function RecordModal({
               field={field}
               value={values[field.key]}
               disabled={mode === "view"}
-              change={(v) => setValues({ ...values, [field.key]: v })}
+              change={(v) => updateField(field.key, v)}
+              onRelationSelected={onSelectRelationDetails}
             />
           ))}
         </div>
+
         <footer>
           <button type="button" onClick={close}>
-            Cancel
+            {mode === "view" ? "Close" : "Cancel"}
           </button>
           {mode !== "view" && (
-            <button className="save">
+            <button className="save" type="submit">
               {mode === "edit" ? "Save changes" : "Create record"}
             </button>
           )}
@@ -981,41 +1207,69 @@ function RecordModal({
     </div>
   );
 }
+
 function FormField({
   field,
   value,
   disabled,
   change,
+  onRelationSelected,
 }: {
   key?: string;
   field: Field;
   value: unknown;
   disabled: boolean;
   change: (v: unknown) => void;
+  onRelationSelected?: (record: Record<string, unknown>) => void;
 }) {
   const [relationOptions, setRelationOptions] = useState<
     Array<Record<string, unknown>>
   >([]);
+  const [uploading, setUploading] = useState(false);
+
   useEffect(() => {
     if (field.type !== "relation" || !field.reference || !supabase) return;
     const reference = field.reference;
     supabase
       .from(reference.table)
-      .select(`${reference.value},${reference.label}`)
+      .select("*")
       .order(reference.label)
       .limit(500)
-      .then(({ data }) =>
-        setRelationOptions(
-          (data || []) as unknown as Array<Record<string, unknown>>,
-        ),
-      );
+      .then(({ data }) => {
+        setRelationOptions((data || []) as unknown as Array<Record<string, unknown>>);
+      });
   }, [field]);
+
+  const isUrlOrFileField =
+    field.key.endsWith("_url") ||
+    field.key.endsWith("_photo") ||
+    field.key === "attachment_url";
+
+  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const publicUrl = await uploadToSupabaseStorage(
+        file,
+        "school-documents",
+        "records"
+      );
+      change(publicUrl);
+    } catch {
+      // Fallback handled inside uploadToSupabaseStorage
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <label className={field.type === "textarea" ? "full" : ""}>
       <span>
         {field.label}
         {field.required && <b>*</b>}
       </span>
+
       {field.type === "textarea" || field.type === "array" ? (
         <textarea
           disabled={disabled}
@@ -1025,7 +1279,7 @@ function FormField({
               ? value.join(", ")
               : String(value ?? "")
           }
-          placeholder={field.type === "array" ? "Separate values with commas" : ""}
+          placeholder={field.type === "array" ? "Comma-separated values (e.g. Maths, Science)" : ""}
           onChange={(e) =>
             change(
               field.type === "array"
@@ -1033,7 +1287,7 @@ function FormField({
                     .split(",")
                     .map((item) => item.trim())
                     .filter(Boolean)
-                : e.target.value,
+                : e.target.value
             )
           }
         />
@@ -1043,15 +1297,24 @@ function FormField({
           value={String(value ?? true)}
           onChange={(e) => change(e.target.value === "true")}
         >
-          <option value="true">Yes</option>
-          <option value="false">No</option>
+          <option value="true">Yes / Active</option>
+          <option value="false">No / Inactive</option>
         </select>
       ) : field.type === "relation" && field.reference ? (
         <select
           disabled={disabled}
           required={field.required}
           value={String(value ?? "")}
-          onChange={(e) => change(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            change(val);
+            const found = relationOptions.find(
+              (opt) => String(opt[field.reference!.value]) === val
+            );
+            if (found && onRelationSelected) {
+              onRelationSelected(found);
+            }
+          }}
         >
           <option value="">Select...</option>
           {relationOptions.map((option) => (
@@ -1059,7 +1322,13 @@ function FormField({
               key={String(option[field.reference!.value])}
               value={String(option[field.reference!.value])}
             >
-              {String(option[field.reference!.label] ?? "")}
+              {String(
+                option[field.reference!.label] ||
+                  option.full_name ||
+                  option.first_name ||
+                  option[field.reference!.value] ||
+                  ""
+              )}
             </option>
           ))}
         </select>
@@ -1070,22 +1339,84 @@ function FormField({
           value={String(value ?? "")}
           onChange={(e) => change(e.target.value)}
         >
-          <option value="">Select...</option>
+          <option value="">Select option...</option>
           {field.options?.map((x) => (
-            <option key={x}>{x}</option>
+            <option key={x} value={x}>
+              {x}
+            </option>
           ))}
         </select>
+      ) : isUrlOrFileField ? (
+        <div style={{ display: "grid", gap: "6px" }}>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <input
+              disabled={disabled}
+              required={field.required}
+              type="text"
+              placeholder="https://..."
+              value={String(value ?? "")}
+              onChange={(e) => change(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            {!disabled && (
+              <label
+                style={{
+                  padding: "0 12px",
+                  height: "38px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  background: "#f0f4fa",
+                  border: "1px solid #d4deec",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  color: "var(--blue)",
+                }}
+              >
+                <Upload size={14} />
+                <span>{uploading ? "Uploading..." : "Upload"}</span>
+                <input
+                  type="file"
+                  style={{ display: "none" }}
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                />
+              </label>
+            )}
+          </div>
+          {value && typeof value === "string" && value.startsWith("http") && (
+            <a
+              href={value}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: "11px", color: "var(--blue)", textDecoration: "underline" }}
+            >
+              Preview current file / image
+            </a>
+          )}
+        </div>
       ) : (
         <input
           disabled={disabled}
           required={field.required}
           type={field.type || "text"}
+          placeholder={
+            field.key === "department_code"
+              ? "Auto-generated (e.g. DEPT-ACAD)"
+              : field.key === "vendor_code"
+              ? "Auto-generated (e.g. VND-SUPP)"
+              : field.key === "receipt_number"
+              ? "Auto-generated on save"
+              : undefined
+          }
           value={String(value ?? "")}
           onChange={(e) =>
             change(
               field.type === "number" && e.target.value !== ""
                 ? Number(e.target.value)
-                : e.target.value,
+                : e.target.value
             )
           }
         />
@@ -1093,6 +1424,7 @@ function FormField({
     </label>
   );
 }
+
 function Login({
   close,
   session,
@@ -1102,54 +1434,77 @@ function Login({
   session: Session | null;
   setToast: (s: string) => void;
 }) {
-  const [email, setEmail] = useState(""),
-    [password, setPassword] = useState(""),
-    [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    setBusy(false);
-    if (error) {
-      setToast(error.message);
-      return;
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) {
+        setToast(error.message);
+      } else {
+        await logActivity({
+          action: "User signed in to portal",
+          module: "auth",
+        });
+        setToast("Signed in successfully");
+        close();
+      }
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Sign-in error");
+    } finally {
+      setBusy(false);
     }
-    close();
   };
+
   const logout = async () => {
+    await logActivity({
+      action: "User signed out",
+      module: "auth",
+    });
     await supabase?.auth.signOut();
-    setToast("Signed out");
+    setToast("Signed out successfully");
     close();
   };
+
   return (
     <div className="modal-bg">
       <form className="login" onSubmit={submit}>
-        <button type="button" className="login-close" onClick={close}>
+        <button
+          type="button"
+          className="login-close"
+          onClick={close}
+          aria-label="Close"
+        >
           <X />
         </button>
-        <img src={logo} />
+        <img src={logo} alt="St. John's English School" />
         <span>SECURE SCHOOL ERP</span>
-        <h2>{session ? "Your account" : "Welcome back"}</h2>
+        <h2>{session ? "Your session" : "Sign in to ERP"}</h2>
         <p>
           {session
             ? session.user.email
-            : "Sign in to your role-based workspace."}
+            : "Sign in with your administrator or teacher credentials."}
         </p>
         {session ? (
           <button type="button" className="login-button" onClick={logout}>
-            Sign out
+            Sign out of session
           </button>
         ) : (
           <>
             <label>
-              Email
+              Email address
               <input
                 required
                 type="email"
+                placeholder="admin@stjohns.edu"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -1159,19 +1514,21 @@ function Login({
               <input
                 required
                 type="password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </label>
-            <button className="login-button">
+            <button className="login-button" disabled={busy}>
               <LogIn />
-              {busy ? "Signing in..." : "Sign in securely"}
+              {busy ? "Authenticating..." : "Sign in securely"}
             </button>
-            <small>Accounts are created by the school administrator.</small>
+            <small>Accounts are managed through Supabase Auth.</small>
           </>
         )}
       </form>
     </div>
   );
 }
+
 export default App;
