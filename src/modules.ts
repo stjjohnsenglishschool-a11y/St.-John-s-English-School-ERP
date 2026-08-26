@@ -79,12 +79,12 @@ export const modules: Record<string, Module> = {
     primaryKey: 'department_id',
     description: 'Teaching, office and operational departments. Department code is generated automatically.',
     fields: [
-      f('department_name', 'Department name', 'text', true),
-      f('department_code', 'Department code (Auto-generated)', 'text', false),
+      f('department_code', 'Department Code', 'text', true),
+      f('department_name', 'Department Name', 'text', true),
       f('description', 'Description', 'textarea'),
-      f('is_active', 'Active', 'boolean'),
+      f('is_active', 'Is Active', 'boolean'),
     ],
-    columns: ['department_code', 'department_name', 'description', 'is_active', 'updated_at'],
+    columns: ['department_code', 'department_name', 'description', 'is_active'],
   },
   'class_master': {
     title: 'class_master',

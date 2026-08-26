@@ -3,6 +3,7 @@ import {
   Activity,
   ArrowUpRight,
   BellRing,
+  Building,
   CalendarCheck2,
   ChevronRight,
   ClipboardList,
@@ -22,6 +23,7 @@ type Stats = {
   teachers: number
   staff: number
   classes: number
+  departments: number
   present: number
   feesPaid: number
   feesDue: number
@@ -47,6 +49,7 @@ const emptyStats: Stats = {
   teachers: 0,
   staff: 0,
   classes: 0,
+  departments: 0,
   present: 0,
   feesPaid: 0,
   feesDue: 0,
@@ -103,6 +106,7 @@ export default function ProductionDashboard({
         fees,
         expenses,
         income,
+        departments,
         leaves,
         assignments,
         notices,
@@ -139,6 +143,9 @@ export default function ProductionDashboard({
         client.from('expense_master').select('amount'),
         client.from('income_master').select('amount'),
         client
+          .from('department_master')
+          .select('*', { count: 'exact', head: true }),
+        client
           .from('leave_application')
           .select('*', { count: 'exact', head: true })
           .eq('status', 'pending'),
@@ -163,6 +170,7 @@ export default function ProductionDashboard({
         teachers: teachers.count ?? 0,
         staff: staff.count ?? 0,
         classes: classes.count ?? 0,
+        departments: departments.count ?? 0,
         present: attendance.count ?? 0,
         feesPaid: (fees.data || []).reduce(
           (sum, row) => sum + Number(row.amount_paid || 0),
@@ -453,6 +461,17 @@ export default function ProductionDashboard({
             </div>
           </header>
           <div className="attention-list">
+            <button onClick={() => choose('department_master')}>
+              <span className="attention-icon blue">
+                <Building />
+              </span>
+              <span>
+                <b>Department Master</b>
+                <small>Teaching, office & staff units</small>
+              </span>
+              <strong>{stats.departments}</strong>
+              <ChevronRight />
+            </button>
             <button onClick={() => choose('leave_application')}>
               <span className="attention-icon violet">
                 <UsersRound />

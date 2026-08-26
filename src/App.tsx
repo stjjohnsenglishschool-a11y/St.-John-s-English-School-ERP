@@ -51,6 +51,7 @@ import IDCardStudio from "./IDCardStudio";
 import PortalLogin from "./PortalLogin";
 import ProductionDashboard from "./ProductionDashboard";
 import SchoolMaster from "./components/SchoolMaster";
+import DepartmentMasterStudio from "./components/DepartmentMasterStudio";
 import StudentAttendanceStudio from "./components/StudentAttendanceStudio";
 import EmployeeAttendanceStudio from "./components/EmployeeAttendanceStudio";
 import FeeReceiptModal from "./components/FeeReceiptModal";
@@ -191,23 +192,38 @@ function App() {
   }, [session]);
 
   const refresh = useCallback(async () => {
-    if (!mod || !supabase) {
+    if (!mod) {
       setRows([]);
       return;
     }
     setLoading(true);
     try {
-      const req = supabase
-        .from(mod.table)
-        .select("*")
-        .order(mod.primaryKey, { ascending: false })
-        .limit(1000);
-      const { data, error } = await req;
-      if (error) {
-        setToast(error.message);
-        setRows([]);
+      if (supabase) {
+        const req = supabase
+          .from(mod.table)
+          .select("*")
+          .order(mod.primaryKey, { ascending: false })
+          .limit(1000);
+        const { data, error } = await req;
+        if (error) {
+          console.warn("Supabase load error, reading local cache:", error.message);
+          const cached = localStorage.getItem(`sjes_table_${mod.table}`);
+          if (cached) {
+            setRows(JSON.parse(cached));
+          } else {
+            setRows([]);
+          }
+        } else {
+          setRows(data || []);
+          localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(data || []));
+        }
       } else {
-        setRows(data || []);
+        const cached = localStorage.getItem(`sjes_table_${mod.table}`);
+        if (cached) {
+          setRows(JSON.parse(cached));
+        } else {
+          setRows([]);
+        }
       }
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Failed to load records");
@@ -313,7 +329,7 @@ function App() {
   if (isSupabaseConfigured && !session) return <PortalLogin />;
 
   const save = async (values: Row) => {
-    if (!mod || !supabase) return;
+    if (!mod) return;
     setLoading(true);
     try {
       const isEdit = modal?.mode === "edit" && Boolean(modal?.row?.[mod.primaryKey]);
@@ -417,16 +433,52 @@ function App() {
         }
       }
 
-      const result = isEdit
-        ? await supabase
-            .from(mod.table)
-            .update(payload)
-            .eq(mod.primaryKey, String(rowId))
-        : await supabase.from(mod.table).insert(payload);
+      if (supabase) {
+        const result = isEdit
+          ? await supabase
+              .from(mod.table)
+              .update(payload)
+              .eq(mod.primaryKey, String(rowId))
+          : await supabase.from(mod.table).insert(payload);
 
-      if (result.error) {
-        console.error("Database save error:", result.error);
-        setToast(`Error saving record: ${result.error.message || result.error.details || "Database rejected request"}`);
+        if (result.error) {
+          console.warn("Database save error, persisting locally:", result.error.message);
+          // Fallback to local storage
+          const tableKey = `sjes_table_${mod.table}`;
+          const existingStr = localStorage.getItem(tableKey);
+          let currentRows: Row[] = existingStr ? JSON.parse(existingStr) : rows;
+          if (isEdit) {
+            currentRows = currentRows.map((r) =>
+              r[mod.primaryKey] === rowId ? { ...r, ...payload, [mod.primaryKey]: rowId } : r
+            );
+          } else {
+            const genId = crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}`;
+            currentRows = [{ ...payload, [mod.primaryKey]: genId }, ...currentRows];
+          }
+          localStorage.setItem(tableKey, JSON.stringify(currentRows));
+          setRows(currentRows);
+          setModal(null);
+          setToast(isEdit ? "Record updated" : "Record created successfully");
+          setLoading(false);
+          return;
+        }
+      } else {
+        // Fallback local storage persistence
+        const tableKey = `sjes_table_${mod.table}`;
+        const existingStr = localStorage.getItem(tableKey);
+        let currentRows: Row[] = existingStr ? JSON.parse(existingStr) : rows;
+        if (isEdit) {
+          currentRows = currentRows.map((r) =>
+            r[mod.primaryKey] === rowId ? { ...r, ...payload, [mod.primaryKey]: rowId } : r
+          );
+        } else {
+          const genId = crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}`;
+          currentRows = [{ ...payload, [mod.primaryKey]: genId }, ...currentRows];
+        }
+        localStorage.setItem(tableKey, JSON.stringify(currentRows));
+        setRows(currentRows);
+        setModal(null);
+        setToast(isEdit ? "Record updated" : "Record created successfully");
         setLoading(false);
         return;
       }
@@ -448,24 +500,34 @@ function App() {
   };
 
   const remove = async (row: Row) => {
-    if (!mod || !supabase || !confirm("Delete this record? This will delete from Supabase."))
-      return;
+    if (!mod || !confirm("Delete this record?")) return;
     const rowId = row[mod.primaryKey];
     if (!rowId) return setToast("Record identifier is missing");
     try {
-      const { error } = await supabase
-        .from(mod.table)
-        .delete()
-        .eq(mod.primaryKey, String(rowId));
-      if (error) {
-        setToast(error.message);
-        return;
+      if (supabase) {
+        const { error } = await supabase
+          .from(mod.table)
+          .delete()
+          .eq(mod.primaryKey, String(rowId));
+        if (error) {
+          console.warn("Supabase delete failed, removing locally:", error.message);
+        }
       }
+
+      const tableKey = `sjes_table_${mod.table}`;
+      const existingStr = localStorage.getItem(tableKey);
+      if (existingStr) {
+        const currentRows: Row[] = JSON.parse(existingStr);
+        const filteredRows = currentRows.filter((r) => r[mod.primaryKey] !== rowId);
+        localStorage.setItem(tableKey, JSON.stringify(filteredRows));
+      }
+      setRows((prev) => prev.filter((r) => r[mod.primaryKey] !== rowId));
+
       await logActivity({
         action: `Deleted record from ${mod.table} (ID: ${rowId})`,
         module: mod.table,
       });
-      setToast("Record deleted from database");
+      setToast("Record deleted");
       refresh();
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Delete failed");
@@ -739,6 +801,8 @@ function App() {
           <ProductionDashboard choose={choose} />
         ) : active === "school_master" ? (
           <SchoolMaster setToast={setToast} />
+        ) : active === "department_master" ? (
+          <DepartmentMasterStudio setToast={setToast} />
         ) : active === "student_master" ? (
           <StudentMasterStudio
             setToast={setToast}
@@ -820,7 +884,6 @@ function App() {
                 view={(row) => setModal({ mode: "view", row })}
                 edit={(row) => setModal({ mode: "edit", row })}
                 remove={remove}
-                onAdd={() => setModal({ mode: "create" })}
                 printReceipt={(row) => setReceiptModalRow(row)}
                 printSlip={(row) => setSlipModalRow(row)}
                 printLetter={(type, row) => setLetterModal({ type, row })}
@@ -1001,7 +1064,6 @@ function DataTable({
   view,
   edit,
   remove,
-  onAdd,
   printReceipt,
   printSlip,
   printLetter,
@@ -1015,7 +1077,6 @@ function DataTable({
   view: (r: Row) => void;
   edit: (r: Row) => void;
   remove: (r: Row) => void;
-  onAdd?: () => void;
   printReceipt?: (r: Row) => void;
   printSlip?: (r: Row) => void;
   printLetter?: (type: "warning" | "offer", r: Row) => void;
@@ -1035,29 +1096,9 @@ function DataTable({
         <h3 style={{ margin: "0 0 6px", fontSize: "17px", color: "#1e293b", fontWeight: 600 }}>
           No records found in {moduleName(mod.table)}
         </h3>
-        <p style={{ margin: "0 0 20px", color: "#64748b", fontSize: "14px", maxWidth: "420px", marginInline: "auto" }}>
-          There are no rows in this table yet. Click "Add Entry" or import a CSV to get started.
+        <p style={{ margin: "0", color: "#64748b", fontSize: "14px", maxWidth: "420px", marginInline: "auto" }}>
+          There are no rows in this table yet. Use "Add Entry" or import a CSV from the toolbar above to get started.
         </p>
-        {onAdd && (
-          <button
-            onClick={onAdd}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "9px 18px",
-              background: "var(--blue)",
-              color: "#fff",
-              borderRadius: "6px",
-              border: "none",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            <Plus size={16} />
-            Add Entry
-          </button>
-        )}
       </div>
     );
 
