@@ -34,22 +34,40 @@ export default function PortalLogin() {
           })
         }
       } else {
-        // Try username login via edge function or lookup user_master
-        const userRes = await supabase
-          .from('user_master')
-          .select('user_id,user_name,user_full_name,role')
-          .eq('user_name', login)
-          .limit(1)
-          .maybeSingle()
+        // 1. Try lookup in public.login_aliases table
+        let targetEmail = `${login.toLowerCase()}@stjohns.edu`
+        try {
+          const aliasRes = await supabase
+            .from('login_aliases')
+            .select('login_email')
+            .eq('username', login)
+            .eq('is_active', true)
+            .limit(1)
+            .maybeSingle()
 
-        if (userRes.data) {
-          // If username exists, sign in with email convention or edge function
-          const assumedEmail = `${login.toLowerCase()}@stjohns.edu`
-          const result = await supabase.auth.signInWithPassword({
-            email: assumedEmail,
-            password,
-          })
-          if (result.error) {
+          if (aliasRes.data?.login_email) {
+            targetEmail = aliasRes.data.login_email
+          }
+        } catch {
+          // ignore if table not accessible anonymously
+        }
+
+        // 2. Sign in with resolved email
+        const result = await supabase.auth.signInWithPassword({
+          email: targetEmail,
+          password,
+        })
+
+        if (result.error) {
+          // Fallback: check user_master
+          const userRes = await supabase
+            .from('user_master')
+            .select('user_id,user_name,user_full_name,role')
+            .eq('user_name', login)
+            .limit(1)
+            .maybeSingle()
+
+          if (userRes.data) {
             // Attempt edge function if deployed
             const fnResult = await supabase.functions.invoke('username-login', {
               body: { username: login, password },
@@ -62,14 +80,7 @@ export default function PortalLogin() {
                 refresh_token: fnResult.data.refresh_token,
               })
             }
-          }
-        } else {
-          // Try standard direct attempt
-          const result = await supabase.auth.signInWithPassword({
-            email: `${login}@stjohns.edu`,
-            password,
-          })
-          if (result.error) {
+          } else {
             setError(result.error.message)
           }
         }

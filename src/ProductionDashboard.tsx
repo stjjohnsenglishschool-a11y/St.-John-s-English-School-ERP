@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { moduleName, modules } from './modules'
+import { getCurrentAcademicYear } from './lib/academicYear'
 
 type Stats = {
   students: number
@@ -298,7 +299,7 @@ export default function ProductionDashboard({
         <div>
           <span className="overline">ADMINISTRATION OVERVIEW</span>
           <h1>Good morning, Administrator</h1>
-          <p>{today} · Academic session 2026–27</p>
+          <p>{today} · Academic session {getCurrentAcademicYear()}</p>
         </div>
         <div className="dashboard-actions">
           <button onClick={loadData} title="Refresh live statistics">

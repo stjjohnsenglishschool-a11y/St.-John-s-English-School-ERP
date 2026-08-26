@@ -70,17 +70,48 @@ export default function SchoolMaster({
 
   useEffect(() => {
     if (!supabase) return;
-    supabase
-      .from("school_master")
-      .select("*")
-      .limit(1)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (data && !error) {
-          setProfile((prev) => ({ ...prev, ...data }));
-          localStorage.setItem("sjes_school_profile", JSON.stringify(data));
+    // Attempt to load from public.schools (primary) or public.school_master (fallback)
+    const fetchSchool = async () => {
+      try {
+        const { data: schoolData, error: sErr } = await supabase
+          .from("schools")
+          .select("*")
+          .limit(1)
+          .maybeSingle();
+
+        if (schoolData && !sErr) {
+          const mapped: Partial<SchoolProfile> = {
+            school_id: schoolData.id,
+            school_name: schoolData.name || schoolData.school_name,
+            school_code: schoolData.code || schoolData.school_code,
+            email: schoolData.email,
+            phone: schoolData.phone,
+            address: schoolData.address,
+            city: schoolData.city,
+            state: schoolData.state,
+            pin_code: schoolData.pincode || schoolData.pin_code,
+          };
+          setProfile((prev) => ({ ...prev, ...mapped }));
+          localStorage.setItem("sjes_school_profile", JSON.stringify({ ...profile, ...mapped }));
+          return;
         }
-      });
+
+        const { data: masterData, error: mErr } = await supabase
+          .from("school_master")
+          .select("*")
+          .limit(1)
+          .maybeSingle();
+
+        if (masterData && !mErr) {
+          setProfile((prev) => ({ ...prev, ...masterData }));
+          localStorage.setItem("sjes_school_profile", JSON.stringify(masterData));
+        }
+      } catch (err) {
+        console.warn("School fetch note:", err);
+      }
+    };
+
+    fetchSchool();
   }, []);
 
   const handleChange = (key: keyof SchoolProfile, value: string) => {
@@ -94,14 +125,31 @@ export default function SchoolMaster({
       localStorage.setItem("sjes_school_profile", JSON.stringify(profile));
 
       if (supabase) {
-        // Try updating or inserting to school_master if available
+        // 1. Sync to schools table
         try {
-          const { error } = await supabase
+          const schoolsPayload: Record<string, unknown> = {
+            name: profile.school_name,
+            code: profile.school_code,
+            email: profile.email,
+            phone: profile.phone,
+            address: profile.address,
+            city: profile.city,
+            state: profile.state,
+            pincode: profile.pin_code,
+          };
+          if (profile.school_id) {
+            schoolsPayload.id = profile.school_id;
+          }
+          await supabase.from("schools").upsert(schoolsPayload, { onConflict: "code" });
+        } catch {
+          // fallback
+        }
+
+        // 2. Also sync to school_master if present
+        try {
+          await supabase
             .from("school_master")
             .upsert({ ...profile, updated_at: new Date().toISOString() });
-          if (error) {
-            console.warn("school_master remote sync note:", error.message);
-          }
         } catch {
           // Ignored if table is not configured
         }

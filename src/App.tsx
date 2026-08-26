@@ -46,6 +46,7 @@ import {
   uploadToSupabaseStorage,
 } from "./lib/supabase";
 import { Field, label, moduleName, modules, navGroups } from "./modules";
+import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS } from "./lib/academicYear";
 import IDCardStudio from "./IDCardStudio";
 import PortalLogin from "./PortalLogin";
 import ProductionDashboard from "./ProductionDashboard";
@@ -1169,7 +1170,15 @@ function RecordModal({
       mod.fields.map((x) => [
         x.key,
         row?.[x.key] ??
-          (x.type === "boolean" ? true : x.type === "array" ? [] : ""),
+          (x.key === "academic_year"
+            ? getCurrentAcademicYear()
+            : x.key === "year" && x.type === "number"
+            ? new Date().getFullYear()
+            : x.type === "boolean"
+            ? true
+            : x.type === "array"
+            ? []
+            : ""),
       ])
     )
   );

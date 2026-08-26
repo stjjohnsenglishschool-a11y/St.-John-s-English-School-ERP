@@ -25,6 +25,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { supabase, uploadToSupabaseStorage, logActivity } from '../lib/supabase'
+import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 
 type Student = {
   student_id?: string
@@ -210,7 +211,7 @@ export default function StudentMasterStudio({
     setSelectedStudent(student || null)
     setActiveTab('admission')
     if (mode === 'create') {
-      const year = '2025-2026'
+      const year = getCurrentAcademicYear()
       setFormState({
         admission_no: `ADM-${Date.now().toString().slice(-4)}`,
         admission_date: new Date().toISOString().slice(0, 10),
@@ -510,7 +511,22 @@ export default function StudentMasterStudio({
             <option value="Alumni">Alumni</option>
           </select>
 
-          {(filterClass || filterSection || filterGender || filterStatus || search) && (
+          <select
+            value={filterYear}
+            onChange={(e) => {
+              setFilterYear(e.target.value)
+              setPage(1)
+            }}
+          >
+            <option value="">All Academic Years</option>
+            {ACADEMIC_YEAR_OPTIONS.map((yr) => (
+              <option key={yr} value={yr}>
+                {yr} {yr === CURRENT_ACADEMIC_YEAR ? '(Current)' : ''}
+              </option>
+            ))}
+          </select>
+
+          {(filterClass || filterSection || filterGender || filterStatus || filterYear || search) && (
             <button
               className="btn-reset-filters"
               onClick={() => {
@@ -836,13 +852,17 @@ export default function StudentMasterStudio({
                   <div className="form-row-3">
                     <label>
                       <span>Academic Year</span>
-                      <input
-                        type="text"
+                      <select
                         disabled={modalMode === 'view'}
-                        value={formState.academic_year || '2025-2026'}
-                        placeholder="2025-2026"
+                        value={formState.academic_year || CURRENT_ACADEMIC_YEAR}
                         onChange={(e) => updateForm('academic_year', e.target.value)}
-                      />
+                      >
+                        {ACADEMIC_YEAR_OPTIONS.map((yr) => (
+                          <option key={yr} value={yr}>
+                            {yr} {yr === CURRENT_ACADEMIC_YEAR ? '(Current Session)' : ''}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                     <label>
                       <span>House Name</span>

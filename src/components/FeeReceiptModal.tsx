@@ -1,4 +1,5 @@
 import { Printer, X } from "lucide-react";
+import { getCurrentAcademicYear } from "../lib/academicYear";
 
 interface FeeReceiptProps {
   receipt: Record<string, unknown>;
@@ -219,7 +220,7 @@ export default function FeeReceiptModal({ receipt, onClose }: FeeReceiptProps) {
             </div>
             <div>
               <span style={{ color: "#64748b" }}>Academic Year:</span>{" "}
-              <b>{String(receipt.academic_year || "2024-2025")}</b>
+              <b>{String(receipt.academic_year || getCurrentAcademicYear())}</b>
             </div>
           </div>
 

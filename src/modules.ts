@@ -1,3 +1,5 @@
+import { ACADEMIC_YEAR_OPTIONS } from './lib/academicYear'
+
 export type FieldType =
   | 'text'
   | 'email'
@@ -55,25 +57,20 @@ export const modules: Record<string, Module> = {
   'school_master': {
     title: 'school_master',
     group: 'Master Setup',
-    table: 'school_master',
-    primaryKey: 'school_id',
+    table: 'schools',
+    primaryKey: 'id',
     description: 'School institutional identity, affiliation, principal and contact configuration',
     fields: [
-      f('school_name', 'School name', 'text', true),
-      f('school_code', 'School code', 'text', true),
-      f('email', 'Official email', 'email', true),
-      f('phone', 'Phone', 'tel', true),
-      f('whatsapp_number', 'WhatsApp number', 'tel'),
-      f('address', 'Campus address', 'textarea', true),
-      f('city', 'City', 'text', true),
-      f('state', 'State', 'text', true),
-      f('pin_code', 'PIN Code', 'text', true),
-      f('affiliation_no', 'Affiliation number'),
-      f('principal_name', 'Principal name'),
-      f('established_year', 'Established year'),
-      f('website', 'Official website'),
+      f('name', 'School name', 'text', true),
+      f('code', 'School code', 'text', true),
+      f('email', 'Official email', 'email'),
+      f('phone', 'Phone', 'tel'),
+      f('address', 'Campus address', 'textarea'),
+      f('city', 'City', 'text'),
+      f('state', 'State', 'text'),
+      f('pincode', 'PIN Code', 'text'),
     ],
-    columns: ['school_code', 'school_name', 'email', 'phone', 'city', 'state'],
+    columns: ['code', 'name', 'email', 'phone', 'city', 'state', 'pincode'],
   },
   'department_master': {
     title: 'department_master',
@@ -97,7 +94,7 @@ export const modules: Record<string, Module> = {
     description: 'Academic year, class capacity and availability',
     fields: [
       f('class_name', 'Class name', 'text', true),
-      f('academic_year', 'Academic year'),
+      f('academic_year', 'Academic year', 'select', false, ACADEMIC_YEAR_OPTIONS),
       f('capacity', 'Capacity', 'number'),
       f('is_active', 'Active', 'boolean'),
     ],
@@ -138,6 +135,7 @@ export const modules: Record<string, Module> = {
     description: 'Supplier contacts, payment terms and balances. Vendor code is generated automatically.',
     fields: [
       f('vendor_name', 'Vendor name', 'text', true),
+      f('vendor_code', 'Vendor code (Auto-generated)', 'text', false),
       f('vendor_type', 'Vendor type'),
       f('contact_person', 'Contact person'),
       f('phone_primary', 'Primary phone', 'tel'),
@@ -148,7 +146,7 @@ export const modules: Record<string, Module> = {
       f('payment_terms', 'Payment terms'),
       f('credit_limit', 'Credit limit', 'number'),
       f('outstanding_amount', 'Outstanding amount', 'number'),
-      f('rating', 'Rating', 'number'),
+      f('rating', 'Rating (1-5)', 'number'),
       f('is_active', 'Active', 'boolean'),
     ],
     columns: ['vendor_code', 'vendor_name', 'vendor_type', 'phone_primary', 'outstanding_amount', 'is_active'],
@@ -164,7 +162,7 @@ export const modules: Record<string, Module> = {
       f('admission_date', 'Admission date', 'date'),
       f('gr_number', 'GR number'),
       f('roll_no', 'Roll number'),
-      f('academic_year', 'Academic year'),
+      f('academic_year', 'Academic year', 'select', false, ACADEMIC_YEAR_OPTIONS),
       f('class_name', 'Class name', 'select', true, [
         'PG',
         'NURSERY',
@@ -253,7 +251,7 @@ export const modules: Record<string, Module> = {
       f('designation', 'Designation'),
       f('employment_type', 'Employment type', 'select', false, ['Permanent', 'Contract', 'Part-time', 'Temporary']),
       f('employment_status', 'Employment status', 'select', false, ['Active', 'On Leave', 'Suspended', 'Resigned', 'Retired']),
-      f('academic_year', 'Academic year'),
+      f('academic_year', 'Academic year', 'select', false, ACADEMIC_YEAR_OPTIONS),
       f('reporting_to', 'Reporting to'),
       f('reporting_designation', 'Reporting designation'),
       f('date_of_joining', 'Date of joining', 'date'),
@@ -339,7 +337,7 @@ export const modules: Record<string, Module> = {
       f('admission_no', 'Admission number'),
       f('student_name', 'Student name'),
       f('class_name', 'Class name'),
-      f('academic_year', 'Academic year'),
+      f('academic_year', 'Academic year', 'select', false, ACADEMIC_YEAR_OPTIONS),
       f('fee_type', 'Fee type'),
       f('amount_due', 'Amount due', 'number'),
       f('amount_paid', 'Amount paid', 'number'),
@@ -447,7 +445,7 @@ export const modules: Record<string, Module> = {
     fields: [
       rel('emp_id', 'Employee', 'employee_master', 'emp_id', 'emp_code'),
       f('employee_name', 'Employee name'),
-      f('academic_year', 'Academic year'),
+      f('academic_year', 'Academic year', 'select', false, ACADEMIC_YEAR_OPTIONS),
       f('leave_type', 'Leave type'),
       f('total_entitled', 'Total entitled', 'number'),
       f('total_taken', 'Total taken', 'number'),

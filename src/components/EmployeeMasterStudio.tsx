@@ -23,6 +23,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react'
 import { supabase, uploadToSupabaseStorage, logActivity } from '../lib/supabase'
+import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 
 type Employee = {
   emp_id?: string
@@ -92,6 +93,7 @@ export default function EmployeeMasterStudio({
   const [filterDept, setFilterDept] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterYear, setFilterYear] = useState('')
 
   const [page, setPage] = useState(1)
   const pageSize = 15
@@ -196,10 +198,11 @@ export default function EmployeeMasterStudio({
       const matchStatus =
         !filterStatus ||
         (filterStatus === 'Active' ? e.is_active !== false : e.employment_status === filterStatus)
+      const matchYear = !filterYear || e.academic_year === filterYear
 
-      return matchSearch && matchDept && matchCategory && matchStatus
+      return matchSearch && matchDept && matchCategory && matchStatus && matchYear
     })
-  }, [employees, search, filterDept, filterCategory, filterStatus])
+  }, [employees, search, filterDept, filterCategory, filterStatus, filterYear])
 
   const totalPages = Math.ceil(filteredEmployees.length / pageSize) || 1
   const paginatedEmployees = useMemo(() => {
@@ -220,7 +223,7 @@ export default function EmployeeMasterStudio({
         designation: 'Assistant Teacher',
         employment_type: 'Permanent',
         employment_status: 'Active',
-        academic_year: '2025-2026',
+        academic_year: getCurrentAcademicYear(),
         date_of_joining: new Date().toISOString().slice(0, 10),
         shift_name: 'Morning Shift (8:00 AM - 2:00 PM)',
         subject_specialisation: [],
@@ -494,7 +497,22 @@ export default function EmployeeMasterStudio({
             <option value="Retired">Retired</option>
           </select>
 
-          {(filterDept || filterCategory || filterStatus || search) && (
+          <select
+            value={filterYear}
+            onChange={(e) => {
+              setFilterYear(e.target.value)
+              setPage(1)
+            }}
+          >
+            <option value="">All Academic Years</option>
+            {ACADEMIC_YEAR_OPTIONS.map((yr) => (
+              <option key={yr} value={yr}>
+                {yr} {yr === CURRENT_ACADEMIC_YEAR ? '(Current)' : ''}
+              </option>
+            ))}
+          </select>
+
+          {(filterDept || filterCategory || filterStatus || filterYear || search) && (
             <button
               className="btn-reset-filters"
               onClick={() => {
@@ -502,6 +520,7 @@ export default function EmployeeMasterStudio({
                 setFilterDept('')
                 setFilterCategory('')
                 setFilterStatus('')
+                setFilterYear('')
                 setPage(1)
               }}
             >
@@ -1041,12 +1060,17 @@ export default function EmployeeMasterStudio({
                     </label>
                     <label>
                       <span>Academic Year</span>
-                      <input
-                        type="text"
+                      <select
                         disabled={modalMode === 'view'}
-                        value={formState.academic_year || '2025-2026'}
+                        value={formState.academic_year || CURRENT_ACADEMIC_YEAR}
                         onChange={(e) => updateForm('academic_year', e.target.value)}
-                      />
+                      >
+                        {ACADEMIC_YEAR_OPTIONS.map((yr) => (
+                          <option key={yr} value={yr}>
+                            {yr} {yr === CURRENT_ACADEMIC_YEAR ? '(Current Session)' : ''}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                     <label>
                       <span>Duty Shift Timing</span>
