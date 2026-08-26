@@ -49,6 +49,12 @@ import { Field, label, moduleName, modules, navGroups } from "./modules";
 import IDCardStudio from "./IDCardStudio";
 import PortalLogin from "./PortalLogin";
 import ProductionDashboard from "./ProductionDashboard";
+import SchoolMaster from "./components/SchoolMaster";
+import StudentAttendanceStudio from "./components/StudentAttendanceStudio";
+import EmployeeAttendanceStudio from "./components/EmployeeAttendanceStudio";
+import FeeReceiptModal from "./components/FeeReceiptModal";
+import SalarySlipModal from "./components/SalarySlipModal";
+import LetterPrintModal from "./components/LetterPrintModal";
 
 type Row = Record<string, unknown>;
 
@@ -57,6 +63,7 @@ const logo =
 
 function NavGroupIcon({ name }: { name: string }) {
   switch (name) {
+    case "Master Setup":
     case "Masters":
       return <FileBarChart />;
     case "People":
@@ -73,6 +80,11 @@ function NavGroupIcon({ name }: { name: string }) {
       return <GraduationCap />;
     case "Academics":
       return <BookOpenCheck />;
+    case "Communication":
+      return <Bell />;
+    case "Administration":
+    case "System":
+      return <Activity />;
     default:
       return <Activity />;
   }
@@ -126,6 +138,12 @@ function App() {
   const [modal, setModal] = useState<{
     mode: "create" | "edit" | "view";
     row?: Row;
+  } | null>(null);
+  const [receiptModalRow, setReceiptModalRow] = useState<Row | null>(null);
+  const [slipModalRow, setSlipModalRow] = useState<Row | null>(null);
+  const [letterModal, setLetterModal] = useState<{
+    type: "warning" | "offer";
+    row: Row;
   } | null>(null);
   const [toast, setToast] = useState("");
   const [authReady, setAuthReady] = useState(false);
@@ -669,10 +687,17 @@ function App() {
       <main>
         {active === "Overview" ? (
           <ProductionDashboard choose={choose} />
-        ) : active === "student_idcard" || active === "teacher_idcard" ? (
+        ) : active === "school_master" ? (
+          <SchoolMaster setToast={setToast} />
+        ) : active === "student_attendance" ? (
+          <StudentAttendanceStudio setToast={setToast} />
+        ) : active === "employee_attendance" ? (
+          <EmployeeAttendanceStudio setToast={setToast} />
+        ) : active === "student_idcard" || active === "teacher_idcard" || active === "escort_card" ? (
           <IDCardStudio
             setToast={setToast}
             onUploadCsv={() => csvImportRef.current?.click()}
+            initialType={active === "teacher_idcard" ? "employee" : "student"}
           />
         ) : (
           <>
@@ -734,6 +759,9 @@ function App() {
                 view={(row) => setModal({ mode: "view", row })}
                 edit={(row) => setModal({ mode: "edit", row })}
                 remove={remove}
+                printReceipt={(row) => setReceiptModalRow(row)}
+                printSlip={(row) => setSlipModalRow(row)}
+                printLetter={(type, row) => setLetterModal({ type, row })}
               />
 
               {/* Pagination Controls */}
@@ -828,6 +856,28 @@ function App() {
         />
       )}
 
+      {receiptModalRow && (
+        <FeeReceiptModal
+          receipt={receiptModalRow}
+          onClose={() => setReceiptModalRow(null)}
+        />
+      )}
+
+      {slipModalRow && (
+        <SalarySlipModal
+          slip={slipModalRow}
+          onClose={() => setSlipModalRow(null)}
+        />
+      )}
+
+      {letterModal && (
+        <LetterPrintModal
+          data={letterModal.row}
+          type={letterModal.type}
+          onClose={() => setLetterModal(null)}
+        />
+      )}
+
       {loginOpen && (
         <Login
           close={() => setLoginOpen(false)}
@@ -888,6 +938,9 @@ function DataTable({
   view,
   edit,
   remove,
+  printReceipt,
+  printSlip,
+  printLetter,
 }: {
   mod: (typeof modules)[string];
   rows: Row[];
@@ -898,6 +951,9 @@ function DataTable({
   view: (r: Row) => void;
   edit: (r: Row) => void;
   remove: (r: Row) => void;
+  printReceipt?: (r: Row) => void;
+  printSlip?: (r: Row) => void;
+  printLetter?: (type: "warning" | "offer", r: Row) => void;
 }) {
   if (loading)
     return (
@@ -1018,6 +1074,42 @@ function DataTable({
               ))}
               <td>
                 <div className="row-actions" style={{ justifyContent: "flex-end" }}>
+                  {mod.table === "fees_collection" && printReceipt && (
+                    <button
+                      onClick={() => printReceipt(r)}
+                      title="Print Fee Receipt"
+                      style={{ color: "var(--blue)" }}
+                    >
+                      <Printer />
+                    </button>
+                  )}
+                  {mod.table === "salary_slip" && printSlip && (
+                    <button
+                      onClick={() => printSlip(r)}
+                      title="Print Salary Payslip"
+                      style={{ color: "var(--blue)" }}
+                    >
+                      <Printer />
+                    </button>
+                  )}
+                  {mod.table === "warning_letter" && printLetter && (
+                    <button
+                      onClick={() => printLetter("warning", r)}
+                      title="Print Warning Letter"
+                      style={{ color: "#d9534f" }}
+                    >
+                      <Printer />
+                    </button>
+                  )}
+                  {mod.table === "offer_letter" && printLetter && (
+                    <button
+                      onClick={() => printLetter("offer", r)}
+                      title="Print Offer Letter"
+                      style={{ color: "var(--blue)" }}
+                    >
+                      <Printer />
+                    </button>
+                  )}
                   <button onClick={() => view(r)} title="View details">
                     <Eye />
                   </button>

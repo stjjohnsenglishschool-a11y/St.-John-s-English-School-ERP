@@ -25,11 +25,20 @@ const logo = 'https://res.cloudinary.com/oilisvfi/image/upload/v1786000074/logo_
 export default function IDCardStudio({
   setToast,
   onUploadCsv,
+  initialType,
 }: {
   setToast: (message: string) => void
   onUploadCsv: () => void
+  initialType?: 'student' | 'employee'
 }) {
-  const [cardType, setCardType] = useState<'student' | 'employee'>('student')
+  const [cardType, setCardType] = useState<'student' | 'employee'>(initialType || 'student')
+
+  useEffect(() => {
+    if (initialType) {
+      setCardType(initialType)
+    }
+  }, [initialType])
+
   const [people, setPeople] = useState<Person[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [className, setClassName] = useState('')
