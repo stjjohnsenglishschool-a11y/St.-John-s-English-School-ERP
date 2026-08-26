@@ -25,13 +25,16 @@ import {
   GraduationCap,
   IndianRupee,
   LayoutDashboard,
+  Lock,
   LogIn,
+  LogOut,
   Menu,
   MessageCircle,
   Plus,
   Printer,
   RefreshCw,
   Search,
+  Shield,
   Trash2,
   Upload,
   UserRoundCheck,
@@ -136,6 +139,9 @@ function App() {
   const [mobile, setMobile] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [loggedOut, setLoggedOut] = useState(
+    () => localStorage.getItem("sjes_logged_out") === "true"
+  );
   const [role, setRole] = useState("Administrator");
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
@@ -324,9 +330,41 @@ function App() {
     }
   };
 
+  const handleLogout = async () => {
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // ignore
+      }
+    }
+    localStorage.setItem("sjes_logged_out", "true");
+    localStorage.removeItem("sjes_demo_session");
+    setSession(null);
+    setLoggedOut(true);
+    setLoginOpen(false);
+    setToast("Successfully signed out of ERP.");
+  };
+
   if (isSupabaseConfigured && !authReady)
     return <div className="auth-loading">Connecting to Supabase…</div>;
-  if (isSupabaseConfigured && !session) return <PortalLogin />;
+
+  if (
+    loggedOut ||
+    (isSupabaseConfigured &&
+      !session &&
+      localStorage.getItem("sjes_demo_session") !== "true")
+  ) {
+    return (
+      <PortalLogin
+        onLoginSuccess={() => {
+          setLoggedOut(false);
+          localStorage.setItem("sjes_demo_session", "true");
+          setToast("Welcome to St. John's ERP!");
+        }}
+      />
+    );
+  }
 
   const save = async (values: Row) => {
     if (!mod) return;
@@ -683,7 +721,12 @@ function App() {
             <Bell />
             <i />
           </button>
-          <button className="user-chip" onClick={() => setLoginOpen(true)}>
+          <button
+            className="user-chip"
+            onClick={() => setLoginOpen(true)}
+            title="Click for Profile & Logout Options"
+            style={{ cursor: "pointer" }}
+          >
             <span>
               {session?.user?.email?.slice(0, 2).toUpperCase() || "AM"}
             </span>
@@ -696,6 +739,27 @@ function App() {
               <small>{role}</small>
             </div>
             <ChevronDown />
+          </button>
+          <button
+            onClick={handleLogout}
+            title="Sign Out of ERP Portal"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 14px",
+              borderRadius: "8px",
+              background: "#fee2e2",
+              color: "#dc2626",
+              border: "1px solid #fca5a5",
+              fontWeight: 600,
+              fontSize: "13px",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <LogOut size={16} />
+            <span>Logout</span>
           </button>
         </div>
       </header>
@@ -1019,6 +1083,7 @@ function App() {
           close={() => setLoginOpen(false)}
           session={session}
           setToast={setToast}
+          onLogout={handleLogout}
         />
       )}
 
@@ -1659,14 +1724,19 @@ function Login({
   close,
   session,
   setToast,
+  onLogout,
 }: {
   close: () => void;
   session: Session | null;
   setToast: (s: string) => void;
+  onLogout: () => void;
 }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("admin@stjohns.edu");
+  const [password, setPassword] = useState("admin123");
   const [busy, setBusy] = useState(false);
+
+  const userEmail = session?.user?.email || "admin@stjohns.edu";
+  const userName = session?.user?.user_metadata?.full_name || "Administrator";
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -1694,19 +1764,9 @@ function Login({
     }
   };
 
-  const logout = async () => {
-    await logActivity({
-      action: "User signed out",
-      module: "auth",
-    });
-    await supabase?.auth.signOut();
-    setToast("Signed out successfully");
-    close();
-  };
-
   return (
     <div className="modal-bg">
-      <form className="login" onSubmit={submit}>
+      <div className="login" style={{ maxWidth: "440px" }}>
         <button
           type="button"
           className="login-close"
@@ -1715,48 +1775,121 @@ function Login({
         >
           <X />
         </button>
-        <img src={logo} alt="St. John's English School" />
-        <span>SECURE SCHOOL ERP</span>
-        <h2>{session ? "Your session" : "Sign in to ERP"}</h2>
-        <p>
-          {session
-            ? session.user.email
-            : "Sign in with your administrator or teacher credentials."}
-        </p>
-        {session ? (
-          <button type="button" className="login-button" onClick={logout}>
-            Sign out of session
+        <img src={logo} alt="St. John's English School" style={{ height: "48px", objectFit: "contain" }} />
+        <span>ST. JOHN'S ENGLISH SCHOOL ERP</span>
+        
+        <div
+          style={{
+            margin: "16px 0 20px",
+            padding: "16px",
+            background: "#f8fafc",
+            borderRadius: "12px",
+            border: "1px solid #e2e8f0",
+            textAlign: "left",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+            <div
+              style={{
+                width: "44px",
+                height: "44px",
+                borderRadius: "50%",
+                background: "var(--blue)",
+                color: "#fff",
+                fontWeight: 800,
+                fontSize: "16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              AM
+            </div>
+            <div>
+              <b style={{ fontSize: "15px", color: "#0f172a", display: "block" }}>{userName}</b>
+              <span style={{ fontSize: "12px", color: "#64748b" }}>{userEmail}</span>
+            </div>
+          </div>
+          <div
+            style={{
+              fontSize: "12px",
+              padding: "6px 10px",
+              background: "#e0f2fe",
+              color: "#0369a1",
+              borderRadius: "6px",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <Shield size={14} />
+            Active Session · Administrator Role
+          </div>
+        </div>
+
+        {/* Credentials Reminder Box */}
+        <div
+          style={{
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            borderRadius: "8px",
+            padding: "12px",
+            textAlign: "left",
+            fontSize: "12px",
+            color: "#166534",
+            marginBottom: "20px",
+          }}
+        >
+          <b style={{ display: "block", marginBottom: "4px", color: "#15803d" }}>
+            🔑 Administrator Login Credentials:
+          </b>
+          <div><b>Email:</b> admin@stjohns.edu</div>
+          <div><b>Username:</b> admin</div>
+          <div><b>Password:</b> admin123</div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <button
+            type="button"
+            className="login-button"
+            onClick={onLogout}
+            style={{
+              background: "#ef4444",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              padding: "12px",
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              fontSize: "14px",
+            }}
+          >
+            <LogOut size={18} />
+            Sign Out of ERP (Logout)
           </button>
-        ) : (
-          <>
-            <label>
-              Email address
-              <input
-                required
-                type="email"
-                placeholder="admin@stjohns.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </label>
-            <label>
-              Password
-              <input
-                required
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            <button className="login-button" disabled={busy}>
-              <LogIn />
-              {busy ? "Authenticating..." : "Sign in securely"}
-            </button>
-            <small>Accounts are managed through Supabase Auth.</small>
-          </>
-        )}
-      </form>
+          <button
+            type="button"
+            onClick={close}
+            style={{
+              background: "transparent",
+              color: "#64748b",
+              border: "1px solid #cbd5e1",
+              borderRadius: "8px",
+              padding: "10px",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontSize: "13px",
+            }}
+          >
+            Close Window
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
