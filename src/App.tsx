@@ -60,6 +60,7 @@ import SalarySlipModal from "./components/SalarySlipModal";
 import LetterPrintModal from "./components/LetterPrintModal";
 import StudentMasterStudio from "./components/StudentMasterStudio";
 import EmployeeMasterStudio from "./components/EmployeeMasterStudio";
+import CsvImportModal from "./components/CsvImportModal";
 
 type Row = Record<string, unknown>;
 
@@ -153,6 +154,7 @@ function App() {
   const [toast, setToast] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [csvModalOpen, setCsvModalOpen] = useState(false);
 
   // Sorting & Pagination
   const [sortCol, setSortCol] = useState<string | null>(null);
@@ -782,8 +784,8 @@ function App() {
                 </button>
                 {mod.fields.length > 0 && (
                   <button
-                    onClick={() => csvImportRef.current?.click()}
-                    title="Import records from CSV"
+                    onClick={() => setCsvModalOpen(true)}
+                    title="Import records from CSV with preview and mapping"
                   >
                     <Upload />
                     Import CSV
@@ -934,6 +936,17 @@ function App() {
           data={letterModal.row}
           type={letterModal.type}
           onClose={() => setLetterModal(null)}
+        />
+      )}
+
+      {csvModalOpen && mod && (
+        <CsvImportModal
+          mod={mod}
+          onClose={() => setCsvModalOpen(false)}
+          onSuccess={(count) => {
+            setToast(`✓ Successfully imported ${count} records into ${moduleName(mod.table)}!`);
+            refresh();
+          }}
         />
       )}
 

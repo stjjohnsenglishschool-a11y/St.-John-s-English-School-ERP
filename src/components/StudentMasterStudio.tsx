@@ -26,6 +26,8 @@ import {
 } from 'lucide-react'
 import { supabase, uploadToSupabaseStorage, logActivity } from '../lib/supabase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
+import { modules } from '../modules'
+import CsvImportModal from './CsvImportModal'
 
 type Student = {
   student_id?: string
@@ -114,6 +116,7 @@ export default function StudentMasterStudio({
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [showCsvModal, setShowCsvModal] = useState(false)
 
   // Fetch classes from class_master
   useEffect(() => {
@@ -424,6 +427,13 @@ export default function StudentMasterStudio({
         <div className="hero-actions">
           <button className="btn-secondary" onClick={handleExportCsv} title="Export current list">
             <Download size={16} /> Export CSV
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={() => setShowCsvModal(true)}
+            title="Import student roster from CSV"
+          >
+            <Upload size={16} /> Import CSV
           </button>
           <button className="btn-secondary" onClick={loadStudents} title="Reload records">
             <RefreshCw size={16} className={loading ? 'spin' : ''} />
@@ -1423,6 +1433,16 @@ export default function StudentMasterStudio({
             </form>
           </div>
         </div>
+      )}
+      {showCsvModal && modules['student_master'] && (
+        <CsvImportModal
+          mod={modules['student_master']}
+          onClose={() => setShowCsvModal(false)}
+          onSuccess={(count) => {
+            setToast(`✓ Successfully imported ${count} students!`)
+            loadStudents()
+          }}
+        />
       )}
     </div>
   )
