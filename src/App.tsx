@@ -55,6 +55,8 @@ import EmployeeAttendanceStudio from "./components/EmployeeAttendanceStudio";
 import FeeReceiptModal from "./components/FeeReceiptModal";
 import SalarySlipModal from "./components/SalarySlipModal";
 import LetterPrintModal from "./components/LetterPrintModal";
+import StudentMasterStudio from "./components/StudentMasterStudio";
+import EmployeeMasterStudio from "./components/EmployeeMasterStudio";
 
 type Row = Record<string, unknown>;
 
@@ -689,6 +691,18 @@ function App() {
           <ProductionDashboard choose={choose} />
         ) : active === "school_master" ? (
           <SchoolMaster setToast={setToast} />
+        ) : active === "student_master" ? (
+          <StudentMasterStudio
+            setToast={setToast}
+            onNavigateToIdCard={() => choose("student_idcard")}
+            onNavigateToFees={() => choose("fees_collection")}
+          />
+        ) : active === "employee_master" ? (
+          <EmployeeMasterStudio
+            setToast={setToast}
+            onGenerateIdCard={() => choose("teacher_idcard")}
+            onGenerateSalarySlip={(emp) => setSlipModalRow(emp)}
+          />
         ) : active === "student_attendance" ? (
           <StudentAttendanceStudio setToast={setToast} />
         ) : active === "employee_attendance" ? (
