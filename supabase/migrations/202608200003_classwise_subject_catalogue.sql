@@ -1,0 +1,25 @@
+-- Class-wise subject catalogue for PG through Class VIII.
+alter table public.subject_master add column if not exists class_name varchar(50);
+create unique index if not exists subject_master_class_subject_idx
+  on public.subject_master(class_name, subject_name);
+
+with subject_rows(class_name, subject_name, subject_type) as (
+  values
+    ('PG','English','Language'),('PG','Mathematics','Scholastic'),('PG','Environmental Awareness','Co-scholastic'),('PG','Rhymes','Activity'),('PG','Art & Craft','Activity'),('PG','General Knowledge','Co-scholastic'),('PG','Physical Education','Activity'),
+    ('NURSERY','English','Language'),('NURSERY','Mathematics','Scholastic'),('NURSERY','Environmental Awareness','Co-scholastic'),('NURSERY','Rhymes','Activity'),('NURSERY','Art & Craft','Activity'),('NURSERY','General Knowledge','Co-scholastic'),('NURSERY','Physical Education','Activity'),
+    ('LKG','English','Language'),('LKG','Mathematics','Scholastic'),('LKG','Environmental Awareness','Co-scholastic'),('LKG','Rhymes','Activity'),('LKG','Art & Craft','Activity'),('LKG','General Knowledge','Co-scholastic'),('LKG','Physical Education','Activity'),
+    ('UKG','English','Language'),('UKG','Mathematics','Scholastic'),('UKG','Environmental Awareness','Co-scholastic'),('UKG','Rhymes','Activity'),('UKG','Art & Craft','Activity'),('UKG','General Knowledge','Co-scholastic'),('UKG','Physical Education','Activity'),
+    ('CLASS I','English','Language'),('CLASS I','Mathematics','Scholastic'),('CLASS I','Environmental Studies','Scholastic'),('CLASS I','Hindi','Language'),('CLASS I','Bengali','Language'),('CLASS I','Computer','Scholastic'),('CLASS I','General Knowledge','Co-scholastic'),('CLASS I','Moral Science','Co-scholastic'),('CLASS I','Art & Craft','Activity'),('CLASS I','Physical Education','Activity'),
+    ('CLASS II','English','Language'),('CLASS II','Mathematics','Scholastic'),('CLASS II','Environmental Studies','Scholastic'),('CLASS II','Hindi','Language'),('CLASS II','Bengali','Language'),('CLASS II','Computer','Scholastic'),('CLASS II','General Knowledge','Co-scholastic'),('CLASS II','Moral Science','Co-scholastic'),('CLASS II','Art & Craft','Activity'),('CLASS II','Physical Education','Activity'),
+    ('CLASS III','English','Language'),('CLASS III','Mathematics','Scholastic'),('CLASS III','Environmental Studies','Scholastic'),('CLASS III','Hindi','Language'),('CLASS III','Bengali','Language'),('CLASS III','Computer','Scholastic'),('CLASS III','General Knowledge','Co-scholastic'),('CLASS III','Moral Science','Co-scholastic'),('CLASS III','Art & Craft','Activity'),('CLASS III','Physical Education','Activity'),
+    ('CLASS IV','English','Language'),('CLASS IV','Mathematics','Scholastic'),('CLASS IV','Environmental Studies','Scholastic'),('CLASS IV','Hindi','Language'),('CLASS IV','Bengali','Language'),('CLASS IV','Computer','Scholastic'),('CLASS IV','General Knowledge','Co-scholastic'),('CLASS IV','Moral Science','Co-scholastic'),('CLASS IV','Art & Craft','Activity'),('CLASS IV','Physical Education','Activity'),
+    ('CLASS V','English','Language'),('CLASS V','Mathematics','Scholastic'),('CLASS V','Environmental Studies','Scholastic'),('CLASS V','Hindi','Language'),('CLASS V','Bengali','Language'),('CLASS V','Computer','Scholastic'),('CLASS V','General Knowledge','Co-scholastic'),('CLASS V','Moral Science','Co-scholastic'),('CLASS V','Art & Craft','Activity'),('CLASS V','Physical Education','Activity'),
+    ('CLASS VI','English','Language'),('CLASS VI','Mathematics','Scholastic'),('CLASS VI','Science','Scholastic'),('CLASS VI','Social Science','Scholastic'),('CLASS VI','Hindi','Language'),('CLASS VI','Bengali','Language'),('CLASS VI','Computer','Scholastic'),('CLASS VI','General Knowledge','Co-scholastic'),('CLASS VI','Moral Science','Co-scholastic'),('CLASS VI','Art & Craft','Activity'),('CLASS VI','Physical Education','Activity'),
+    ('CLASS VII','English','Language'),('CLASS VII','Mathematics','Scholastic'),('CLASS VII','Science','Scholastic'),('CLASS VII','Social Science','Scholastic'),('CLASS VII','Hindi','Language'),('CLASS VII','Bengali','Language'),('CLASS VII','Computer','Scholastic'),('CLASS VII','General Knowledge','Co-scholastic'),('CLASS VII','Moral Science','Co-scholastic'),('CLASS VII','Art & Craft','Activity'),('CLASS VII','Physical Education','Activity'),
+    ('CLASS VIII','English','Language'),('CLASS VIII','Mathematics','Scholastic'),('CLASS VIII','Science','Scholastic'),('CLASS VIII','Social Science','Scholastic'),('CLASS VIII','Hindi','Language'),('CLASS VIII','Bengali','Language'),('CLASS VIII','Computer','Scholastic'),('CLASS VIII','General Knowledge','Co-scholastic'),('CLASS VIII','Moral Science','Co-scholastic'),('CLASS VIII','Art & Craft','Activity'),('CLASS VIII','Physical Education','Activity')
+)
+insert into public.subject_master(class_name, subject_name, subject_type, is_active)
+select class_name, subject_name, subject_type, true from subject_rows
+on conflict (class_name, subject_name) do update set
+  subject_type = excluded.subject_type,
+  is_active = true;
