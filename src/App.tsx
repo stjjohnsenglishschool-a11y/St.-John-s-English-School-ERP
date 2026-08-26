@@ -47,6 +47,8 @@ import {
 } from "./lib/supabase";
 import { Field, label, moduleName, modules, navGroups } from "./modules";
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS } from "./lib/academicYear";
+import { seedModuleData, SEED_DATA } from "./lib/seedData";
+import { Sparkles, Database } from "lucide-react";
 import IDCardStudio from "./IDCardStudio";
 import PortalLogin from "./PortalLogin";
 import ProductionDashboard from "./ProductionDashboard";
@@ -150,6 +152,7 @@ function App() {
   } | null>(null);
   const [toast, setToast] = useState("");
   const [authReady, setAuthReady] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   // Sorting & Pagination
   const [sortCol, setSortCol] = useState<string | null>(null);
@@ -213,6 +216,24 @@ function App() {
       setLoading(false);
     }
   }, [mod]);
+
+  const handleSeed = useCallback(async () => {
+    if (!mod) return;
+    setSeeding(true);
+    try {
+      const res = await seedModuleData(mod.table);
+      if (res.success) {
+        setToast(`✓ Populated ${res.count} records into ${moduleName(mod.table)} in database!`);
+        await refresh();
+      } else {
+        setToast(res.error || `Unable to populate seed data.`);
+      }
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Seed failed");
+    } finally {
+      setSeeding(false);
+    }
+  }, [mod, refresh]);
 
   useEffect(() => {
     refresh();
@@ -721,6 +742,9 @@ function App() {
               total={filtered.length}
               canAdd={mod.fields.length > 0}
               onAdd={() => setModal({ mode: "create" })}
+              onSeed={handleSeed}
+              hasSeed={Boolean(SEED_DATA[mod.table])}
+              seeding={seeding}
             />
 
             <section className="data-card">
@@ -736,6 +760,22 @@ function App() {
                     placeholder={`Filter ${moduleName(mod.table)}... (${filtered.length} records)`}
                   />
                 </div>
+                {Boolean(SEED_DATA[mod.table]) && filtered.length === 0 && (
+                  <button
+                    onClick={handleSeed}
+                    disabled={seeding}
+                    title="Populate standard default records"
+                    style={{
+                      background: "linear-gradient(135deg, #1e3a8a, #2563eb)",
+                      color: "#fff",
+                      border: "none",
+                      fontWeight: 600,
+                    }}
+                  >
+                    <Sparkles size={14} />
+                    {seeding ? "Populating..." : "Seed Default Data"}
+                  </button>
+                )}
                 <button onClick={exportCsv} title="Export current rows to CSV">
                   <Download />
                   Export CSV
@@ -774,6 +814,10 @@ function App() {
                 view={(row) => setModal({ mode: "view", row })}
                 edit={(row) => setModal({ mode: "edit", row })}
                 remove={remove}
+                onAdd={() => setModal({ mode: "create" })}
+                onSeed={handleSeed}
+                hasSeed={Boolean(SEED_DATA[mod.table])}
+                seeding={seeding}
                 printReceipt={(row) => setReceiptModalRow(row)}
                 printSlip={(row) => setSlipModalRow(row)}
                 printLetter={(type, row) => setLetterModal({ type, row })}
@@ -918,11 +962,17 @@ function PageHeader({
   total,
   onAdd,
   canAdd,
+  onSeed,
+  hasSeed,
+  seeding,
 }: {
   mod: (typeof modules)[string];
   total: number;
   onAdd: () => void;
   canAdd: boolean;
+  onSeed?: () => void;
+  hasSeed?: boolean;
+  seeding?: boolean;
 }) {
   return (
     <section className="page-head">
@@ -933,12 +983,29 @@ function PageHeader({
           {mod?.description} · {total} records in database
         </p>
       </div>
-      {canAdd && (
-        <button onClick={onAdd}>
-          <Plus />
-          Add record
-        </button>
-      )}
+      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        {hasSeed && total === 0 && onSeed && (
+          <button
+            onClick={onSeed}
+            disabled={seeding}
+            style={{
+              background: "linear-gradient(135deg, #1e3a8a, #2563eb)",
+              color: "#fff",
+              border: "none",
+              fontWeight: 600,
+            }}
+          >
+            <Sparkles size={16} />
+            {seeding ? "Populating..." : "Seed Default Data"}
+          </button>
+        )}
+        {canAdd && (
+          <button onClick={onAdd}>
+            <Plus />
+            Add record
+          </button>
+        )}
+      </div>
     </section>
   );
 }
@@ -953,6 +1020,10 @@ function DataTable({
   view,
   edit,
   remove,
+  onAdd,
+  onSeed,
+  hasSeed,
+  seeding,
   printReceipt,
   printSlip,
   printLetter,
@@ -966,10 +1037,16 @@ function DataTable({
   view: (r: Row) => void;
   edit: (r: Row) => void;
   remove: (r: Row) => void;
+  onAdd?: () => void;
+  onSeed?: () => void;
+  hasSeed?: boolean;
+  seeding?: boolean;
   printReceipt?: (r: Row) => void;
   printSlip?: (r: Row) => void;
   printLetter?: (type: "warning" | "offer", r: Row) => void;
 }) {
+  const [showRlsHelp, setShowRlsHelp] = useState(false);
+
   if (loading)
     return (
       <div className="empty">
@@ -980,10 +1057,121 @@ function DataTable({
     );
   if (!rows.length)
     return (
-      <div className="empty">
-        <Cloud />
-        <h3>No records found</h3>
-        <p>There are no rows in this table yet. Click "Add record" or import a CSV to get started.</p>
+      <div className="empty" style={{ padding: "40px 20px", textAlign: "center" }}>
+        <Cloud style={{ width: 48, height: 48, color: "#94a3b8", margin: "0 auto 12px" }} />
+        <h3 style={{ margin: "0 0 6px", fontSize: "18px", color: "#1e293b" }}>
+          No records found in {moduleName(mod.table)}
+        </h3>
+        <p style={{ margin: "0 0 20px", color: "#64748b", maxWidth: "480px", marginInline: "auto" }}>
+          There are currently 0 rows returned from the <code>{mod.table}</code> table. You can populate standard school records with one click or add new entries manually.
+        </p>
+        <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap", marginBottom: "20px" }}>
+          {hasSeed && onSeed && (
+            <button
+              onClick={onSeed}
+              disabled={seeding}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "10px 20px",
+                background: "linear-gradient(135deg, #1e3a8a, #2563eb)",
+                color: "#fff",
+                borderRadius: "8px",
+                border: "none",
+                fontWeight: 600,
+                cursor: seeding ? "not-allowed" : "pointer",
+                boxShadow: "0 4px 12px rgba(37,99,235,0.25)",
+              }}
+            >
+              <Sparkles size={16} />
+              {seeding ? "Populating..." : `⚡ Seed St. John's ${moduleName(mod.table)}`}
+            </button>
+          )}
+          {onAdd && (
+            <button
+              onClick={onAdd}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "10px 18px",
+                background: "#fff",
+                color: "#1e293b",
+                borderRadius: "8px",
+                border: "1px solid #cbd5e1",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              <Plus size={16} />
+              Add Record Manually
+            </button>
+          )}
+        </div>
+
+        <div style={{ maxWidth: "560px", margin: "0 auto", textAlign: "left" }}>
+          <button
+            onClick={() => setShowRlsHelp(!showRlsHelp)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#3b82f6",
+              fontSize: "12px",
+              cursor: "pointer",
+              textDecoration: "underline",
+              padding: "4px",
+              display: "block",
+              margin: "0 auto",
+            }}
+          >
+            {showRlsHelp ? "Hide Supabase RLS troubleshooting info" : "ℹ️ Ran the backend SQL but still see 0 records? Click here"}
+          </button>
+
+          {showRlsHelp && (
+            <div
+              style={{
+                marginTop: "12px",
+                padding: "12px 16px",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                fontSize: "12px",
+                lineHeight: "1.6",
+                color: "#334155",
+              }}
+            >
+              <p style={{ margin: "0 0 8px 0", fontWeight: 600, color: "#0f172a" }}>
+                Why data might not appear after running schema:
+              </p>
+              <ol style={{ margin: 0, paddingLeft: "18px" }}>
+                <li>
+                  <b>RLS Permissions (Most Common)</b>: In Supabase, the public web client connects via the <code>anon</code> key. If your RLS policy only granted permissions to <code>authenticated</code>, Supabase returns 0 rows to unauthenticated browsers.
+                </li>
+                <li>
+                  <b>Quick Fix</b>: Run this 1-line command in Supabase SQL Editor:
+                  <pre
+                    style={{
+                      background: "#1e293b",
+                      color: "#38bdf8",
+                      padding: "8px 10px",
+                      borderRadius: "6px",
+                      marginTop: "6px",
+                      overflowX: "auto",
+                      fontSize: "11px",
+                    }}
+                  >
+{`grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+create policy "allow_all" on public.${mod.table} for all to anon, authenticated using (true) with check (true);`}
+                  </pre>
+                </li>
+                <li>
+                  Or simply click the <b>"⚡ Seed St. John's {moduleName(mod.table)}"</b> button above to insert default items!
+                </li>
+              </ol>
+            </div>
+          )}
+        </div>
       </div>
     );
 
