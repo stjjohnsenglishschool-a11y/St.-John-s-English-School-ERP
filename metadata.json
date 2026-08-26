@@ -2,5 +2,7 @@
   "name": "St. John's English School ERP",
   "description": "Comprehensive school enterprise resource planning (ERP) platform for St. John's English School featuring student management, attendance, fee collection, employee profiles, and ID card studio.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
