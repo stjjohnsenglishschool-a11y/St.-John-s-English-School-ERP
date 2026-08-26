@@ -317,8 +317,23 @@ export default function StudentMasterStudio({
 
     setSubmitting(true)
     try {
+      // Sanitize payload to avoid postgres type errors on empty strings
+      const payload: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(formState)) {
+        if (k === 'student_id' && modalMode === 'create') continue
+        if (v === '' || v === undefined) {
+          if (modalMode === 'edit') {
+            payload[k] = null
+          }
+        } else if (k === 'roll_no') {
+          payload[k] = String(v).trim()
+        } else {
+          payload[k] = v
+        }
+      }
+
       if (modalMode === 'create') {
-        const { error } = await supabase.from('student_master').insert([formState])
+        const { error } = await supabase.from('student_master').insert([payload])
         if (error) throw error
         await logActivity({
           action: `Admitted new student: ${formState.full_name} (${formState.admission_no})`,
@@ -328,7 +343,7 @@ export default function StudentMasterStudio({
       } else if (modalMode === 'edit' && selectedStudent?.student_id) {
         const { error } = await supabase
           .from('student_master')
-          .update(formState)
+          .update(payload)
           .eq('student_id', selectedStudent.student_id)
         if (error) throw error
         await logActivity({

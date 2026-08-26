@@ -322,8 +322,24 @@ export default function EmployeeMasterStudio({
 
     setSubmitting(true)
     try {
+      // Sanitize payload to avoid postgres type errors on empty strings
+      const payload: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(formState)) {
+        if (k === 'emp_id' && modalMode === 'create') continue
+        if (v === '' || v === undefined) {
+          if (modalMode === 'edit') {
+            payload[k] = null
+          }
+        } else if (k === 'basic_salary' || k === 'total_experience_years') {
+          const num = Number(v)
+          payload[k] = isNaN(num) ? (modalMode === 'edit' ? null : undefined) : num
+        } else {
+          payload[k] = v
+        }
+      }
+
       if (modalMode === 'create') {
-        const { error } = await supabase.from('employee_master').insert([formState])
+        const { error } = await supabase.from('employee_master').insert([payload])
         if (error) throw error
         await logActivity({
           action: `Added new employee: ${formState.first_name} ${formState.last_name} (${formState.emp_code})`,
@@ -333,7 +349,7 @@ export default function EmployeeMasterStudio({
       } else if (modalMode === 'edit' && selectedEmp?.emp_id) {
         const { error } = await supabase
           .from('employee_master')
-          .update(formState)
+          .update(payload)
           .eq('emp_id', selectedEmp.emp_id)
         if (error) throw error
         await logActivity({
