@@ -48,6 +48,7 @@ import {
   supabase,
   uploadToSupabaseStorage,
 } from "./lib/supabase";
+import { seedSupabaseDatabase } from "./lib/seedDatabase";
 import { Field, label, moduleName, modules, navGroups } from "./modules";
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS } from "./lib/academicYear";
 import IDCardStudio from "./IDCardStudio";
@@ -197,7 +198,7 @@ function App() {
       });
   }, [session]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (forceSeed = false) => {
     if (!mod) {
       setRows([]);
       return;
@@ -205,6 +206,13 @@ function App() {
     setLoading(true);
     try {
       if (supabase) {
+        if (forceSeed) {
+          const result = await seedSupabaseDatabase(true);
+          setToast(result.message);
+        } else {
+          await seedSupabaseDatabase(false);
+        }
+
         const req = supabase
           .from(mod.table)
           .select("*")
@@ -849,9 +857,9 @@ function App() {
           <strong>{active === "Overview" ? "Dashboard" : moduleName(active)}</strong>
         </div>
         <div>
-          <button onClick={refresh} title="Refresh from database">
+          <button onClick={() => refresh(true)} title="Sync and auto-seed live data to Supabase">
             <RefreshCw className={loading ? "spin" : ""} />
-            <span>Sync</span>
+            <span>Sync Live Data</span>
           </button>
           <span className="live">
             <i />

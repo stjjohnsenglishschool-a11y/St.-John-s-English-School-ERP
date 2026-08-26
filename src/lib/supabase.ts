@@ -1,7 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const rawUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || 'https://zjuowrqmkdzfnrzausgq.supabase.co'
-const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || ''
+const rawUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || 'https://dbliogptcikqyzkbqnus.supabase.co'
+const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRibGlvZ3B0Y2lrcXl6a2JxbnVzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyNzg2NjMsImV4cCI6MjA5Nzg1NDY2M30.c-lU8C9ZScHMIIWJ-NCxqKNF1WVJqLsm3dQVQlclKdI'
+export const SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRibGlvZ3B0Y2lrcXl6a2JxbnVzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MjI3ODY2MywiZXhwIjoyMDk3ODU0NjYzfQ.F-pkvO-1LO7lBMiwbPAm9sjsmWSvUNMHywtYy57drPU'
 
 export const isSupabaseConfigured = Boolean(rawUrl && rawKey)
 
