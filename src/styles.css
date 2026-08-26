@@ -697,6 +697,45 @@ body,.app{background:linear-gradient(135deg,#f8fbff 0%,#f3f8ff 55%,#faf7ff 100%)
   gap: 10px;
 }
 
+/* Fix for Logout Button card sizing & text overlap */
+.head-actions > button.logout-action-btn,
+button.logout-action-btn {
+  width: auto !important;
+  min-width: 100px !important;
+  height: 44px !important;
+  padding: 0 16px !important;
+  border: 1px solid #fca5a5 !important;
+  border-radius: 10px !important;
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.12) !important;
+}
+
+.head-actions > button.logout-action-btn:hover,
+button.logout-action-btn:hover {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border-color: #dc2626 !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.28) !important;
+}
+
+.head-actions > button.logout-action-btn svg,
+button.logout-action-btn svg {
+  width: 16px !important;
+  height: 16px !important;
+  color: inherit !important;
+  flex-shrink: 0 !important;
+}
+
 @media (max-width: 768px) {
   .form-row-2,
   .form-row-3,
@@ -712,4 +751,5 @@ body,.app{background:linear-gradient(135deg,#f8fbff 0%,#f3f8ff 55%,#faf7ff 100%)
     flex-wrap: wrap;
   }
 }
+
 

@@ -749,22 +749,9 @@ function App() {
             <ChevronDown />
           </button>
           <button
+            className="logout-action-btn"
             onClick={handleLogout}
             title="Sign Out of ERP Portal"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "7px 14px",
-              borderRadius: "8px",
-              background: "#fee2e2",
-              color: "#dc2626",
-              border: "1px solid #fca5a5",
-              fontWeight: 600,
-              fontSize: "13px",
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-            }}
           >
             <LogOut size={16} />
             <span>Logout</span>
