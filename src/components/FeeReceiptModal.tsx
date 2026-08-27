@@ -17,6 +17,7 @@ export default function FeeReceiptModal({ receipt, onClose }: FeeReceiptProps) {
 
   return (
     <div
+      className="printable-modal-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -31,6 +32,7 @@ export default function FeeReceiptModal({ receipt, onClose }: FeeReceiptProps) {
       onClick={onClose}
     >
       <div
+        className="printable-modal-card"
         style={{
           background: "#fff",
           borderRadius: "14px",

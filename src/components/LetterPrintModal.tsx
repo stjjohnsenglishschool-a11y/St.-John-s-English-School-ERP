@@ -19,6 +19,7 @@ export default function LetterPrintModal({
 
   return (
     <div
+      className="printable-modal-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -33,6 +34,7 @@ export default function LetterPrintModal({
       onClick={onClose}
     >
       <div
+        className="printable-modal-card"
         style={{
           background: "#fff",
           borderRadius: "14px",

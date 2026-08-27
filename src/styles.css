@@ -54,7 +54,7 @@ main>footer{padding:22px 3px;color:#909cad;display:flex;justify-content:space-be
 @media(max-width:760px){.dashboard-heading{align-items:flex-start;flex-direction:column}.dashboard-actions{width:100%}.dashboard-actions button{flex:1;justify-content:center}.finance-values{grid-template-columns:repeat(2,minmax(0,1fr))}.operations-grid{grid-template-columns:1fr}.attendance-body{justify-content:center}.dashboard-panel>header{align-items:flex-start}.dashboard-panel header>button{margin-top:5px}.module-centre>header{align-items:flex-start;gap:12px}.directory-count{white-space:nowrap}}
 @media(max-width:460px){.dashboard-actions{display:grid;grid-template-columns:1fr}.finance-values{grid-template-columns:1fr}.attendance-body{flex-direction:column}.attention-list>button{grid-template-columns:38px 1fr 24px 12px}.dashboard-panel>header>button{display:none}.directory-count{display:none}}
 @media print {
-  /* Hide UI navigation, headers, sidebars, toolbars, search bars, toasts, and buttons */
+  /* Hide UI navigation, headers, sidebars, toolbars, search bars, toasts, and non-printable controls */
   .masthead,
   .sidebar,
   .sidebar-backdrop,
@@ -79,11 +79,16 @@ main>footer{padding:22px 3px;color:#909cad;display:flex;justify-content:space-be
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
     font-size: 11pt;
   }
 
   .app {
     background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
   }
 
   .app>main, main {
@@ -91,6 +96,61 @@ main>footer{padding:22px 3px;color:#909cad;display:flex;justify-content:space-be
     padding: 10px !important;
     width: 100% !important;
     max-width: none !important;
+    overflow: visible !important;
+  }
+
+  /* Handle print modal overlays and containers so they never print blank */
+  .printable-modal-overlay,
+  .modal-bg {
+    position: static !important;
+    inset: auto !important;
+    background: #ffffff !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    z-index: auto !important;
+  }
+
+  .printable-modal-card,
+  .record-modal {
+    position: static !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Explicit printable document containers */
+  #printable-fee-receipt,
+  #printable-salary-slip,
+  #printable-letter,
+  .printable-content,
+  .id-card {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 15px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    page-break-inside: avoid;
+    box-shadow: none !important;
   }
 
   /* Full table visibility for reports and master data */
@@ -151,6 +211,7 @@ main>footer{padding:22px 3px;color:#909cad;display:flex;justify-content:space-be
     background: none !important;
     padding: 0 !important;
     display: block !important;
+    overflow: visible !important;
   }
 
   .id-card {
@@ -159,6 +220,11 @@ main>footer{padding:22px 3px;color:#909cad;display:flex;justify-content:space-be
     transform: none !important;
     margin: 0 auto !important;
     page-break-inside: avoid;
+  }
+
+  img {
+    max-width: 100% !important;
+    object-fit: contain !important;
   }
 }
 
