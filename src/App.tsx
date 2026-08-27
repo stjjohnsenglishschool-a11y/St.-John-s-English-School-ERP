@@ -21,6 +21,7 @@ import {
   Download,
   Edit3,
   Eye,
+  EyeOff,
   FileBarChart,
   GraduationCap,
   IndianRupee,
@@ -49,7 +50,7 @@ import {
   uploadToSupabaseStorage,
 } from "./lib/supabase";
 import { seedSupabaseDatabase } from "./lib/seedDatabase";
-import { Field, label, moduleName, modules, navGroups } from "./modules";
+import { ALL_SUBMENU_MODULES, Field, label, moduleName, modules, navGroups } from "./modules";
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS } from "./lib/academicYear";
 import IDCardStudio from "./IDCardStudio";
 import PortalLogin from "./PortalLogin";
@@ -144,6 +145,69 @@ function App() {
     () => localStorage.getItem("sjes_logged_out") === "true"
   );
   const [role, setRole] = useState("Administrator");
+
+  // Currently logged in ERP user profile & allowed modules session
+  const [currentUser, setCurrentUser] = useState<{
+    user_name: string;
+    user_full_name: string;
+    role: string;
+    allowed_modules: string[];
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem("sjes_logged_in_user");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const syncCurrentUser = useCallback(() => {
+    try {
+      const raw = localStorage.getItem("sjes_logged_in_user");
+      if (raw) {
+        setCurrentUser(JSON.parse(raw));
+      } else {
+        setCurrentUser(null);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const isUserAdmin = useMemo(() => {
+    if (!currentUser) return true;
+    const r = (currentUser.role || "").toLowerCase();
+    const name = (currentUser.user_name || "").toLowerCase();
+    return r === "admin" || r === "administrator" || name === "admin";
+  }, [currentUser]);
+
+  const allowedModuleKeys = useMemo(() => {
+    if (isUserAdmin) return null; // null means unrestricted full access
+    const list = currentUser?.allowed_modules || [];
+    return new Set(list.map((m) => m.toLowerCase().trim()));
+  }, [currentUser, isUserAdmin]);
+
+  const visibleNavGroups = useMemo(() => {
+    if (!allowedModuleKeys) return navGroups.slice(1);
+    return navGroups
+      .slice(1)
+      .map((g) => {
+        const allowedItems = g.items.filter((item) =>
+          allowedModuleKeys.has(item.toLowerCase())
+        );
+        return { ...g, items: allowedItems };
+      })
+      .filter((g) => g.items.length > 0);
+  }, [allowedModuleKeys]);
+
+  // Route protection guard: if current active module is not allowed, reset to Overview
+  useEffect(() => {
+    if (active === "Overview" || !allowedModuleKeys) return;
+    if (!allowedModuleKeys.has(active.toLowerCase())) {
+      setActive("Overview");
+      setToast(`Module '${moduleName(active)}' is not permitted for your user account.`);
+    }
+  }, [active, allowedModuleKeys]);
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
@@ -218,17 +282,31 @@ function App() {
           .select("*")
           .order(mod.primaryKey, { ascending: false })
           .limit(1000);
-        const { data, error } = await req;
+        let { data, error } = await req;
+
+        // Auto-seed table in Supabase if table is empty and initialRows are available
+        if (!error && (!data || data.length === 0) && mod.initialRows && mod.initialRows.length > 0) {
+          const { error: seedErr } = await supabase.from(mod.table).insert(mod.initialRows);
+          if (!seedErr) {
+            const reFetch = await supabase.from(mod.table).select("*").order(mod.primaryKey, { ascending: false }).limit(1000);
+            if (reFetch.data && reFetch.data.length > 0) {
+              data = reFetch.data;
+            }
+          } else {
+            console.warn("Auto-insert into Supabase table failed:", seedErr.message);
+          }
+        }
+
         if (error) {
           console.warn("Supabase load error, reading local cache:", error.message);
           const cached = localStorage.getItem(`sjes_table_${mod.table}`);
           if (cached) {
             setRows(JSON.parse(cached));
           } else {
-            setRows([]);
+            setRows(mod.initialRows || []);
           }
         } else {
-          setRows(data || []);
+          setRows(data || mod.initialRows || []);
           localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(data || []));
         }
       } else {
@@ -255,15 +333,39 @@ function App() {
   useEffect(() => {
     if (!supabase || !mod) return;
     const channel = supabase
-      .channel(`table-${mod.table}`)
+      .channel(`table-rt-${mod.table}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: mod.table },
-        () => {
-          refresh();
+        (payload) => {
+          if (payload.eventType === "INSERT" && payload.new) {
+            setRows((prev) => {
+              const pKey = mod.primaryKey;
+              if (prev.some((r) => String(r[pKey]) === String(payload.new[pKey]))) return prev;
+              return [payload.new as Row, ...prev];
+            });
+          } else if (payload.eventType === "UPDATE" && payload.new) {
+            setRows((prev) => {
+              const pKey = mod.primaryKey;
+              return prev.map((r) =>
+                String(r[pKey]) === String(payload.new[pKey]) ? { ...r, ...(payload.new as Row) } : r
+              );
+            });
+          } else if (payload.eventType === "DELETE" && payload.old) {
+            setRows((prev) => {
+              const pKey = mod.primaryKey;
+              return prev.filter((r) => String(r[pKey]) !== String(payload.old[pKey]));
+            });
+          } else {
+            refresh();
+          }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log(`Live Supabase sync active on table ${mod.table}`);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -736,15 +838,20 @@ function App() {
             style={{ cursor: "pointer" }}
           >
             <span>
-              {session?.user?.email?.slice(0, 2).toUpperCase() || "AM"}
+              {(currentUser?.user_full_name || currentUser?.user_name || "AM").slice(0, 2).toUpperCase()}
             </span>
             <div>
               <b>
-                {session?.user?.user_metadata?.full_name ||
-                  session?.user?.email ||
-                  "Administrator"}
+                {currentUser?.user_full_name || currentUser?.user_name || "Administrator"}
               </b>
-              <small>{role}</small>
+              <small>
+                {currentUser?.role ? label(currentUser.role) : role}
+                {!isUserAdmin && currentUser?.allowed_modules && (
+                  <span style={{ marginLeft: "4px", color: "#0284c7" }}>
+                    ({currentUser.allowed_modules.length} modules)
+                  </span>
+                )}
+              </small>
             </div>
             <ChevronDown />
           </button>
@@ -787,7 +894,7 @@ function App() {
             </span>
             <span>Dashboard</span>
           </button>
-          {navGroups.slice(1).map((g) => {
+          {visibleNavGroups.map((g) => {
             const open = navOpen === g.label;
             const groupActive = g.items.includes(active);
             return (
@@ -1257,6 +1364,30 @@ function DataTable({
                     ) : (
                       "—"
                     )
+                  ) : c === "password" ? (
+                    <span style={{ fontFamily: "monospace", background: "#f1f5f9", padding: "2px 8px", borderRadius: "4px", fontSize: "12px", border: "1px solid #cbd5e1", fontWeight: 600, color: "#0f172a" }}>
+                      🔑 {String(r[c] || "admin123")}
+                    </span>
+                  ) : c === "allowed_modules" || c === "active_module" ? (
+                    (() => {
+                      const mods = Array.isArray(r[c]) ? (r[c] as string[]) : typeof r[c] === "string" ? String(r[c]).split(",") : [];
+                      if (!mods.length) return <span style={{ color: "var(--muted)", fontStyle: "italic" }}>No modules selected</span>;
+                      if (mods.length >= 25) return <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 700 }}>All Modules ({mods.length})</span>;
+                      return (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", maxWidth: "260px" }}>
+                          {mods.slice(0, 3).map((m) => (
+                            <span key={m} style={{ background: "#eff6ff", color: "#1d4ed8", padding: "1px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #bfdbfe", fontWeight: 500 }}>
+                              {moduleName(m.trim())}
+                            </span>
+                          ))}
+                          {mods.length > 3 && (
+                            <span style={{ background: "#f1f5f9", color: "#475569", padding: "1px 6px", borderRadius: "4px", fontSize: "11px", fontWeight: 600 }}>
+                              +{mods.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()
                   ) : (
                     String(r[c] ?? "—")
                   )}
@@ -1516,6 +1647,7 @@ function FormField({
     Array<Record<string, unknown>>
   >([]);
   const [uploading, setUploading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (field.type !== "relation" || !field.reference || !supabase) return;
@@ -1552,6 +1684,155 @@ function FormField({
       setUploading(false);
     }
   };
+
+  // Custom Multi-Select UI for Module Permission Option
+  if (field.key === "allowed_modules" || field.key === "active_module") {
+    const selectedModules: string[] = Array.isArray(value)
+      ? (value as string[])
+      : typeof value === "string" && value.length > 0
+      ? value.split(",").map((s) => s.trim())
+      : [];
+
+    const toggleModule = (modKey: string) => {
+      if (selectedModules.includes(modKey)) {
+        change(selectedModules.filter((m) => m !== modKey));
+      } else {
+        change([...selectedModules, modKey]);
+      }
+    };
+
+    const selectAll = () => {
+      change(ALL_SUBMENU_MODULES.map((m) => m.key));
+    };
+
+    const deselectAll = () => {
+      change([]);
+    };
+
+    // Group modules by category
+    const groupedModules = ALL_SUBMENU_MODULES.reduce((acc, item) => {
+      acc[item.group] = acc[item.group] || [];
+      acc[item.group].push(item);
+      return acc;
+    }, {} as Record<string, typeof ALL_SUBMENU_MODULES>);
+
+    return (
+      <div className="full" style={{ gridColumn: "1 / -1", marginTop: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+          <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--navy)" }}>
+            Module Access Permissions (Check modules this user can view) <b>*</b>
+          </span>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <span style={{ fontSize: "12px", background: "#e0f2fe", color: "#0369a1", padding: "2px 10px", borderRadius: "12px", fontWeight: 700 }}>
+              {selectedModules.length} / {ALL_SUBMENU_MODULES.length} Selected
+            </span>
+            {!disabled && (
+              <>
+                <button
+                  type="button"
+                  onClick={selectAll}
+                  style={{ fontSize: "11px", padding: "3px 10px", background: "#f0f4fa", border: "1px solid #cbd5e1", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
+                >
+                  Select All
+                </button>
+                <button
+                  type="button"
+                  onClick={deselectAll}
+                  style={{ fontSize: "11px", padding: "3px 10px", background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
+                >
+                  Clear All
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "10px", background: "#f8fafc", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0", maxHeight: "320px", overflowY: "auto" }}>
+          {Object.entries(groupedModules).map(([groupName, groupItems]) => (
+            <div key={groupName} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", marginBottom: "6px", borderBottom: "1px solid #f1f5f9", paddingBottom: "4px" }}>
+                {groupName}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                {groupItems.map((item) => {
+                  const checked = selectedModules.includes(item.key);
+                  return (
+                    <label
+                      key={item.key}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "12px",
+                        padding: "4px 6px",
+                        borderRadius: "4px",
+                        background: checked ? "#f0f9ff" : "transparent",
+                        cursor: disabled ? "not-allowed" : "pointer",
+                        userSelect: "none",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={disabled}
+                        checked={checked}
+                        onChange={() => toggleModule(item.key)}
+                        style={{ cursor: "pointer", accentColor: "#0284c7" }}
+                      />
+                      <span style={{ fontWeight: checked ? 600 : 400, color: checked ? "#0369a1" : "#334155" }}>
+                        {item.label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Password Input Field with Eye Toggle
+  if (field.key === "password") {
+    return (
+      <label>
+        <span>
+          {field.label}
+          {field.required && <b>*</b>}
+        </span>
+        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          <input
+            disabled={disabled}
+            required={field.required}
+            type={showPassword ? "text" : "password"}
+            placeholder="Enter account password (e.g. admin123)"
+            value={String(value ?? "")}
+            onChange={(e) => change(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            style={{
+              padding: "0 10px",
+              height: "38px",
+              border: "1px solid #d4deec",
+              borderRadius: "8px",
+              background: "#f8fafc",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#475569",
+            }}
+            title={showPassword ? "Hide Password" : "Show Password"}
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+      </label>
+    );
+  }
 
   return (
     <label className={field.type === "textarea" ? "full" : ""}>

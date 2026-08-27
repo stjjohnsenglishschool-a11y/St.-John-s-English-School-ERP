@@ -144,6 +144,26 @@ export default function EmployeeAttendanceStudio({
     } else {
       loadHistory();
     }
+
+    if (!supabase) return;
+    const channel = supabase
+      .channel("rt-employee-attendance")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "employee_attendance" },
+        () => {
+          if (activeTab === "marker") {
+            loadBatchData();
+          } else {
+            loadHistory();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [activeTab, loadBatchData, loadHistory]);
 
   const updateEntry = (index: number, patch: Partial<EmpAttendanceEntry>) => {

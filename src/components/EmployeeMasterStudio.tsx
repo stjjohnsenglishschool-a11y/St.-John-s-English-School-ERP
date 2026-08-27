@@ -181,6 +181,22 @@ export default function EmployeeMasterStudio({
 
   useEffect(() => {
     loadEmployees()
+
+    if (!supabase) return
+    const channel = supabase
+      .channel('rt-employee-master')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'employee_master' },
+        () => {
+          loadEmployees()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   // Filtering

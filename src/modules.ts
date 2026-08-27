@@ -30,6 +30,7 @@ export type Module = {
   description: string
   fields: Field[]
   columns: string[]
+  initialRows?: Record<string, any>[]
 }
 
 export type NavSection = { label: string; items: string[] }
@@ -52,6 +53,38 @@ const rel = (
   display: string,
   required = false
 ) => f(key, label, 'relation', required, undefined, { table, value, label: display })
+
+export const ALL_SUBMENU_MODULES = [
+  { key: 'school_master', label: 'School Master', group: 'Master Setup' },
+  { key: 'department_master', label: 'Department Master', group: 'Master Setup' },
+  { key: 'class_master', label: 'Class Master', group: 'Master Setup' },
+  { key: 'subject_master', label: 'Subject Master', group: 'Master Setup' },
+  { key: 'vendor_master', label: 'Vendor Master', group: 'Master Setup' },
+  { key: 'student_master', label: 'Student Master', group: 'Master Setup' },
+  { key: 'employee_master', label: 'Employee Master', group: 'Master Setup' },
+  { key: 'user_master', label: 'User Master', group: 'Master Setup' },
+  { key: 'student_attendance', label: 'Student Attendance', group: 'Attendance' },
+  { key: 'employee_attendance', label: 'Employee Attendance', group: 'Attendance' },
+  { key: 'fees_collection', label: 'Fee Collection', group: 'Finance' },
+  { key: 'expense_master', label: 'Expenses', group: 'Finance' },
+  { key: 'income_master', label: 'Income', group: 'Finance' },
+  { key: 'salary_slip', label: 'Salary / Payroll', group: 'Finance' },
+  { key: 'leave_application', label: 'Leave Application', group: 'HR' },
+  { key: 'leave_balance', label: 'Leave Balance', group: 'HR' },
+  { key: 'warning_letter', label: 'Warning Letters', group: 'HR' },
+  { key: 'offer_letter', label: 'Offer Letters', group: 'HR' },
+  { key: 'employee_document', label: 'Employee Documents', group: 'HR' },
+  { key: 'asset_master', label: 'Asset Master', group: 'Assets & Inventory' },
+  { key: 'inventory_master', label: 'Inventory Master', group: 'Assets & Inventory' },
+  { key: 'teacher_idcard', label: 'Teacher ID Card', group: 'ID Cards' },
+  { key: 'student_idcard', label: 'Student ID Card', group: 'ID Cards' },
+  { key: 'escort_card', label: 'Escort Card', group: 'ID Cards' },
+  { key: 'assignments_master', label: 'Assignments', group: 'Academics' },
+  { key: 'notice_automation', label: 'Notice Automation', group: 'Communication' },
+  { key: 'userlog_master', label: 'User Activity Logs', group: 'Administration' },
+]
+
+export const ALL_MODULE_KEYS = ALL_SUBMENU_MODULES.map((m) => m.key)
 
 export const modules: Record<string, Module> = {
   'school_master': {
@@ -281,17 +314,60 @@ export const modules: Record<string, Module> = {
     group: 'Master Setup',
     table: 'user_master',
     primaryKey: 'user_id',
-    description: 'Application user directory; authentication accounts, roles and permission management',
+    description: 'Application user directory; authentication accounts, passwords, roles and module permission management',
     fields: [
       f('user_full_name', 'Full name', 'text', true),
       f('user_name', 'Username', 'text', true),
-      f('department', 'Department'),
-      f('active_module', 'Active modules', 'array'),
+      f('password', 'Password', 'text', true),
+      f('department', 'Department', 'select', false, ['Management', 'Teaching Staff', 'Non-Teaching Staff', 'Administrative Office', 'Accounts & Finance', 'Sports & Physical Education', 'Information Technology']),
+      f('role', 'Role', 'select', true, ['admin', 'principal', 'teacher', 'accounts', 'hr', 'staff']),
+      f('allowed_modules', 'Allowed Modules (Multiple Selection)', 'array'),
       f('status', 'Status', 'select', false, ['active', 'inactive', 'suspended']),
-      f('role', 'Role', 'select', false, ['admin', 'principal', 'teacher', 'accounts', 'hr', 'staff']),
       f('is_active', 'Active', 'boolean'),
     ],
-    columns: ['user_full_name', 'user_name', 'department', 'role', 'status', 'is_active'],
+    columns: ['user_full_name', 'user_name', 'password', 'department', 'role', 'allowed_modules', 'status', 'is_active'],
+    initialRows: [
+      {
+        user_full_name: 'Administrator',
+        user_name: 'admin',
+        password: 'admin123',
+        department: 'Management',
+        role: 'admin',
+        allowed_modules: ALL_MODULE_KEYS,
+        status: 'active',
+        is_active: true,
+      },
+      {
+        user_full_name: 'John Stevens',
+        user_name: 'principal',
+        password: 'principal123',
+        department: 'Management',
+        role: 'principal',
+        allowed_modules: ['school_master', 'department_master', 'class_master', 'student_master', 'employee_master', 'student_attendance', 'employee_attendance', 'fees_collection', 'notice_automation'],
+        status: 'active',
+        is_active: true,
+      },
+      {
+        user_full_name: 'Soma Chakraborty',
+        user_name: 'schakraborty',
+        password: 'teacher123',
+        department: 'Teaching Staff',
+        role: 'teacher',
+        allowed_modules: ['student_master', 'student_attendance', 'assignments_master', 'notice_automation', 'student_idcard'],
+        status: 'active',
+        is_active: true,
+      },
+      {
+        user_full_name: 'Ramesh Dutta',
+        user_name: 'rdutta',
+        password: 'accounts123',
+        department: 'Accounts & Finance',
+        role: 'accounts',
+        allowed_modules: ['fees_collection', 'expense_master', 'income_master', 'salary_slip', 'vendor_master'],
+        status: 'active',
+        is_active: true,
+      },
+    ],
   },
   'student_attendance': {
     title: 'student_attendance',

@@ -164,6 +164,26 @@ export default function StudentAttendanceStudio({
     } else {
       loadHistory();
     }
+
+    if (!supabase) return;
+    const channel = supabase
+      .channel("rt-student-attendance")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "student_attendance" },
+        () => {
+          if (activeTab === "marker") {
+            loadBatchData();
+          } else {
+            loadHistory();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [activeTab, loadBatchData, loadHistory]);
 
   const updateStatus = (index: number, status: AttendanceEntry["status"]) => {

@@ -175,6 +175,22 @@ export default function StudentMasterStudio({
 
   useEffect(() => {
     loadStudents()
+
+    if (!supabase) return
+    const channel = supabase
+      .channel('rt-student-master')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'student_master' },
+        () => {
+          loadStudents()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   // Filtering

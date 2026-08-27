@@ -112,6 +112,22 @@ export default function SchoolMaster({
     };
 
     fetchSchool();
+
+    if (!supabase) return;
+    const channel = supabase
+      .channel("rt-school-master")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "school_master" },
+        () => {
+          fetchSchool();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleChange = (key: keyof SchoolProfile, value: string) => {

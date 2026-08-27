@@ -157,6 +157,22 @@ export default function DepartmentMasterStudio({
 
   useEffect(() => {
     fetchDepartments();
+
+    if (!supabase) return;
+    const channel = supabase
+      .channel("rt-department-master")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "department_master" },
+        () => {
+          fetchDepartments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchDepartments]);
 
   // Sync to local storage
