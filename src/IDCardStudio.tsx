@@ -1,20 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Download,
-  Printer,
-  Save,
-  Upload,
-  UserCheck,
-  GraduationCap,
-  LayoutGrid,
-  ShieldCheck,
-  Palette,
-  PhoneCall,
-  Mail,
-  Calendar,
-  Sparkles,
-  Layers,
-} from 'lucide-react'
+import { Download, Printer, Save, Upload, UserCheck, GraduationCap } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
@@ -27,19 +12,13 @@ type Person = {
   fullName: string
   secondaryInfo?: string
   dateOfBirth?: string
-  bloodGroup?: string
   mobile?: string
-  emergencyPhone?: string
-  email?: string
   photoUrl?: string
   type: 'student' | 'employee'
   designation?: string
   department?: string
-  employeeCategory?: string
   className?: string
-  section?: string
   rollNo?: string
-  fatherName?: string
 }
 
 const logo = 'https://res.cloudinary.com/oilisvfi/image/upload/v1786000074/logo_final_frchld.jpg'
@@ -53,9 +32,7 @@ export default function IDCardStudio({
   onUploadCsv: () => void
   initialType?: 'student' | 'employee'
 }) {
-  const [cardType, setCardType] = useState<'student' | 'employee'>(initialType || 'employee')
-  const [cardSide, setCardSide] = useState<'front' | 'back'>('front')
-  const [cardTheme, setCardTheme] = useState<'theme-crimson' | 'theme-navy' | 'theme-emerald' | 'theme-slate'>('theme-crimson')
+  const [cardType, setCardType] = useState<'student' | 'employee'>(initialType || 'student')
 
   useEffect(() => {
     if (initialType) {
@@ -66,18 +43,14 @@ export default function IDCardStudio({
   const [people, setPeople] = useState<Person[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [className, setClassName] = useState('')
-  const [section, setSection] = useState('')
-  const [rollNo, setRollNo] = useState('')
-  const [designation, setDesignation] = useState('TEACHER')
-  const [department, setDepartment] = useState('Teaching Staff')
-  const [dob, setDob] = useState('')
-  const [email, setEmail] = useState('st.johnsenglishschool@gmail.com')
-  const [phone, setPhone] = useState('8274089481')
-  const [bloodGroup, setBloodGroup] = useState('O+')
+  const [designation, setDesignation] = useState('')
+  const [department, setDepartment] = useState('')
   const [photoUrl, setPhotoUrl] = useState('')
   const [photoPreview, setPhotoPreview] = useState('')
-  const [sessionEnd, setSessionEnd] = useState('2027-03-31')
-  const [sessionName, setSessionName] = useState('2026 - 2027')
+  const [expiry, setExpiry] = useState(() => {
+    const nextYear = new Date().getFullYear() + 1
+    return `${nextYear}-03-31`
+  })
   const [qr, setQr] = useState('')
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -89,7 +62,7 @@ export default function IDCardStudio({
     if (cardType === 'student') {
       supabase
         .from('student_master')
-        .select('student_id,admission_no,roll_no,full_name,date_of_birth,blood_group,mobile_primary,emergency_contact_phone,email_address,class_name,section,father_name,student_photo_url')
+        .select('student_id,admission_no,roll_no,full_name,date_of_birth,mobile_primary,class_name,student_photo_url')
         .eq('is_active', true)
         .order('full_name')
         .then(({ data, error }) => {
@@ -102,16 +75,11 @@ export default function IDCardStudio({
               fullName: s.full_name,
               secondaryInfo: s.class_name ? `Class ${s.class_name}` : undefined,
               dateOfBirth: s.date_of_birth,
-              bloodGroup: s.blood_group,
               mobile: s.mobile_primary,
-              emergencyPhone: s.emergency_contact_phone || s.mobile_primary,
-              email: s.email_address || 'st.johnsenglishschool@gmail.com',
               photoUrl: s.student_photo_url,
               type: 'student',
               className: s.class_name,
-              section: s.section,
               rollNo: s.roll_no,
-              fatherName: s.father_name,
             }))
             setPeople(list)
             if (list.length > 0 && !selectedId) {
@@ -122,7 +90,7 @@ export default function IDCardStudio({
     } else {
       supabase
         .from('employee_master')
-        .select('emp_id,emp_code,first_name,last_name,employee_category,designation,department,blood_group,date_of_birth,mobile_primary,emergency_contact_phone,whatsapp_number,email_official,email_personal,employee_photo_url')
+        .select('emp_id,emp_code,first_name,last_name,designation,department,mobile_primary,employee_photo_url')
         .eq('is_active', true)
         .order('first_name')
         .then(({ data, error }) => {
@@ -134,14 +102,9 @@ export default function IDCardStudio({
               code: e.emp_code,
               fullName: `${e.first_name || ''} ${e.last_name || ''}`.trim(),
               secondaryInfo: e.designation || e.department,
-              dateOfBirth: e.date_of_birth,
-              bloodGroup: e.blood_group,
               mobile: e.mobile_primary,
-              emergencyPhone: e.mobile_primary || e.emergency_contact_phone || e.whatsapp_number,
-              email: e.email_official || e.email_personal || 'st.johnsenglishschool@gmail.com',
               photoUrl: e.employee_photo_url,
               type: 'employee',
-              employeeCategory: e.employee_category,
               designation: e.designation,
               department: e.department,
             }))
@@ -162,64 +125,29 @@ export default function IDCardStudio({
   useEffect(() => {
     if (selected) {
       setClassName(selected.className || '')
-      setSection(selected.section || '')
-      setRollNo(selected.rollNo || '')
-      setDesignation(selected.designation || (selected.type === 'student' ? 'STUDENT' : 'TEACHER'))
-      setDepartment(selected.department || 'Teaching Staff')
-      setDob(selected.dateOfBirth || '15/08/1996')
-      setPhone(selected.emergencyPhone || selected.mobile || '8274089481')
-      setEmail(selected.email || 'st.johnsenglishschool@gmail.com')
-      setBloodGroup(selected.bloodGroup || 'O+')
+      setDesignation(selected.designation || '')
+      setDepartment(selected.department || '')
       setPhotoUrl(selected.photoUrl || '')
       setPhotoPreview('')
     }
   }, [selected])
 
-  // Format Expiration string as readable "31 March 2027"
-  const formattedExpiry = useMemo(() => {
-    try {
-      if (!sessionEnd) return '31 March 2027'
-      const [y, m, d] = sessionEnd.split('-')
-      if (y && m && d) {
-        const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
-        return dateObj.toLocaleDateString('en-GB', {
-          day: '2-digit',
-          month: 'long',
-          year: 'numeric',
-        }) // e.g. "31 March 2027"
-      }
-    } catch {}
-    return '31 March 2027'
-  }, [sessionEnd])
-
-  // Generate high-resolution QR
   useEffect(() => {
     if (!selected) {
       setQr('')
       return
     }
     const payload = JSON.stringify({
-      school: "St. John's English School",
+      school: 'SJES',
       type: selected.type,
-      id: selected.code,
+      code: selected.code,
       name: selected.fullName,
-      role: designation || (selected.type === 'student' ? 'Student' : 'Staff'),
-      dob: dob,
-      phone: phone,
-      sessionEnd: formattedExpiry,
-      verified: true,
+      id: selected.id,
     })
-    QRCode.toDataURL(payload, {
-      width: 200,
-      margin: 1,
-      color: {
-        dark: cardTheme === 'theme-navy' ? '#0f172a' : cardTheme === 'theme-emerald' ? '#064e3b' : '#991b1b',
-        light: '#ffffff',
-      },
-    })
+    QRCode.toDataURL(payload, { width: 180, margin: 1 })
       .then(setQr)
       .catch(() => setQr(''))
-  }, [selected, designation, dob, phone, formattedExpiry, cardTheme])
+  }, [selected])
 
   const visiblePhoto = photoPreview || photoUrl
 
@@ -246,24 +174,16 @@ export default function IDCardStudio({
   const makePdf = async () => {
     if (!cardRef.current) throw new Error('Card preview unavailable')
     const canvas = await html2canvas(cardRef.current, {
-      scale: 3.5,
+      scale: 3,
       useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
+      backgroundColor: '#fff',
     })
     const pdf = new jsPDF({
-      orientation: 'portrait',
+      orientation: 'landscape',
       unit: 'mm',
-      format: [54, 85.6], // Standard ISO CR80 Vertical Card
+      format: [85.6, 54],
     })
-    pdf.addImage(
-      canvas.toDataURL('image/jpeg', 0.99),
-      'JPEG',
-      0,
-      0,
-      54,
-      85.6
-    )
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, 85.6, 54)
     return pdf.output('blob')
   }
 
@@ -274,9 +194,9 @@ export default function IDCardStudio({
       const blob = await makePdf()
       const link = document.createElement('a')
       link.href = URL.createObjectURL(blob)
-      link.download = `Modern-ID-${selected.code || selected.fullName}.pdf`
+      link.download = `ID-${selected.code || selected.fullName}.pdf`
       link.click()
-      setToast('High-Resolution ID Card PDF downloaded')
+      setToast('ID card PDF downloaded successfully')
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'PDF generation failed')
     } finally {
@@ -294,11 +214,11 @@ export default function IDCardStudio({
           student_id: selected.id,
           student_name: selected.fullName,
           class_name: className,
-          roll_no: rollNo || selected.rollNo || null,
-          mobile: phone || selected.mobile || null,
+          roll_no: selected.rollNo || null,
+          mobile: selected.mobile || null,
           photo_url: photoUrl || null,
           issue_date: todayIso,
-          valid_until: sessionEnd,
+          valid_until: expiry,
           is_active: true,
         }
 
@@ -321,7 +241,7 @@ export default function IDCardStudio({
         if (result.error) throw result.error
 
         await logActivity({
-          action: `Saved student ID card with expiry ${sessionEnd} for ${selected.fullName}`,
+          action: `Saved student ID card for ${selected.fullName} (${selected.code})`,
           module: 'student_idcard',
         })
 
@@ -332,10 +252,10 @@ export default function IDCardStudio({
           employee_name: selected.fullName,
           designation: designation || null,
           department: department || null,
-          mobile: phone || selected.mobile || null,
+          mobile: selected.mobile || null,
           photo_url: photoUrl || null,
           issue_date: todayIso,
-          valid_until: sessionEnd,
+          valid_until: expiry,
           is_active: true,
         }
 
@@ -358,11 +278,11 @@ export default function IDCardStudio({
         if (result.error) throw result.error
 
         await logActivity({
-          action: `Saved staff/teacher ID card with session end ${sessionEnd} for ${selected.fullName}`,
+          action: `Saved teacher/staff ID card for ${selected.fullName} (${selected.code})`,
           module: 'teacher_idcard',
         })
 
-        setToast('Staff ID card record saved to database')
+        setToast('Teacher/Staff ID card record saved to database')
       }
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Save failed')
@@ -371,82 +291,28 @@ export default function IDCardStudio({
     }
   }
 
-  // Wave Palette Theme Helper
-  const waveFillPrimary =
-    cardTheme === 'theme-navy'
-      ? '#1e3a8a'
-      : cardTheme === 'theme-emerald'
-      ? '#065f46'
-      : cardTheme === 'theme-slate'
-      ? '#1e293b'
-      : '#b91c1c' // Crimson Red
-
-  const waveFillSecondary =
-    cardTheme === 'theme-navy'
-      ? '#3b82f6'
-      : cardTheme === 'theme-emerald'
-      ? '#10b981'
-      : cardTheme === 'theme-slate'
-      ? '#475569'
-      : '#f87171' // Rose / Light Crimson
-
-  const waveFillDark =
-    cardTheme === 'theme-navy'
-      ? '#0f172a'
-      : cardTheme === 'theme-emerald'
-      ? '#022c22'
-      : cardTheme === 'theme-slate'
-      ? '#090d16'
-      : '#881337' // Deep Maroon/Wine
-
   return (
     <div className="studio">
       <section className="studio-panel">
-        <span className="overline">MODERN DYNAMIC ID STUDIO</span>
-        <h2>Modern Wave ID Template</h2>
+        <span className="overline">ID CARD GENERATOR & STUDIO</span>
+        <h2>Digital Identity Studio</h2>
         <p>
-          Generate dynamic modern ID cards with fluid wave arches, glowing name ribbon,
-          and prominent session expiry date (<b>31 March 2027</b>).
+          Generate and print standardized identity cards directly from real
+          Supabase student and employee records.
         </p>
 
-        {/* Card Type Selector */}
         <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-          <button
-            type="button"
-            className={cardType === 'employee' ? 'primary' : ''}
-            style={{
-              flex: 1,
-              height: '38px',
-              borderRadius: '9px',
-              border: '1px solid #cbd5e1',
-              background: cardType === 'employee' ? 'linear-gradient(135deg,#991b1b,#dc2626)' : '#fff',
-              color: cardType === 'employee' ? '#fff' : '#475569',
-              fontWeight: 800,
-              fontSize: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-            }}
-            onClick={() => {
-              setCardType('employee')
-              setSelectedId('')
-            }}
-          >
-            <UserCheck size={16} />
-            Faculty / Staff ID
-          </button>
           <button
             type="button"
             className={cardType === 'student' ? 'primary' : ''}
             style={{
               flex: 1,
               height: '38px',
-              borderRadius: '9px',
-              border: '1px solid #cbd5e1',
-              background: cardType === 'student' ? 'linear-gradient(135deg,#991b1b,#dc2626)' : '#fff',
-              color: cardType === 'student' ? '#fff' : '#475569',
-              fontWeight: 800,
+              borderRadius: '8px',
+              border: '1px solid #d8e1eb',
+              background: cardType === 'student' ? 'var(--blue)' : '#fff',
+              color: cardType === 'student' ? '#fff' : '#4f6277',
+              fontWeight: 700,
               fontSize: '12px',
               display: 'flex',
               alignItems: 'center',
@@ -458,103 +324,38 @@ export default function IDCardStudio({
               setSelectedId('')
             }}
           >
-            <GraduationCap size={16} />
-            Student ID
+            <GraduationCap size={15} />
+            Student ID Card
+          </button>
+          <button
+            type="button"
+            className={cardType === 'employee' ? 'primary' : ''}
+            style={{
+              flex: 1,
+              height: '38px',
+              borderRadius: '8px',
+              border: '1px solid #d8e1eb',
+              background: cardType === 'employee' ? 'var(--blue)' : '#fff',
+              color: cardType === 'employee' ? '#fff' : '#4f6277',
+              fontWeight: 700,
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
+            onClick={() => {
+              setCardType('employee')
+              setSelectedId('')
+            }}
+          >
+            <UserCheck size={15} />
+            Staff / Teacher ID
           </button>
         </div>
 
-        {/* Template Accent Color */}
-        <label style={{ marginTop: '14px' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <Palette size={14} /> Color Accent
-          </span>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginTop: '4px' }}>
-            <button
-              type="button"
-              style={{
-                height: '34px',
-                borderRadius: '7px',
-                border: cardTheme === 'theme-crimson' ? '2px solid #b91c1c' : '1px solid #cbd5e1',
-                background: '#dc2626',
-                color: '#fff',
-                fontWeight: 800,
-                fontSize: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-              }}
-              onClick={() => setCardTheme('theme-crimson')}
-              title="Crimson Ruby (As in reference image)"
-            >
-              Crimson Red
-            </button>
-            <button
-              type="button"
-              style={{
-                height: '34px',
-                borderRadius: '7px',
-                border: cardTheme === 'theme-navy' ? '2px solid #1e3a8a' : '1px solid #cbd5e1',
-                background: '#1e3a8a',
-                color: '#fff',
-                fontWeight: 800,
-                fontSize: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-              }}
-              onClick={() => setCardTheme('theme-navy')}
-              title="Royal Navy"
-            >
-              Royal Navy
-            </button>
-            <button
-              type="button"
-              style={{
-                height: '34px',
-                borderRadius: '7px',
-                border: cardTheme === 'theme-emerald' ? '2px solid #064e3b' : '1px solid #cbd5e1',
-                background: '#047857',
-                color: '#fff',
-                fontWeight: 800,
-                fontSize: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-              }}
-              onClick={() => setCardTheme('theme-emerald')}
-              title="Emerald Green"
-            >
-              Emerald
-            </button>
-            <button
-              type="button"
-              style={{
-                height: '34px',
-                borderRadius: '7px',
-                border: cardTheme === 'theme-slate' ? '2px solid #1e293b' : '1px solid #cbd5e1',
-                background: '#1e293b',
-                color: '#fff',
-                fontWeight: 800,
-                fontSize: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-              }}
-              onClick={() => setCardTheme('theme-slate')}
-              title="Titanium Slate"
-            >
-              Slate
-            </button>
-          </div>
-        </label>
-
-        {/* Record Selection */}
         <label>
-          Select {cardType === 'student' ? 'Student' : 'Faculty / Staff Member'}
+          Select {cardType === 'student' ? 'Student' : 'Staff / Teacher'}
           <select
             value={selectedId}
             onChange={(e) => setSelectedId(e.target.value)}
@@ -571,98 +372,61 @@ export default function IDCardStudio({
           </select>
         </label>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+        {cardType === 'student' ? (
           <label>
-            Designation / Role Title
+            Class Name / Grade
             <input
-              value={designation}
-              onChange={(e) => setDesignation(e.target.value)}
-              placeholder="e.g. TEACHER / GRAPHIC DESIGNER"
+              value={className}
+              onChange={(e) => setClassName(e.target.value)}
+              placeholder="e.g. CLASS VIII"
             />
           </label>
-          <label>
-            Date of Birth (DOB)
-            <input
-              value={dob}
-              onChange={(e) => setDob(e.target.value)}
-              placeholder="e.g. 15/08/1996"
-            />
-          </label>
-        </div>
+        ) : (
+          <>
+            <label>
+              Designation
+              <input
+                value={designation}
+                onChange={(e) => setDesignation(e.target.value)}
+                placeholder="e.g. Senior Secondary Teacher"
+              />
+            </label>
+            <label>
+              Department
+              <input
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                placeholder="e.g. Science & Mathematics"
+              />
+            </label>
+          </>
+        )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-          <label>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <PhoneCall size={13} color="#dc2626" /> Direct / Emergency Phone
-            </span>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="e.g. +91 82740 89481"
-            />
-          </label>
-          <label>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Mail size={13} color="#dc2626" /> Email Address
-            </span>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. your email goes here"
-            />
-          </label>
-        </div>
+        <label>
+          Photo URL
+          <input
+            type="url"
+            value={photoUrl}
+            onChange={(e) => setPhotoUrl(e.target.value)}
+            placeholder="https://..."
+          />
+        </label>
 
-        {/* Expiry & Session Settings (Requested: 31 March 2027) */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-          <label>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Calendar size={13} color="#dc2626" /> Expiry / Session End Date
-            </span>
-            <input
-              type="date"
-              value={sessionEnd}
-              onChange={(e) => setSessionEnd(e.target.value)}
-            />
-          </label>
-          <label>
-            Academic Session
-            <input
-              value={sessionName}
-              onChange={(e) => setSessionName(e.target.value)}
-              placeholder="e.g. 2026 - 2027"
-            />
-          </label>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px' }}>
-          <label>
-            Photo Public URL
-            <input
-              type="url"
-              value={photoUrl}
-              onChange={(e) => setPhotoUrl(e.target.value)}
-              placeholder="https://..."
-            />
-          </label>
-          <label>
-            Blood Group
-            <input
-              value={bloodGroup}
-              onChange={(e) => setBloodGroup(e.target.value)}
-              placeholder="e.g. O+"
-            />
-          </label>
-        </div>
+        <label>
+          Valid Until
+          <input
+            type="date"
+            value={expiry}
+            onChange={(e) => setExpiry(e.target.value)}
+          />
+        </label>
 
         <label className="photo-upload">
           <Upload />
           <span>
             {uploading
-              ? 'Uploading HD Portrait to Storage...'
-              : 'Upload Member Photo or Portrait'}
+              ? 'Uploading to Supabase Storage...'
+              : 'Upload photograph or portrait'}
           </span>
           <input
             type="file"
@@ -673,269 +437,108 @@ export default function IDCardStudio({
         </label>
 
         <div className="studio-actions">
-          <button onClick={download} disabled={busy || !selected} className="primary">
+          <button onClick={download} disabled={busy || !selected}>
             <Download />
-            Download HD PDF
+            Download PDF
           </button>
-          <button onClick={save} disabled={busy || !selected}>
+          <button
+            className="primary"
+            onClick={save}
+            disabled={busy || !selected}
+          >
             <Save />
-            {busy ? 'Saving…' : 'Save ID Record'}
+            {busy ? 'Saving…' : 'Save card record'}
           </button>
           <button onClick={() => window.print()} disabled={!selected}>
             <Printer />
-            Print Card
+            Print
           </button>
           <button onClick={onUploadCsv}>
             <Upload />
-            Bulk CSV Upload
+            Upload CSV
           </button>
         </div>
       </section>
 
-      {/* Preview Stage */}
       <section className="preview-stage">
-        <div className="deluxe-card-stage-wrapper">
-          {/* Card View Switcher */}
-          <div className="card-view-toggles">
-            <button
-              type="button"
-              className={cardSide === 'front' ? 'active' : ''}
-              onClick={() => setCardSide('front')}
-            >
-              Front Side (Wave Template)
-            </button>
-            <button
-              type="button"
-              className={cardSide === 'back' ? 'active' : ''}
-              onClick={() => setCardSide('back')}
-            >
-              Back Side (Terms & Verification)
-            </button>
+        <div className="id-card" ref={cardRef}>
+          <header>
+            <img src={logo} alt="School Crest" />
+            <div>
+              <b>ST. JOHN'S ENGLISH SCHOOL</b>
+              <span>Dankuni, Hooghly · W.B. 712311</span>
+            </div>
+          </header>
+
+          <div className="id-body">
+            <div className="student-photo">
+              {visiblePhoto ? (
+                <img
+                  src={formatImageUrl(visiblePhoto)}
+                  alt="Portrait"
+                  referrerPolicy="no-referrer"
+                  onError={handleImageError}
+                />
+              ) : (
+                <span>
+                  {selected
+                    ? selected.fullName
+                        .split(' ')
+                        .slice(0, 2)
+                        .map((part) => part[0])
+                        .join('')
+                    : 'PHOTO'}
+                </span>
+              )}
+            </div>
+
+            <div className="id-details">
+              <small>
+                {cardType === 'student'
+                  ? 'STUDENT IDENTITY CARD'
+                  : 'STAFF IDENTITY CARD'}
+              </small>
+              <h3>{selected?.fullName || 'Select a person'}</h3>
+              <dl>
+                <dt>{cardType === 'student' ? 'Adm No.' : 'Emp Code'}</dt>
+                <dd>{selected?.code || '—'}</dd>
+
+                {cardType === 'student' ? (
+                  <>
+                    <dt>Class</dt>
+                    <dd>{className || '—'}</dd>
+                    <dt>Roll No.</dt>
+                    <dd>{selected?.rollNo || '—'}</dd>
+                    <dt>DOB</dt>
+                    <dd>{selected?.dateOfBirth || '—'}</dd>
+                  </>
+                ) : (
+                  <>
+                    <dt>Designation</dt>
+                    <dd>{designation || '—'}</dd>
+                    <dt>Department</dt>
+                    <dd>{department || '—'}</dd>
+                  </>
+                )}
+
+                <dt>Mobile</dt>
+                <dd>{selected?.mobile || '—'}</dd>
+                <dt>Valid Until</dt>
+                <dd>{expiry}</dd>
+              </dl>
+            </div>
+
+            {qr && <img className="id-qr" src={qr} alt="Card Verification QR" />}
           </div>
 
-          {/* DYNAMIC MODERN WAVE ID CARD (MATCHING USER REFERENCE IMAGE) */}
-          <div
-            className={`deluxe-corp-card template-wave ${cardTheme}`}
-            ref={cardRef}
-          >
-            {/* Lanyard Cutout Slot */}
-            <div className="card-lanyard-slot" />
-
-            {cardSide === 'front' ? (
-              <>
-                {/* Dynamic Wave Top SVG Graphic (Red & Soft Grey Curving Arches) */}
-                <div className="wave-top-decor">
-                  <svg viewBox="0 0 328 125" fill="none" preserveAspectRatio="none">
-                    {/* Background Dark Wave */}
-                    <path
-                      d="M0 0 H328 V45 C280 85 180 115 0 80 Z"
-                      fill={waveFillDark}
-                    />
-                    {/* Light Grey Accent Arch */}
-                    <path
-                      d="M0 0 H328 V75 C260 110 160 120 0 92 Z"
-                      fill="#e2e8f0"
-                      opacity="0.85"
-                    />
-                    {/* Primary Dynamic Wave */}
-                    <path
-                      d="M0 0 H328 V30 C240 90 140 100 0 65 Z"
-                      fill={waveFillPrimary}
-                    />
-                    {/* Glowing Light Arch Edge */}
-                    <path
-                      d="M0 0 H328 V15 C200 65 100 80 0 45 Z"
-                      fill={waveFillSecondary}
-                      opacity="0.9"
-                    />
-                  </svg>
-                </div>
-
-                {/* Header Branding Row over waves */}
-                <div className="wave-header-content">
-                  <div className="wave-school-brand">
-                    <div className="wave-logo-circle">
-                      <img src={logo} alt="School Crest" />
-                    </div>
-                    <div className="wave-school-text">
-                      <h2>St. John's English School</h2>
-                      <p>Dankuni, Hooghly · W.B. 712311</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Central Portrait Area (Clear of waves) */}
-                <div className="wave-photo-container">
-                  <div className="wave-photo-wrapper">
-                    {visiblePhoto ? (
-                      <img
-                        src={formatImageUrl(visiblePhoto)}
-                        alt="Portrait"
-                        referrerPolicy="no-referrer"
-                        onError={handleImageError}
-                      />
-                    ) : (
-                      <div className="wave-photo-monogram">
-                        {selected
-                          ? selected.fullName
-                              .split(' ')
-                              .slice(0, 2)
-                              .map((part) => part[0])
-                              .join('')
-                          : 'ID'}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Floating Glowing Name Banner & Designation (Exact User Reference Pattern) */}
-                <div className="wave-name-ribbon-wrap">
-                  <div className="wave-name-ribbon">
-                    <h3>{selected?.fullName || 'SMITH JHON'}</h3>
-                  </div>
-                  <div className="wave-role-title">
-                    {designation || (cardType === 'student' ? 'STUDENT' : 'GRAPHIC DESIGNER')}
-                  </div>
-                  <div className="wave-double-line">
-                    <span />
-                    <span />
-                  </div>
-                </div>
-
-                {/* Modern Clean Key-Value Tabular List (Matching Exact Reference Layout) */}
-                <div className="wave-details-list">
-                  <div className="wave-detail-row">
-                    <span className="wave-detail-label">ID No</span>
-                    <span className="wave-detail-colon">:</span>
-                    <span className="wave-detail-val" style={{ fontFamily: 'monospace', fontWeight: 800 }}>
-                      {selected?.code || '00000000'}
-                    </span>
-                  </div>
-
-                  <div className="wave-detail-row">
-                    <span className="wave-detail-label">DOB</span>
-                    <span className="wave-detail-colon">:</span>
-                    <span className="wave-detail-val">{dob || selected?.dateOfBirth || 'MM/DD/YEAR'}</span>
-                  </div>
-
-                  <div className="wave-detail-row">
-                    <span className="wave-detail-label">Email</span>
-                    <span className="wave-detail-colon">:</span>
-                    <span className="wave-detail-val" title={email || selected?.email}>
-                      {email || selected?.email || 'your mail goes here'}
-                    </span>
-                  </div>
-
-                  <div className="wave-detail-row">
-                    <span className="wave-detail-label">Phone</span>
-                    <span className="wave-detail-colon">:</span>
-                    <span className="wave-detail-val">{phone || selected?.mobile || '+00 000 000'}</span>
-                  </div>
-
-                  {/* Explicit Expiry and Session End mention as requested */}
-                  <div className="wave-detail-row">
-                    <span className="wave-detail-label" style={{ color: '#b91c1c', fontWeight: 900 }}>
-                      Expires
-                    </span>
-                    <span className="wave-detail-colon">:</span>
-                    <span className="wave-detail-val highlight-expiry">
-                      {formattedExpiry}
-                    </span>
-                  </div>
-
-                  <div className="wave-detail-row">
-                    <span className="wave-detail-label">Session</span>
-                    <span className="wave-detail-colon">:</span>
-                    <span className="wave-detail-val">
-                      {sessionName} (Ends: {formattedExpiry})
-                    </span>
-                  </div>
-                </div>
-
-                {/* Footer Bar with QR verification and authorized signature */}
-                <div className="wave-footer-bar">
-                  <div className="wave-qr-box">
-                    {qr ? (
-                      <img src={qr} alt="Card Verification QR" />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', background: '#f1f5f9' }} />
-                    )}
-                  </div>
-                  <div className="wave-sign-block">
-                    <div className="wave-sign-text">Fr. S. John</div>
-                    <div className="wave-sign-label">Authorised Signatory</div>
-                  </div>
-                </div>
-
-                {/* Dynamic Wave Bottom SVG Graphic */}
-                <div className="wave-bottom-decor">
-                  <svg viewBox="0 0 328 70" fill="none" preserveAspectRatio="none">
-                    <path
-                      d="M0 45 C120 15 220 20 328 60 V70 H0 Z"
-                      fill="#e2e8f0"
-                      opacity="0.8"
-                    />
-                    <path
-                      d="M0 55 C100 28 200 32 328 65 V70 H0 Z"
-                      fill={waveFillSecondary}
-                      opacity="0.85"
-                    />
-                    <path
-                      d="M0 62 C80 40 180 44 328 68 V70 H0 Z"
-                      fill={waveFillPrimary}
-                    />
-                  </svg>
-                </div>
-              </>
-            ) : (
-              /* BACK SIDE OF ID CARD */
-              <div className="wave-back-body">
-                <div className="wave-back-header">
-                  <h4>Terms & Institutional Policy</h4>
-                  <span style={{ fontSize: '7.5px', color: '#b91c1c', fontWeight: 800 }}>
-                    SESSION {sessionName}
-                  </span>
-                </div>
-
-                <ul className="wave-back-rules">
-                  <li>This card is the property of St. John's English School and must be carried at all times on campus.</li>
-                  <li>This card is strictly non-transferable and valid until <b>{formattedExpiry}</b>.</li>
-                  <li>Report any loss immediately to the administration office for hotlisting and reissue.</li>
-                  <li>Scan the front QR code with any smartphone camera for digital authenticity verification.</li>
-                </ul>
-
-                <div className="wave-back-info-card">
-                  <b>Campus Administrative Helpline:</b>
-                  <span>St. John's English School, Dankuni, Hooghly · W.B. 712311</span>
-                  <span>Direct Contact: +91 82740 89481 · Email: {email}</span>
-                  <span><b>Session Validity:</b> Valid until session closing on {formattedExpiry}</span>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <ShieldCheck size={16} color="#0d9488" />
-                    <span style={{ fontSize: '7.5px', color: '#0f766e', fontWeight: 800 }}>
-                      ISO 7810 ID-1 DIGITAL SECURE
-                    </span>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span className="wave-sign-text" style={{ fontSize: '13px' }}>Principal</span>
-                    <span className="wave-sign-label" style={{ display: 'block', fontSize: '6.5px' }}>ADMINISTRATOR SEAL</span>
-                  </div>
-                </div>
-
-                <div className="wave-barcode-footer">
-                  <div className="wave-barcode-lines" />
-                  <div className="wave-barcode-text">SJES-{selected?.code || '00000000'}-2027</div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <p className="preview-note">
-            Standard ISO 7810 CR80 (54mm × 85.6mm) 300+ DPI Vector Printable Output · Session End: {formattedExpiry}
-          </p>
+          <footer>
+            <span>Emergency: 9674368297</span>
+            <b>AUTHORISED SIGNATORY</b>
+          </footer>
         </div>
+        <p className="preview-note">
+          Live ISO/IEC 7810 ID-1 standard layout · Vector printable output
+        </p>
       </section>
     </div>
   )
