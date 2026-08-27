@@ -67,10 +67,19 @@ const money = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value)
 
+function getGreeting() {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
 export default function ProductionDashboard({
   choose,
+  userName = 'Administrator',
 }: {
   choose: (table: string) => void
+  userName?: string
 }) {
   const [stats, setStats] = useState<Stats>(emptyStats)
   const [logs, setLogs] = useState<LogRow[]>([])
@@ -306,7 +315,7 @@ export default function ProductionDashboard({
       <section className="dashboard-heading">
         <div>
           <span className="overline">ADMINISTRATION OVERVIEW</span>
-          <h1>Good morning, Administrator</h1>
+          <h1>{getGreeting()}, {userName}</h1>
           <p>{today} · Academic session {getCurrentAcademicYear()}</p>
         </div>
         <div className="dashboard-actions">

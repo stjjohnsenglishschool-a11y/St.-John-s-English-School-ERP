@@ -105,8 +105,8 @@ export default function EmployeeAttendanceStudio({
           employee_name: fullName,
           department: emp.department || "General",
           designation: emp.designation || "Staff",
-          check_in_time: String(existing?.check_in_time || "08:30"),
-          check_out_time: String(existing?.check_out_time || "15:30"),
+          check_in_time: String(existing?.check_in_time || "09:30"),
+          check_out_time: String(existing?.check_out_time || "14:45"),
           status: (existing?.status as EmpAttendanceEntry["status"]) || "present",
           remarks: String(existing?.remarks || ""),
           attendance_id: existing?.attendance_id ? String(existing.attendance_id) : undefined,
@@ -175,7 +175,14 @@ export default function EmployeeAttendanceStudio({
   };
 
   const markAll = (status: EmpAttendanceEntry["status"]) => {
-    setEntries((prev) => prev.map((e) => ({ ...e, status })));
+    setEntries((prev) =>
+      prev.map((e) => ({
+        ...e,
+        status,
+        check_in_time: status === "absent" ? "" : e.check_in_time || "09:30",
+        check_out_time: status === "absent" ? "" : e.check_out_time || "14:45",
+      }))
+    );
   };
 
   const handleSave = async () => {
@@ -556,9 +563,9 @@ export default function EmployeeAttendanceStudio({
                                     updateEntry(idx, {
                                       status: key,
                                       check_in_time:
-                                        key === "absent" ? "" : entry.check_in_time || "08:30",
+                                        key === "absent" ? "" : entry.check_in_time || "09:30",
                                       check_out_time:
-                                        key === "absent" ? "" : entry.check_out_time || "15:30",
+                                        key === "absent" ? "" : entry.check_out_time || "14:45",
                                     })
                                   }
                                   style={{

@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { Download, Printer, Save, Upload, UserCheck, GraduationCap } from 'lucide-react'
+import { Download, Printer, Save, Upload, UserCheck, GraduationCap, LayoutGrid } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
@@ -13,6 +13,7 @@ type Person = {
   secondaryInfo?: string
   dateOfBirth?: string
   mobile?: string
+  emergencyPhone?: string
   photoUrl?: string
   type: 'student' | 'employee'
   designation?: string
@@ -33,10 +34,16 @@ export default function IDCardStudio({
   initialType?: 'student' | 'employee'
 }) {
   const [cardType, setCardType] = useState<'student' | 'employee'>(initialType || 'student')
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(
+    initialType === 'employee' || cardType === 'employee' ? 'portrait' : 'portrait'
+  )
 
   useEffect(() => {
     if (initialType) {
       setCardType(initialType)
+      if (initialType === 'employee') {
+        setOrientation('portrait')
+      }
     }
   }, [initialType])
 
@@ -45,6 +52,7 @@ export default function IDCardStudio({
   const [className, setClassName] = useState('')
   const [designation, setDesignation] = useState('')
   const [department, setDepartment] = useState('')
+  const [emergencyPhone, setEmergencyPhone] = useState('')
   const [photoUrl, setPhotoUrl] = useState('')
   const [photoPreview, setPhotoPreview] = useState('')
   const [expiry, setExpiry] = useState(() => {
@@ -62,7 +70,7 @@ export default function IDCardStudio({
     if (cardType === 'student') {
       supabase
         .from('student_master')
-        .select('student_id,admission_no,roll_no,full_name,date_of_birth,mobile_primary,class_name,student_photo_url')
+        .select('student_id,admission_no,roll_no,full_name,date_of_birth,mobile_primary,emergency_contact_phone,class_name,student_photo_url')
         .eq('is_active', true)
         .order('full_name')
         .then(({ data, error }) => {
@@ -76,6 +84,7 @@ export default function IDCardStudio({
               secondaryInfo: s.class_name ? `Class ${s.class_name}` : undefined,
               dateOfBirth: s.date_of_birth,
               mobile: s.mobile_primary,
+              emergencyPhone: s.emergency_contact_phone || s.mobile_primary,
               photoUrl: s.student_photo_url,
               type: 'student',
               className: s.class_name,
@@ -90,7 +99,7 @@ export default function IDCardStudio({
     } else {
       supabase
         .from('employee_master')
-        .select('emp_id,emp_code,first_name,last_name,designation,department,mobile_primary,employee_photo_url')
+        .select('emp_id,emp_code,first_name,last_name,designation,department,mobile_primary,emergency_contact_phone,whatsapp_number,employee_photo_url')
         .eq('is_active', true)
         .order('first_name')
         .then(({ data, error }) => {
@@ -103,6 +112,7 @@ export default function IDCardStudio({
               fullName: `${e.first_name || ''} ${e.last_name || ''}`.trim(),
               secondaryInfo: e.designation || e.department,
               mobile: e.mobile_primary,
+              emergencyPhone: e.mobile_primary || e.emergency_contact_phone || e.whatsapp_number,
               photoUrl: e.employee_photo_url,
               type: 'employee',
               designation: e.designation,
@@ -128,6 +138,7 @@ export default function IDCardStudio({
       setDesignation(selected.designation || '')
       setDepartment(selected.department || '')
       setPhotoUrl(selected.photoUrl || '')
+      setEmergencyPhone(selected.emergencyPhone || selected.mobile || '')
       setPhotoPreview('')
     }
   }, [selected])
@@ -178,12 +189,20 @@ export default function IDCardStudio({
       useCORS: true,
       backgroundColor: '#fff',
     })
+    const isPortrait = orientation === 'portrait'
     const pdf = new jsPDF({
-      orientation: 'landscape',
+      orientation: isPortrait ? 'portrait' : 'landscape',
       unit: 'mm',
-      format: [85.6, 54],
+      format: isPortrait ? [54, 85.6] : [85.6, 54],
     })
-    pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, 85.6, 54)
+    pdf.addImage(
+      canvas.toDataURL('image/jpeg', 0.98),
+      'JPEG',
+      0,
+      0,
+      isPortrait ? 54 : 85.6,
+      isPortrait ? 85.6 : 54
+    )
     return pdf.output('blob')
   }
 
@@ -346,6 +365,7 @@ export default function IDCardStudio({
             }}
             onClick={() => {
               setCardType('employee')
+              setOrientation('portrait')
               setSelectedId('')
             }}
           >
@@ -353,6 +373,54 @@ export default function IDCardStudio({
             Staff / Teacher ID
           </button>
         </div>
+
+        <label style={{ marginTop: '14px' }}>
+          Card Orientation
+          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+            <button
+              type="button"
+              style={{
+                flex: 1,
+                height: '34px',
+                borderRadius: '6px',
+                border: '1px solid #d8e1eb',
+                background: orientation === 'portrait' ? '#1e40af' : '#fff',
+                color: orientation === 'portrait' ? '#fff' : '#4f6277',
+                fontWeight: 700,
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px',
+              }}
+              onClick={() => setOrientation('portrait')}
+            >
+              <LayoutGrid size={13} />
+              Portrait (Vertical)
+            </button>
+            <button
+              type="button"
+              style={{
+                flex: 1,
+                height: '34px',
+                borderRadius: '6px',
+                border: '1px solid #d8e1eb',
+                background: orientation === 'landscape' ? '#1e40af' : '#fff',
+                color: orientation === 'landscape' ? '#fff' : '#4f6277',
+                fontWeight: 700,
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px',
+              }}
+              onClick={() => setOrientation('landscape')}
+            >
+              <LayoutGrid size={13} style={{ transform: 'rotate(90deg)' }} />
+              Landscape (Horizontal)
+            </button>
+          </div>
+        </label>
 
         <label>
           Select {cardType === 'student' ? 'Student' : 'Staff / Teacher'}
@@ -401,6 +469,16 @@ export default function IDCardStudio({
             </label>
           </>
         )}
+
+        <label>
+          Emergency Contact Phone
+          <input
+            type="tel"
+            value={emergencyPhone}
+            onChange={(e) => setEmergencyPhone(e.target.value)}
+            placeholder="e.g. 8274089481"
+          />
+        </label>
 
         <label>
           Photo URL
@@ -461,7 +539,7 @@ export default function IDCardStudio({
       </section>
 
       <section className="preview-stage">
-        <div className="id-card" ref={cardRef}>
+        <div className={`id-card ${orientation}`} ref={cardRef}>
           <header>
             <img src={logo} alt="School Crest" />
             <div>
@@ -470,74 +548,140 @@ export default function IDCardStudio({
             </div>
           </header>
 
-          <div className="id-body">
-            <div className="student-photo">
-              {visiblePhoto ? (
-                <img
-                  src={formatImageUrl(visiblePhoto)}
-                  alt="Portrait"
-                  referrerPolicy="no-referrer"
-                  onError={handleImageError}
-                />
-              ) : (
-                <span>
-                  {selected
-                    ? selected.fullName
-                        .split(' ')
-                        .slice(0, 2)
-                        .map((part) => part[0])
-                        .join('')
-                    : 'PHOTO'}
-                </span>
-              )}
-            </div>
-
-            <div className="id-details">
+          {orientation === 'portrait' ? (
+            <div className="id-body">
               <small>
                 {cardType === 'student'
                   ? 'STUDENT IDENTITY CARD'
                   : 'STAFF IDENTITY CARD'}
               </small>
-              <h3>{selected?.fullName || 'Select a person'}</h3>
-              <dl>
-                <dt>{cardType === 'student' ? 'Adm No.' : 'Emp Code'}</dt>
-                <dd>{selected?.code || '—'}</dd>
 
-                {cardType === 'student' ? (
-                  <>
-                    <dt>Class</dt>
-                    <dd>{className || '—'}</dd>
-                    <dt>Roll No.</dt>
-                    <dd>{selected?.rollNo || '—'}</dd>
-                    <dt>DOB</dt>
-                    <dd>{selected?.dateOfBirth || '—'}</dd>
-                  </>
+              <div className="student-photo">
+                {visiblePhoto ? (
+                  <img
+                    src={formatImageUrl(visiblePhoto)}
+                    alt="Portrait"
+                    referrerPolicy="no-referrer"
+                    onError={handleImageError}
+                  />
                 ) : (
-                  <>
-                    <dt>Designation</dt>
-                    <dd>{designation || '—'}</dd>
-                    <dt>Department</dt>
-                    <dd>{department || '—'}</dd>
-                  </>
+                  <span>
+                    {selected
+                      ? selected.fullName
+                          .split(' ')
+                          .slice(0, 2)
+                          .map((part) => part[0])
+                          .join('')
+                      : 'PHOTO'}
+                  </span>
                 )}
+              </div>
 
-                <dt>Mobile</dt>
-                <dd>{selected?.mobile || '—'}</dd>
-                <dt>Valid Until</dt>
-                <dd>{expiry}</dd>
-              </dl>
+              <div className="id-details">
+                <h3>{selected?.fullName || 'Select a person'}</h3>
+                <dl>
+                  <dt>{cardType === 'student' ? 'Adm No.' : 'Emp Code'}</dt>
+                  <dd>{selected?.code || '—'}</dd>
+
+                  {cardType === 'student' ? (
+                    <>
+                      <dt>Class</dt>
+                      <dd>{className || '—'}</dd>
+                      <dt>Roll No.</dt>
+                      <dd>{selected?.rollNo || '—'}</dd>
+                      <dt>DOB</dt>
+                      <dd>{selected?.dateOfBirth || '—'}</dd>
+                    </>
+                  ) : (
+                    <>
+                      <dt>Designation</dt>
+                      <dd>{designation || '—'}</dd>
+                      <dt>Department</dt>
+                      <dd>{department || '—'}</dd>
+                    </>
+                  )}
+
+                  <dt>Mobile</dt>
+                  <dd>{selected?.mobile || '—'}</dd>
+                  <dt>Valid Until</dt>
+                  <dd>{expiry}</dd>
+                </dl>
+              </div>
+
+              {qr && <img className="id-qr" src={qr} alt="Card Verification QR" />}
             </div>
+          ) : (
+            <div className="id-body">
+              <div className="student-photo">
+                {visiblePhoto ? (
+                  <img
+                    src={formatImageUrl(visiblePhoto)}
+                    alt="Portrait"
+                    referrerPolicy="no-referrer"
+                    onError={handleImageError}
+                  />
+                ) : (
+                  <span>
+                    {selected
+                      ? selected.fullName
+                          .split(' ')
+                          .slice(0, 2)
+                          .map((part) => part[0])
+                          .join('')
+                      : 'PHOTO'}
+                  </span>
+                )}
+              </div>
 
-            {qr && <img className="id-qr" src={qr} alt="Card Verification QR" />}
-          </div>
+              <div className="id-details">
+                <small>
+                  {cardType === 'student'
+                    ? 'STUDENT IDENTITY CARD'
+                    : 'STAFF IDENTITY CARD'}
+                </small>
+                <h3>{selected?.fullName || 'Select a person'}</h3>
+                <dl>
+                  <dt>{cardType === 'student' ? 'Adm No.' : 'Emp Code'}</dt>
+                  <dd>{selected?.code || '—'}</dd>
+
+                  {cardType === 'student' ? (
+                    <>
+                      <dt>Class</dt>
+                      <dd>{className || '—'}</dd>
+                      <dt>Roll No.</dt>
+                      <dd>{selected?.rollNo || '—'}</dd>
+                      <dt>DOB</dt>
+                      <dd>{selected?.dateOfBirth || '—'}</dd>
+                    </>
+                  ) : (
+                    <>
+                      <dt>Designation</dt>
+                      <dd>{designation || '—'}</dd>
+                      <dt>Department</dt>
+                      <dd>{department || '—'}</dd>
+                    </>
+                  )}
+
+                  <dt>Mobile</dt>
+                  <dd>{selected?.mobile || '—'}</dd>
+                  <dt>Valid Until</dt>
+                  <dd>{expiry}</dd>
+                </dl>
+              </div>
+
+              {qr && <img className="id-qr" src={qr} alt="Card Verification QR" />}
+            </div>
+          )}
 
           <footer>
-            <span>Emergency: 9674368297</span>
+            <span className="id-card-emergency-badge">
+              Emergency: {emergencyPhone || selected?.mobile || '—'}
+            </span>
             <b>AUTHORISED SIGNATORY</b>
           </footer>
         </div>
         <p className="preview-note">
-          Live ISO/IEC 7810 ID-1 standard layout · Vector printable output
+          Live ISO/IEC 7810 ID-1 standard {orientation} layout · Vector printable output
         </p>
       </section>
     </div>

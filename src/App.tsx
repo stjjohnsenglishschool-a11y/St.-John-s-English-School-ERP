@@ -966,7 +966,10 @@ function App() {
 
       <main>
         {active === "Overview" ? (
-          <ProductionDashboard choose={choose} />
+          <ProductionDashboard
+            choose={choose}
+            userName={currentUser?.user_full_name || currentUser?.user_name || "Administrator"}
+          />
         ) : active === "school_master" ? (
           <SchoolMaster setToast={setToast} />
         ) : active === "department_master" ? (

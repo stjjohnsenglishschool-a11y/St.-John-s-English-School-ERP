@@ -131,7 +131,7 @@ export const modules: Record<string, Module> = {
       f('capacity', 'Capacity', 'number'),
       f('is_active', 'Active', 'boolean'),
     ],
-    columns: ['class_name', 'academic_year', 'capacity', 'is_active', 'updated_at'],
+    columns: ['class_name', 'academic_year', 'capacity', 'is_active'],
   },
   'subject_master': {
     title: 'subject_master',
@@ -158,7 +158,7 @@ export const modules: Record<string, Module> = {
       f('subject_type', 'Subject type', 'select', false, ['Scholastic', 'Co-scholastic', 'Activity', 'Language']),
       f('is_active', 'Active', 'boolean'),
     ],
-    columns: ['class_name', 'subject_name', 'subject_type', 'is_active', 'created_at'],
+    columns: ['class_name', 'subject_name', 'subject_type', 'is_active'],
   },
   'vendor_master': {
     title: 'vendor_master',

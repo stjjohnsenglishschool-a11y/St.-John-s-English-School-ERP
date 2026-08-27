@@ -305,6 +305,8 @@ export function generateSampleCsv(mod: Module): string {
     if (k === 'asset_name') return rowIndex === 0 ? 'Dell OptiPlex Desktop' : 'Epson LCD Projector'
     if (k === 'asset_code') return rowIndex === 0 ? 'AST-001' : 'AST-002'
     if (k === 'leave_type') return rowIndex === 0 ? 'Casual Leave (CL)' : 'Medical Leave (ML)'
+    if (k === 'check_in_time' || k === 'in_time') return '09:30'
+    if (k === 'check_out_time' || k === 'out_time') return '14:45'
     if (k === 'title' || k === 'assignment_title' || k === 'notice_title')
       return rowIndex === 0 ? 'Mathematics Homework Chapter 3' : 'Annual Sports Day Announcement'
 
