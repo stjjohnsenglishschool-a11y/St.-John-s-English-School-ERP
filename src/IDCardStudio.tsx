@@ -1,10 +1,11 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { Download, Printer, Save, Upload, UserCheck, GraduationCap } from 'lucide-react'
+import { Download, Printer, Save, Upload, UserCheck, GraduationCap, PenTool, RefreshCw } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
 import { supabase, logActivity, uploadToSupabaseStorage } from './lib/supabase'
 import { formatImageUrl, handleImageError } from './lib/imageUtils'
+import { DEFAULT_SIGNATORY_SVG } from './lib/signatureData'
 
 type Person = {
   id: string
@@ -47,6 +48,8 @@ export default function IDCardStudio({
   const [department, setDepartment] = useState('')
   const [photoUrl, setPhotoUrl] = useState('')
   const [photoPreview, setPhotoPreview] = useState('')
+  const [signatureUrl, setSignatureUrl] = useState<string>(DEFAULT_SIGNATORY_SVG)
+  const [signaturePreview, setSignaturePreview] = useState('')
   const [expiry, setExpiry] = useState(() => {
     const nextYear = new Date().getFullYear() + 1
     return `${nextYear}-03-31`
@@ -150,6 +153,7 @@ export default function IDCardStudio({
   }, [selected])
 
   const visiblePhoto = photoPreview || photoUrl
+  const visibleSignature = signaturePreview || signatureUrl || DEFAULT_SIGNATORY_SVG
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -171,19 +175,35 @@ export default function IDCardStudio({
     }
   }
 
+  const handleSignatureUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const objectUrl = URL.createObjectURL(file)
+    setSignaturePreview(objectUrl)
+    setSignatureUrl(objectUrl)
+    setToast('Custom signature loaded for Authorised Signatory')
+  }
+
+  const resetSignature = () => {
+    setSignaturePreview('')
+    setSignatureUrl(DEFAULT_SIGNATORY_SVG)
+    setToast('Reset to default Authorised Signatory')
+  }
+
   const makePdf = async () => {
     if (!cardRef.current) throw new Error('Card preview unavailable')
     const canvas = await html2canvas(cardRef.current, {
       scale: 3,
       useCORS: true,
-      backgroundColor: '#fff',
+      backgroundColor: '#ffffff',
     })
+    // ISO/IEC 7810 ID-1 standard portrait format: 54mm width x 85.6mm height
     const pdf = new jsPDF({
-      orientation: 'landscape',
+      orientation: 'portrait',
       unit: 'mm',
-      format: [85.6, 54],
+      format: [54, 85.6],
     })
-    pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, 85.6, 54)
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, 54, 85.6)
     return pdf.output('blob')
   }
 
@@ -194,9 +214,9 @@ export default function IDCardStudio({
       const blob = await makePdf()
       const link = document.createElement('a')
       link.href = URL.createObjectURL(blob)
-      link.download = `ID-${selected.code || selected.fullName}.pdf`
+      link.download = `ID-${selected.code || selected.fullName}-Portrait.pdf`
       link.click()
-      setToast('ID card PDF downloaded successfully')
+      setToast('Portrait ID card PDF downloaded successfully')
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'PDF generation failed')
     } finally {
@@ -241,7 +261,7 @@ export default function IDCardStudio({
         if (result.error) throw result.error
 
         await logActivity({
-          action: `Saved student ID card for ${selected.fullName} (${selected.code})`,
+          action: `Saved portrait student ID card for ${selected.fullName} (${selected.code})`,
           module: 'student_idcard',
         })
 
@@ -278,7 +298,7 @@ export default function IDCardStudio({
         if (result.error) throw result.error
 
         await logActivity({
-          action: `Saved teacher/staff ID card for ${selected.fullName} (${selected.code})`,
+          action: `Saved portrait teacher/staff ID card for ${selected.fullName} (${selected.code})`,
           module: 'teacher_idcard',
         })
 
@@ -295,10 +315,9 @@ export default function IDCardStudio({
     <div className="studio">
       <section className="studio-panel">
         <span className="overline">ID CARD GENERATOR & STUDIO</span>
-        <h2>Digital Identity Studio</h2>
+        <h2>Portrait Identity Studio</h2>
         <p>
-          Generate and print standardized identity cards directly from real
-          Supabase student and employee records.
+          Generate and print standardized portrait identity cards with official authorised signatory.
         </p>
 
         <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
@@ -388,7 +407,7 @@ export default function IDCardStudio({
               <input
                 value={designation}
                 onChange={(e) => setDesignation(e.target.value)}
-                placeholder="e.g. Senior Secondary Teacher"
+                placeholder="e.g. Teacher"
               />
             </label>
             <label>
@@ -396,7 +415,7 @@ export default function IDCardStudio({
               <input
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
-                placeholder="e.g. Science & Mathematics"
+                placeholder="e.g. Teaching Staff"
               />
             </label>
           </>
@@ -436,6 +455,41 @@ export default function IDCardStudio({
           />
         </label>
 
+        {/* Authorised Signatory customizer */}
+        <div style={{ marginTop: '14px', padding: '12px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <PenTool size={13} color="var(--blue)" />
+              Authorised Signatory Image
+            </span>
+            {signaturePreview && (
+              <button
+                type="button"
+                onClick={resetSignature}
+                style={{ height: '24px', padding: '0 8px', fontSize: '10px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <RefreshCw size={10} /> Reset
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ height: '36px', width: '90px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', display: 'grid', placeItems: 'center', padding: '2px' }}>
+              <img src={visibleSignature} alt="Signatory preview" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+            </div>
+            <label style={{ margin: 0, flex: 1, cursor: 'pointer' }}>
+              <span style={{ fontSize: '11px', color: 'var(--blue)', fontWeight: 700, textDecoration: 'underline' }}>
+                Replace Signature
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleSignatureUpload}
+              />
+            </label>
+          </div>
+        </div>
+
         <div className="studio-actions">
           <button onClick={download} disabled={busy || !selected}>
             <Download />
@@ -461,7 +515,8 @@ export default function IDCardStudio({
       </section>
 
       <section className="preview-stage">
-        <div className="id-card" ref={cardRef}>
+        {/* PORTRAIT ID CARD */}
+        <div className="id-card id-card-portrait" ref={cardRef}>
           <header>
             <img src={logo} alt="School Crest" />
             <div>
@@ -470,8 +525,12 @@ export default function IDCardStudio({
             </div>
           </header>
 
-          <div className="id-body">
-            <div className="student-photo">
+          <div className="id-type-strip">
+            {cardType === 'student' ? 'STUDENT IDENTITY CARD' : 'STAFF IDENTITY CARD'}
+          </div>
+
+          <div className="id-body-portrait">
+            <div className="student-photo-portrait">
               {visiblePhoto ? (
                 <img
                   src={formatImageUrl(visiblePhoto)}
@@ -492,13 +551,15 @@ export default function IDCardStudio({
               )}
             </div>
 
-            <div className="id-details">
-              <small>
-                {cardType === 'student'
-                  ? 'STUDENT IDENTITY CARD'
-                  : 'STAFF IDENTITY CARD'}
-              </small>
-              <h3>{selected?.fullName || 'Select a person'}</h3>
+            <h3 className="id-name-portrait">{selected?.fullName || 'Person Name'}</h3>
+            
+            <div className="id-role-tag">
+              {cardType === 'student'
+                ? (className ? `Class: ${className}` : selected?.code || 'STUDENT')
+                : (designation || 'FACULTY / STAFF')}
+            </div>
+
+            <div className="id-details-portrait">
               <dl>
                 <dt>{cardType === 'student' ? 'Adm No.' : 'Emp Code'}</dt>
                 <dd>{selected?.code || '—'}</dd>
@@ -527,19 +588,38 @@ export default function IDCardStudio({
                 <dd>{expiry}</dd>
               </dl>
             </div>
-
-            {qr && <img className="id-qr" src={qr} alt="Card Verification QR" />}
           </div>
 
-          <footer>
-            <span>Emergency: 9674368297</span>
-            <b>AUTHORISED SIGNATORY</b>
+          {/* Portrait Footer with QR Code & Authorised Signatory */}
+          <footer className="id-footer-portrait">
+            <div className="id-footer-left">
+              {qr ? (
+                <img className="id-qr-portrait" src={qr} alt="Card Verification QR" />
+              ) : (
+                <div className="id-qr-portrait" style={{ display: 'grid', placeItems: 'center', fontSize: '8px', color: '#94a3b8' }}>QR</div>
+              )}
+              <div className="id-emergency-text">
+                Emergency:
+                <b>9674368297</b>
+              </div>
+            </div>
+
+            <div className="id-signatory-block">
+              <img
+                src={visibleSignature}
+                alt="Authorised Signatory"
+                className="id-signature-img"
+              />
+              <span className="id-signatory-title">AUTHORISED SIGNATORY</span>
+            </div>
           </footer>
         </div>
+
         <p className="preview-note">
-          Live ISO/IEC 7810 ID-1 standard layout · Vector printable output
+          Live ISO/IEC 7810 ID-1 portrait standard (54mm × 85.6mm) · Vector printable output
         </p>
       </section>
     </div>
   )
 }
+
