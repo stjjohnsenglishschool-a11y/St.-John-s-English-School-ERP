@@ -60,103 +60,84 @@ main>footer{padding:22px 3px;color:#909cad;display:flex;justify-content:space-be
 .preview-stage{min-width:0;background:radial-gradient(circle at 50% 30%,#ffffff,#e2e8f0);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;position:relative}
 
 /* ========================================================
-   DELUXE FULL-CORPORATE ID CARD SYSTEM
+   MODERN WAVE & CORPORATE ID CARD SYSTEM
    ======================================================== */
 .deluxe-card-stage-wrapper{display:flex;flex-direction:column;align-items:center;gap:18px}
 .card-view-toggles{display:flex;background:#e2e8f0;padding:4px;border-radius:10px;gap:4px}
 .card-view-toggles button{padding:6px 14px;border:0;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#475569;transition:all .15s}
 .card-view-toggles button.active{background:#fff;color:#0f172a;box-shadow:0 2px 6px rgba(0,0,0,.08)}
 
-/* Card Container */
-.deluxe-corp-card{width:328px;height:520px;border-radius:18px;background:#ffffff;box-shadow:0 24px 60px rgba(15,23,42,.22),0 4px 14px rgba(15,23,42,.08);color:#0f172a;position:relative;overflow:hidden;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,.9);transform:translateZ(0)}
-.deluxe-corp-card.landscape{width:520px;height:328px;flex-direction:row}
+/* Card Base */
+.deluxe-corp-card{width:328px;height:528px;border-radius:20px;background:#ffffff;box-shadow:0 20px 50px rgba(15,23,42,.18),0 4px 12px rgba(15,23,42,.06);color:#0f172a;position:relative;overflow:hidden;display:flex;flex-direction:column;border:1px solid #f1f5f9;transform:translateZ(0)}
+.deluxe-corp-card.landscape{width:528px;height:328px}
 
-/* Themes */
-.theme-navy .card-header-bg{background:linear-gradient(145deg,#051429 0%,#0c2547 50%,#0a3769 100%)}
-.theme-navy .gold-trim{background:linear-gradient(90deg,#997322 0%,#e4ba4e 35%,#fff0ad 50%,#d8ab38 65%,#997322 100%)}
-.theme-slate .card-header-bg{background:linear-gradient(145deg,#090d16 0%,#1e293b 60%,#334155 100%)}
-.theme-slate .gold-trim{background:linear-gradient(90deg,#475569 0%,#94a3b8 50%,#cbd5e1 100%)}
-.theme-emerald .card-header-bg{background:linear-gradient(145deg,#042217 0%,#064e3b 60%,#047857 100%)}
-.theme-emerald .gold-trim{background:linear-gradient(90deg,#b45309 0%,#fbbf24 50%,#b45309 100%)}
-.theme-maroon .card-header-bg{background:linear-gradient(145deg,#2e050d 0%,#5c091d 60%,#881337 100%)}
-.theme-maroon .gold-trim{background:linear-gradient(90deg,#997322 0%,#e4ba4e 50%,#997322 100%)}
+/* Template 1: Modern Wave Dynamic (User Reference) */
+.template-wave{background:#ffffff;position:relative}
+.wave-top-decor{position:absolute;top:0;left:0;right:0;height:125px;pointer-events:none;z-index:1;overflow:hidden}
+.wave-top-decor svg{width:100%;height:100%;display:block}
+.wave-bottom-decor{position:absolute;bottom:0;left:0;right:0;height:70px;pointer-events:none;z-index:1;overflow:hidden}
+.wave-bottom-decor svg{width:100%;height:100%;display:block}
 
-/* Lanyard Slot */
-.card-lanyard-slot{position:absolute;top:7px;left:50%;transform:translateX(-50%);width:36px;height:5px;border-radius:10px;background:rgba(0,0,0,.35);box-shadow:inset 0 1px 2px rgba(0,0,0,.6),0 1px 1px rgba(255,255,255,.2);z-index:20}
+.wave-header-content{position:relative;z-index:2;padding:12px 14px 4px;display:flex;align-items:center;justify-content:space-between}
+.wave-school-brand{display:flex;align-items:center;gap:8px}
+.wave-logo-circle{width:38px;height:38px;border-radius:50%;padding:2px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center}
+.wave-logo-circle img{width:100%;height:100%;object-fit:contain;border-radius:50%}
+.wave-school-text h2{margin:0;font:800 11.5px/1.2 'Manrope';color:#ffffff;text-shadow:0 1px 2px rgba(0,0,0,.4);letter-spacing:.2px;text-transform:uppercase}
+.wave-school-text p{margin:0;font-size:7.5px;color:#f1f5f9;text-shadow:0 1px 2px rgba(0,0,0,.3);font-weight:600}
 
-/* Header */
-.corp-header{position:relative;padding:16px 14px 12px;color:#fff;overflow:hidden;text-align:center;display:flex;flex-direction:column;align-items:center}
-.corp-header:before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle at 80% 20%,rgba(255,255,255,.12) 0%,transparent 60%),linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:100% 100%,12px 12px,12px 12px;opacity:.7}
-.header-brand-row{display:flex;align-items:center;justify-content:center;gap:10px;position:relative;z-index:2;width:100%}
-.corp-logo-badge{width:46px;height:46px;border-radius:50%;padding:2px;background:#ffffff;box-shadow:0 0 0 2px #d4af37,0 4px 10px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.corp-logo-badge img{width:100%;height:100%;object-fit:contain;border-radius:50%}
-.corp-inst-info{text-align:left}
-.corp-inst-info h2{margin:0;font:800 13px/1.15 'Manrope';color:#ffffff;letter-spacing:.4px;text-transform:uppercase}
-.corp-inst-info p{margin:2px 0 0;font-size:8px;color:#cbd5e1;font-weight:600;letter-spacing:.3px}
-.corp-inst-info .affil{font-size:7px;color:#fef08a;letter-spacing:.6px;font-weight:700;text-transform:uppercase}
+/* Wave Photo Area */
+.wave-photo-container{position:relative;z-index:3;margin:8px auto 6px;width:130px;height:156px;display:flex;align-items:center;justify-content:center}
+.wave-photo-wrapper{width:120px;height:148px;border-radius:14px;overflow:hidden;background:#f1f5f9;box-shadow:0 10px 24px rgba(15,23,42,.15);border:3px solid #ffffff;position:relative}
+.wave-photo-wrapper img{width:100%;height:100%;object-fit:cover;display:block}
+.wave-photo-monogram{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font:800 28px 'Manrope';color:#64748b;background:radial-gradient(circle,#f8fafc,#cbd5e1)}
 
-/* Gold Divider */
-.gold-trim{height:3.5px;width:100%;box-shadow:0 1px 3px rgba(0,0,0,.25);position:relative;z-index:5}
+/* Floating Name Ribbon */
+.wave-name-ribbon-wrap{position:relative;z-index:4;margin:-14px auto 0;width:82%;text-align:center}
+.wave-name-ribbon{background:linear-gradient(90deg,#991b1b 0%,#dc2626 40%,#ef4444 60%,#b91c1c 100%);color:#ffffff;padding:6px 14px;border-radius:8px;box-shadow:0 6px 18px rgba(220,38,38,.4),0 2px 4px rgba(0,0,0,.1);border:1px solid rgba(255,255,255,.3)}
+.theme-navy .wave-name-ribbon{background:linear-gradient(90deg,#0f172a 0%,#1e3a8a 40%,#2563eb 60%,#1e3a8a 100%);box-shadow:0 6px 18px rgba(37,99,235,.4)}
+.theme-emerald .wave-name-ribbon{background:linear-gradient(90deg,#064e3b 0%,#047857 40%,#059669 60%,#064e3b 100%);box-shadow:0 6px 18px rgba(5,150,105,.4)}
+.theme-slate .wave-name-ribbon{background:linear-gradient(90deg,#090d16 0%,#1e293b 40%,#334155 60%,#1e293b 100%);box-shadow:0 6px 18px rgba(30,41,59,.4)}
 
-/* Role Classification Ribbon */
-.corp-role-ribbon{background:#f1f5f9;padding:4px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e2e8f0}
-.role-pill{display:inline-flex;align-items:center;gap:5px;font-size:8px;font-weight:800;letter-spacing:1px;color:#1e3a8a;text-transform:uppercase}
-.role-pill .dot{width:5px;height:5px;border-radius:50%;background:#10b981;box-shadow:0 0 0 2px rgba(16,185,129,.2)}
-.security-code{font-size:7.5px;font-family:monospace;font-weight:700;color:#64748b;letter-spacing:.5px}
+.wave-name-ribbon h3{margin:0;font:800 15px/1.2 'Manrope';letter-spacing:.6px;text-transform:uppercase;color:#ffffff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wave-role-title{margin:5px 0 3px;font:800 11px 'Manrope';color:#1e293b;letter-spacing:1.4px;text-transform:uppercase}
+.wave-double-line{display:flex;flex-direction:column;align-items:center;gap:2px;margin:3px auto 8px}
+.wave-double-line span{display:block;width:90px;height:1.5px;background:#dc2626;border-radius:2px}
+.theme-navy .wave-double-line span{background:#2563eb}
+.theme-emerald .wave-double-line span{background:#059669}
+.theme-slate .wave-double-line span{background:#475569}
 
-/* Card Body */
-.corp-body{padding:10px 14px 6px;display:flex;flex-direction:column;align-items:center;flex:1;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%)}
+/* Modern Tabular Details List (Matching Exact Reference Layout) */
+.wave-details-list{position:relative;z-index:2;padding:0 22px;display:flex;flex-direction:column;gap:5.5px;font-size:11px;margin-bottom:auto}
+.wave-detail-row{display:grid;grid-template-columns:82px 14px 1fr;align-items:center;line-height:1.25}
+.wave-detail-label{font-weight:800;color:#0f172a;letter-spacing:.2px;font-size:10.5px}
+.wave-detail-colon{font-weight:800;color:#334155;text-align:center}
+.wave-detail-val{font-weight:600;color:#1e293b;letter-spacing:.1px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wave-detail-val.highlight-expiry{color:#b91c1c;font-weight:800;background:#fef2f2;padding:1px 6px;border-radius:4px;border:1px solid #fecaca;display:inline-block;width:fit-content}
+.theme-navy .wave-detail-val.highlight-expiry{color:#1e3a8a;background:#eff6ff;border-color:#bfdbfe}
+.theme-emerald .wave-detail-val.highlight-expiry{color:#064e3b;background:#ecfdf5;border-color:#a7f3d0}
+.theme-slate .wave-detail-val.highlight-expiry{color:#0f172a;background:#f1f5f9;border-color:#cbd5e1}
 
-/* Portrait Avatar Pedestal */
-.corp-photo-frame{width:104px;height:128px;border-radius:12px;padding:3px;background:linear-gradient(135deg,#e2ba47 0%,#ffffff 40%,#0a3769 100%);box-shadow:0 8px 20px rgba(15,23,42,.16);position:relative;margin:2px 0 6px}
-.corp-photo-inner{width:100%;height:100%;border-radius:9px;background:#e2e8f0;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center}
-.corp-photo-inner img{width:100%;height:100%;object-fit:cover}
-.corp-monogram{font:800 24px 'Manrope';color:#475569;background:radial-gradient(circle,#f1f5f9,#cbd5e1);width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-.hologram-seal{position:absolute;bottom:4px;right:4px;background:linear-gradient(135deg,#f59e0b,#ec4899,#06b6d4);width:16px;height:16px;border-radius:50%;border:1.5px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.25);opacity:.9}
+/* Wave QR & Verification Footer Bar */
+.wave-footer-bar{position:relative;z-index:3;padding:4px 18px 8px;display:flex;align-items:flex-end;justify-content:space-between}
+.wave-qr-box{width:42px;height:42px;background:#fff;padding:2px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.12);border:1px solid #e2e8f0}
+.wave-qr-box img{width:100%;height:100%;object-fit:contain}
+.wave-sign-block{text-align:right}
+.wave-sign-text{font-family:'Brush Script MT',cursive,sans-serif;font-size:13px;color:#1e293b;font-weight:700;line-height:1;margin-bottom:-1px}
+.wave-sign-label{font-size:7px;font-weight:800;color:#475569;letter-spacing:.6px;text-transform:uppercase}
 
-/* Person Name & Subtitle */
-.corp-person-block{text-align:center;width:100%;margin-bottom:6px}
-.corp-person-name{margin:0;font:800 16px/1.2 'Manrope';color:#0a2540;letter-spacing:-.2px;text-transform:uppercase}
-.corp-person-title{margin:2px 0 0;display:inline-block;padding:2px 8px;border-radius:9999px;background:#e0f2fe;color:#0369a1;font-size:9px;font-weight:800;letter-spacing:.3px}
-
-/* Corporate Data Grid */
-.corp-data-table{width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:6px 9px;display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:9px;box-shadow:inset 0 1px 2px rgba(0,0,0,.02)}
-.corp-data-item{display:flex;flex-direction:column;line-height:1.2}
-.corp-data-item.full-span{grid-column:1 / -1}
-.corp-label{font-size:7px;font-weight:800;color:#64748b;letter-spacing:.6px;text-transform:uppercase}
-.corp-val{font-size:9px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-/* QR Row */
-.corp-qr-row{margin-top:auto;width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0 2px}
-.qr-verify-badge{display:flex;align-items:center;gap:6px}
-.corp-qr-code{width:48px;height:48px;padding:2px;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
-.qr-meta{font-size:7.5px;color:#475569;line-height:1.3}
-.qr-meta b{color:#0a2540;display:block;font-size:8px;letter-spacing:.3px}
-
-/* Footer */
-.corp-footer{padding:6px 12px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;gap:6px}
-.corp-emergency-pill{background:#1e3a8a;color:#ffffff;padding:3px 8px;border-radius:5px;font-weight:800;font-size:8.5px;letter-spacing:.2px;display:inline-flex;align-items:center;gap:4px;box-shadow:0 2px 4px rgba(30,58,138,.2)}
-.corp-signatory{text-align:right;display:flex;flex-direction:column;align-items:flex-end}
-.corp-signature-script{font-family:'Brush Script MT',cursive,sans-serif;font-size:12px;color:#1e3a8a;font-weight:700;line-height:1;margin-bottom:-2px;letter-spacing:.5px}
-.corp-sign-title{font-size:6.5px;font-weight:800;color:#64748b;letter-spacing:.8px;text-transform:uppercase}
-
-/* BACK SIDE OF ID CARD */
-.deluxe-corp-card.back-side{background:#f8fafc}
-.back-header-strip{padding:8px 12px;background:linear-gradient(145deg,#051429,#0a3769);color:#fff;text-align:center}
-.back-header-strip h4{margin:0;font:800 10px 'Manrope';letter-spacing:1px;text-transform:uppercase}
-.back-content{padding:12px 14px;display:flex;flex-direction:column;gap:8px;flex:1;font-size:8px;color:#334155;line-height:1.45}
-.back-rules-list{margin:0;padding-left:14px;display:flex;flex-direction:column;gap:4px}
-.back-rules-list li{font-size:7.5px;color:#475569}
-.back-contact-card{background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;display:grid;gap:3px;font-size:7.5px}
-.back-contact-card b{color:#0a2540}
-.back-barcode-box{margin-top:auto;text-align:center;padding:6px 0;border-top:1px dashed #cbd5e1}
-.barcode-visual{height:24px;width:160px;margin:0 auto;background:repeating-linear-gradient(90deg,#000 0,#000 1.5px,#fff 1.5px,#fff 3.5px,#000 3.5px,#000 4.5px,#fff 4.5px,#fff 7px)}
-.barcode-num{font-size:7px;font-family:monospace;letter-spacing:2px;margin-top:2px;color:#64748b}
-
-/* Landscape Mode Adjustments */
-.deluxe-corp-card.landscape .corp-header{width:180px;height:100%;border-right:3.5px solid #d4af37}
-.deluxe-corp-card.landscape .corp-body{flex:1;flex-direction:row;gap:14px;align-items:center;padding:12px 16px}
-.deluxe-corp-card.landscape .corp-footer{width:100%;position:absolute;bottom:0;left:180px;right:0}
+/* Back Side for Modern Wave */
+.wave-back-body{padding:14px 16px;display:flex;flex-direction:column;height:100%;position:relative;z-index:2}
+.wave-back-header{border-bottom:2px solid #dc2626;padding-bottom:6px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.theme-navy .wave-back-header{border-color:#2563eb}
+.theme-emerald .wave-back-header{border-color:#059669}
+.theme-slate .wave-back-header{border-color:#475569}
+.wave-back-header h4{margin:0;font:800 11px 'Manrope';color:#0f172a;letter-spacing:.6px;text-transform:uppercase}
+.wave-back-rules{margin:0;padding-left:14px;display:flex;flex-direction:column;gap:5px;font-size:8px;color:#334155;line-height:1.4}
+.wave-back-info-card{margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:8px;color:#334155;display:grid;gap:3px}
+.wave-back-info-card b{color:#0f172a}
+.wave-barcode-footer{margin-top:auto;text-align:center;padding-top:6px}
+.wave-barcode-lines{height:26px;width:170px;margin:0 auto;background:repeating-linear-gradient(90deg,#000 0,#000 1.5px,#fff 1.5px,#fff 3.5px,#000 3.5px,#000 4.5px,#fff 4.5px,#fff 7px)}
+.wave-barcode-text{font-size:7.5px;font-family:monospace;letter-spacing:2px;margin-top:3px;color:#64748b}
 
 
 /* Login page */
