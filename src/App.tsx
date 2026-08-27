@@ -66,6 +66,7 @@ import StudentMasterStudio from "./components/StudentMasterStudio";
 import EmployeeMasterStudio from "./components/EmployeeMasterStudio";
 import CsvImportModal from "./components/CsvImportModal";
 import { downloadSampleCsv } from "./lib/csvUtils";
+import { formatImageUrl, handleImageError } from "./lib/imageUtils";
 
 type Row = Record<string, unknown>;
 
@@ -1363,14 +1364,23 @@ function DataTable({
                     )
                   ) : c.includes("photo_url") || c.includes("file_url") ? (
                     r[c] ? (
-                      <a
-                        href={String(r[c])}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ color: "var(--blue)", textDecoration: "underline" }}
-                      >
-                        View Attachment
-                      </a>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <img
+                          src={formatImageUrl(String(r[c]))}
+                          alt="Photo"
+                          referrerPolicy="no-referrer"
+                          onError={handleImageError}
+                          style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover", border: "1px solid #cbd5e1" }}
+                        />
+                        <a
+                          href={formatImageUrl(String(r[c]))}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: "var(--blue)", textDecoration: "underline", fontSize: "12px" }}
+                        >
+                          View Link
+                        </a>
+                      </div>
                     ) : (
                       "—"
                     )

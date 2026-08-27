@@ -4,6 +4,7 @@ import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
 import { supabase, logActivity, uploadToSupabaseStorage } from './lib/supabase'
+import { formatImageUrl, handleImageError } from './lib/imageUtils'
 
 type Person = {
   id: string
@@ -472,7 +473,12 @@ export default function IDCardStudio({
           <div className="id-body">
             <div className="student-photo">
               {visiblePhoto ? (
-                <img src={visiblePhoto} alt="Portrait" />
+                <img
+                  src={formatImageUrl(visiblePhoto)}
+                  alt="Portrait"
+                  referrerPolicy="no-referrer"
+                  onError={handleImageError}
+                />
               ) : (
                 <span>
                   {selected

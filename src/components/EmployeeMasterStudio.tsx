@@ -26,6 +26,7 @@ import { supabase, uploadToSupabaseStorage, logActivity } from '../lib/supabase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
 import { downloadSampleCsv } from '../lib/csvUtils'
+import { formatImageUrl, handleImageError } from '../lib/imageUtils'
 import CsvImportModal from './CsvImportModal'
 
 type Employee = {
@@ -617,11 +618,10 @@ export default function EmployeeMasterStudio({
                     <div className="table-avatar">
                       {emp.employee_photo_url ? (
                         <img
-                          src={emp.employee_photo_url}
+                          src={formatImageUrl(emp.employee_photo_url)}
                           alt={emp.first_name}
-                          onError={(e) => {
-                            ;(e.target as HTMLElement).style.display = 'none'
-                          }}
+                          referrerPolicy="no-referrer"
+                          onError={handleImageError}
                         />
                       ) : (
                         <span>{emp.first_name?.slice(0, 1) || 'E'}</span>
@@ -810,13 +810,18 @@ export default function EmployeeMasterStudio({
                   <div className="photo-upload-section">
                     <div className="avatar-preview-box">
                       {formState.employee_photo_url ? (
-                        <img src={formState.employee_photo_url} alt="Staff" />
+                        <img
+                          src={formatImageUrl(formState.employee_photo_url)}
+                          alt="Staff"
+                          referrerPolicy="no-referrer"
+                          onError={handleImageError}
+                        />
                       ) : (
                         <User size={48} opacity={0.3} />
                       )}
                     </div>
                     {modalMode !== 'view' && (
-                      <div className="photo-actions">
+                      <div className="photo-actions" style={{ flex: 1 }}>
                         <label className="btn-upload-label">
                           <Upload size={14} />{' '}
                           {uploadingPhoto ? 'Uploading...' : 'Upload Staff Photograph'}
@@ -828,7 +833,22 @@ export default function EmployeeMasterStudio({
                             style={{ display: 'none' }}
                           />
                         </label>
-                        <small>Max 2MB · PNG, JPG</small>
+                        <small style={{ display: 'block', marginBottom: '6px' }}>Max 2MB · PNG, JPG</small>
+                        <div style={{ marginTop: '4px' }}>
+                          <input
+                            type="url"
+                            placeholder="Or paste Google Drive / Photo URL..."
+                            value={formState.employee_photo_url || ''}
+                            onChange={(e) => updateForm('employee_photo_url', e.target.value)}
+                            style={{
+                              padding: '6px 10px',
+                              fontSize: '12px',
+                              borderRadius: '6px',
+                              border: '1px solid #cbd5e1',
+                              width: '100%',
+                            }}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>

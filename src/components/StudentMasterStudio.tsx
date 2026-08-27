@@ -28,6 +28,7 @@ import { supabase, uploadToSupabaseStorage, logActivity } from '../lib/supabase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
 import { downloadSampleCsv } from '../lib/csvUtils'
+import { formatImageUrl, handleImageError } from '../lib/imageUtils'
 import CsvImportModal from './CsvImportModal'
 
 type Student = {
@@ -631,11 +632,10 @@ export default function StudentMasterStudio({
                     <div className="table-avatar">
                       {student.student_photo_url ? (
                         <img
-                          src={student.student_photo_url}
+                          src={formatImageUrl(student.student_photo_url)}
                           alt={student.full_name}
-                          onError={(e) => {
-                            ;(e.target as HTMLElement).style.display = 'none'
-                          }}
+                          referrerPolicy="no-referrer"
+                          onError={handleImageError}
                         />
                       ) : (
                         <span>{student.full_name?.slice(0, 2).toUpperCase() || 'ST'}</span>
@@ -948,13 +948,18 @@ export default function StudentMasterStudio({
                   <div className="photo-upload-section">
                     <div className="avatar-preview-box">
                       {formState.student_photo_url ? (
-                        <img src={formState.student_photo_url} alt="Student" />
+                        <img
+                          src={formatImageUrl(formState.student_photo_url)}
+                          alt="Student"
+                          referrerPolicy="no-referrer"
+                          onError={handleImageError}
+                        />
                       ) : (
                         <User size={48} opacity={0.3} />
                       )}
                     </div>
                     {modalMode !== 'view' && (
-                      <div className="photo-actions">
+                      <div className="photo-actions" style={{ flex: 1 }}>
                         <label className="btn-upload-label">
                           <Upload size={14} />{' '}
                           {uploadingPhoto ? 'Uploading...' : 'Upload Student Photo'}
@@ -966,7 +971,22 @@ export default function StudentMasterStudio({
                             style={{ display: 'none' }}
                           />
                         </label>
-                        <small>Max 2MB · PNG, JPG, JPEG</small>
+                        <small style={{ display: 'block', marginBottom: '6px' }}>Max 2MB · PNG, JPG, JPEG</small>
+                        <div style={{ marginTop: '4px' }}>
+                          <input
+                            type="url"
+                            placeholder="Or paste Google Drive / Photo URL..."
+                            value={formState.student_photo_url || ''}
+                            onChange={(e) => updateForm('student_photo_url', e.target.value)}
+                            style={{
+                              padding: '6px 10px',
+                              fontSize: '12px',
+                              borderRadius: '6px',
+                              border: '1px solid #cbd5e1',
+                              width: '100%',
+                            }}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
