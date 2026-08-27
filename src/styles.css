@@ -43,50 +43,42 @@ main>footer{padding:22px 3px;color:#909cad;display:flex;justify-content:space-be
 .studio{display:grid;grid-template-columns:minmax(310px,430px) 1fr;gap:18px}.studio-panel,.preview-stage{padding:24px;border:1px solid var(--line);border-radius:17px;background:#fff;box-shadow:var(--shadow-sm)}.studio-panel h2{margin:6px 0;color:#18344f;font:800 23px 'Manrope'}.studio-panel>p{margin:0;color:#77869a;font-size:13px}.studio-panel label{margin-top:15px;color:#485b70;display:grid;gap:7px;font-size:12px;font-weight:700}.studio-panel select,.studio-panel input{width:100%;padding:11px;border:1px solid #d8e1eb;border-radius:9px;background:#fff;font-size:13px}.photo-upload{padding:14px!important;border:1px dashed #8eadd2;border-radius:10px;color:var(--blue)!important;background:#f7faff;display:flex!important;align-items:center;gap:8px!important;cursor:pointer}.photo-upload svg{width:17px}.photo-upload input{display:none}.studio-actions{margin-top:19px;display:flex;flex-wrap:wrap;gap:7px}.studio-actions button{height:38px;padding:0 11px;border:1px solid #d8e1eb;border-radius:9px;background:#fff;color:#4f6277;display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800}.studio-actions button.primary{border-color:var(--blue);background:var(--blue);color:#fff}.studio-actions svg{width:14px}.preview-stage{min-width:0;background:radial-gradient(circle at 50% 40%,#fff,#eaf0f7);display:grid;place-items:center;padding:24px}
 
 /* Portrait ID Card Standard: 54mm x 85.6mm (CR80) */
-.id-card{width:324px;min-height:520px;height:520px;border-radius:14px;background:#fff;box-shadow:0 22px 55px rgba(16,42,71,.27);color:#173451;position:relative;overflow:hidden;display:flex;flex-direction:column;box-sizing:border-box}
-.id-card>header{height:58px;padding:7px 12px;border-bottom:3px solid #d8a940;background:linear-gradient(115deg,#09233f,#174f7d);color:#fff;display:flex;align-items:center;gap:9px;flex-shrink:0}
-.id-card>header img{width:42px;height:42px;border-radius:50%;background:#fff;object-fit:contain;padding:1.5px;box-shadow:0 0 0 2px rgba(216,169,64,.85);flex-shrink:0}
+.id-card{width:324px;min-height:524px;height:524px;border-radius:14px;background:#fff;box-shadow:0 22px 55px rgba(16,42,71,.27);color:#173451;position:relative;overflow:hidden;display:flex;flex-direction:column;box-sizing:border-box}
+.id-card>header{height:68px;padding:9px 14px;border-bottom:3.5px solid #d8a940;background:linear-gradient(115deg,#09233f,#174f7d);color:#fff;display:flex;align-items:center;gap:11px;flex-shrink:0}
+.id-card>header img{width:48px;height:48px;border-radius:50%;background:#fff;object-fit:contain;padding:2px;box-shadow:0 0 0 2px rgba(216,169,64,.85);flex-shrink:0}
 .id-card>header b,.id-card>header span{display:block}
-.id-card>header b{font:800 13px/1.2 'Manrope';letter-spacing:.3px}
-.id-card>header span{color:#d2dfeb;font-size:8.5px;font-weight:600;margin-top:1px}
-.id-type-strip{background:#fdf8eb;border-bottom:1px solid #f2e3bc;padding:3px 10px;text-align:center;color:#9c6c18;font-size:8.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;flex-shrink:0}
-.id-body-portrait{padding:6px 12px 2px;display:flex;flex-direction:column;align-items:center;flex:1;justify-content:space-between;min-height:0}
-.student-photo-portrait{width:96px;height:116px;border-radius:8px;border:2px solid #cbdbe9;background:#edf3f8;color:#7a8a9a;display:grid;place-items:center;overflow:hidden;font-size:13px;font-weight:800;box-shadow:0 4px 10px rgba(15,35,60,.1);margin-bottom:3px;flex-shrink:0}
+.id-card>header b{font:800 14px/1.25 'Manrope';letter-spacing:.4px}
+.id-card>header span{color:#d2dfeb;font-size:9.5px;font-weight:600;margin-top:2px}
+.id-type-strip{background:#fdf8eb;border-bottom:1px solid #f2e3bc;padding:4px 12px;text-align:center;color:#9c6c18;font-size:9.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;flex-shrink:0}
+.id-body-portrait{padding:9px 14px 6px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;flex:1;min-height:0}
+.student-photo-portrait{width:118px;height:142px;border-radius:10px;border:2.5px solid #cbdbe9;background:#edf3f8;color:#7a8a9a;display:grid;place-items:center;overflow:hidden;font-size:14px;font-weight:800;box-shadow:0 4px 12px rgba(15,35,60,.12);margin-bottom:5px;flex-shrink:0}
 .student-photo-portrait img{width:100%;height:100%;object-fit:cover}
-.id-name-portrait{margin:1px 0 0;font:800 15px/1.2 'Manrope';color:#102842;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.id-role-tag{display:inline-block;padding:1.5px 10px;border-radius:4px;background:#e9f2fd;color:var(--blue);font-size:8.5px;font-weight:800;letter-spacing:.5px;margin-bottom:3px}
-.id-details-portrait{width:100%;margin-top:1px}
-.id-details-portrait dl{margin:0;display:grid;grid-template-columns:74px 1fr;row-gap:3px;font-size:9.5px;line-height:1.35;padding:5px 9px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0}
+.id-name-portrait{margin:2px 0 3px;font:800 17px/1.2 'Manrope';color:#102842;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.id-role-tag{display:inline-block;padding:2.5px 12px;border-radius:5px;background:#e9f2fd;color:var(--blue);font-size:9.5px;font-weight:800;letter-spacing:.5px;margin-bottom:6px}
+.id-details-portrait{width:100%;margin-top:0}
+.id-details-portrait dl{margin:0;display:grid;grid-template-columns:82px 1fr;row-gap:4px;font-size:10.5px;line-height:1.4;padding:7px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0}
 .id-details-portrait dt{color:#64748b;font-weight:600}
 .id-details-portrait dd{margin:0;font-weight:800;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-/* Security Thread divider */
-.id-security-thread{background:linear-gradient(90deg,#09233f,#d8a940 50%,#09233f);padding:2px 6px;text-align:center;color:#fff;font-size:6px;font-weight:800;letter-spacing:1.5px;flex-shrink:0;text-shadow:0 1px 2px rgba(0,0,0,.5);line-height:1.1}
-
 /* Portrait Footer styling */
-.id-footer-portrait{padding:5px 10px 4px;background:linear-gradient(180deg,#ffffff,#f1f5f9);display:flex;align-items:flex-end;justify-content:space-between;gap:6px;margin-top:auto;flex-shrink:0;border-top:1px solid #e2e8f0}
-.id-footer-left{display:flex;align-items:center;gap:6px}
+.id-footer-portrait{padding:8px 12px 9px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:auto;flex-shrink:0}
+.id-footer-left{display:flex;align-items:center;gap:7px}
 
-.id-qr-box{display:flex;flex-direction:column;align-items:center;cursor:pointer;background:#fff;padding:2px 2.5px 1.5px;border-radius:5px;border:1.5px solid #09233f;box-shadow:0 1px 4px rgba(9,35,63,.12);transition:all .15s ease;flex-shrink:0}
+.id-qr-box{display:flex;flex-direction:column;align-items:center;cursor:pointer;background:#fff;padding:2px 3px 2px;border-radius:6px;border:1.5px solid #09233f;box-shadow:0 1px 4px rgba(9,35,63,.1);transition:all .15s ease;flex-shrink:0}
 .id-qr-box:hover{transform:scale(1.04);box-shadow:0 3px 8px rgba(37,99,235,.25);border-color:var(--blue)}
-.id-qr-img{width:40px;height:40px;display:block;border-radius:2px}
-.id-qr-placeholder{width:40px;height:40px;display:grid;place-items:center;color:#64748b;background:#f8fafc}
+.id-qr-img{width:44px;height:44px;display:block;border-radius:2px}
+.id-qr-placeholder{width:44px;height:44px;display:grid;place-items:center;color:#64748b;background:#f8fafc}
 .id-qr-tag{display:block;font-size:5px;font-weight:900;letter-spacing:.5px;color:#09233f;margin-top:1px;text-transform:uppercase;line-height:1}
 
-.id-emergency-pill{background:#fff;border:1px solid #fed7aa;border-radius:5px;padding:2px 5px;display:flex;flex-direction:column;gap:1px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
-.id-emergency-badge{display:flex;align-items:center;gap:2.5px;color:#c2410c;font-size:6px;font-weight:900;letter-spacing:.4px;line-height:1}
-.id-emergency-num{font-size:8.5px;font-weight:900;color:#0f172a;letter-spacing:.2px;line-height:1.1}
+.id-emergency-pill{background:#fff;border:1px solid #fed7aa;border-radius:6px;padding:3px 6px;display:flex;flex-direction:column;gap:1px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.id-emergency-badge{display:flex;align-items:center;gap:3px;color:#c2410c;font-size:6.5px;font-weight:900;letter-spacing:.4px;line-height:1}
+.id-emergency-num{font-size:9.5px;font-weight:900;color:#0f172a;letter-spacing:.3px;line-height:1.1}
 
-.id-signatory-block{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:105px;position:relative}
-.id-signatory-wrap{position:relative;display:flex;align-items:center;justify-content:center;height:26px;width:100%}
-.id-seal-bg{position:absolute;font-size:14px;font-weight:900;color:rgba(216,169,64,.18);letter-spacing:2px;pointer-events:none;transform:rotate(-8deg)}
-.id-signature-img{height:26px;max-width:96px;object-fit:contain;position:relative;z-index:2;filter:contrast(1.2)}
-.id-signatory-line{display:flex;align-items:center;justify-content:center;gap:2.5px;border-top:1.5px solid #09233f;padding-top:1.5px;width:100%;margin-top:1px}
-.id-signatory-star{font-size:5.5px;color:#d8a940}
-.id-signatory-title{font-size:6.5px;font-weight:900;letter-spacing:.7px;color:#09233f;text-transform:uppercase;white-space:nowrap;line-height:1}
-
-/* Bottom micro-ribbon */
-.id-bottom-ribbon{background:#09233f;color:#d8a940;padding:2px 6px;text-align:center;font-size:5.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;flex-shrink:0;line-height:1.1}
+.id-signatory-block{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:110px;position:relative}
+.id-signatory-wrap{position:relative;display:flex;align-items:center;justify-content:center;height:32px;width:100%}
+.id-signature-img{height:32px;max-width:105px;object-fit:contain;position:relative;z-index:2;filter:contrast(1.2)}
+.id-signatory-line{display:flex;align-items:center;justify-content:center;border-top:1.5px solid #09233f;padding-top:2px;width:100%;margin-top:1px}
+.id-signatory-title{font-size:7px;font-weight:900;letter-spacing:.8px;color:#09233f;text-transform:uppercase;white-space:nowrap;line-height:1}
 .preview-note{margin:18px 0 0;color:#718093;font-size:11px}
 
 /* Login page */

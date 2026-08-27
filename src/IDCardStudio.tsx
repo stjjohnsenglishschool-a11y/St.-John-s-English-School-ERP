@@ -646,12 +646,7 @@ export default function IDCardStudio({
             </div>
           </div>
 
-          {/* Security Thread Divider */}
-          <div className="id-security-thread">
-            <span>✦ OFFICIAL INSTITUTIONAL IDENTITY ✦</span>
-          </div>
-
-          {/* Portrait Footer with Stylized QR, Emergency Badge & Authorised Signatory */}
+          {/* Portrait Footer with QR Code, Helpline & Authorised Signatory */}
           <footer className="id-footer-portrait">
             <div className="id-footer-left">
               <div
@@ -680,7 +675,6 @@ export default function IDCardStudio({
 
             <div className="id-signatory-block">
               <div className="id-signatory-wrap">
-                <div className="id-seal-bg">SEAL</div>
                 <img
                   src={visibleSignature}
                   alt="Authorised Signatory"
@@ -688,17 +682,10 @@ export default function IDCardStudio({
                 />
               </div>
               <div className="id-signatory-line">
-                <span className="id-signatory-star">★</span>
                 <span className="id-signatory-title">AUTHORISED SIGNATORY</span>
-                <span className="id-signatory-star">★</span>
               </div>
             </div>
           </footer>
-
-          {/* Bottom Accreditation Micro Ribbon */}
-          <div className="id-bottom-ribbon">
-            <span>WBBSE AFFILIATED · DANKUNI HOOGHLY · SECURED CREDENTIAL</span>
-          </div>
         </div>
 
         <p className="preview-note">
