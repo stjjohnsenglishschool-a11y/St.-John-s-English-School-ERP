@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { Download, Printer, Save, Upload, UserCheck, GraduationCap, PenTool, RefreshCw, QrCode as QrCodeIcon, ShieldCheck, PhoneCall, CheckCircle2 } from 'lucide-react'
+import { Download, Printer, Save, Upload, UserCheck, GraduationCap, PenTool, RefreshCw, QrCode as QrCodeIcon, ShieldCheck, PhoneCall, CheckCircle2, Camera } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
@@ -7,6 +7,7 @@ import { supabase, logActivity, uploadToSupabaseStorage } from './lib/supabase'
 import { formatImageUrl, handleImageError } from './lib/imageUtils'
 import { DEFAULT_SIGNATORY_SVG } from './lib/signatureData'
 import DigitalVerificationModal, { VerificationData } from './components/DigitalVerificationModal'
+import QRScannerModal from './components/QRScannerModal'
 
 type Person = {
   id: string
@@ -59,6 +60,7 @@ export default function IDCardStudio({
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [verificationModalData, setVerificationModalData] = useState<VerificationData | null>(null)
+  const [isScannerOpen, setIsScannerOpen] = useState(false)
 
   const cardRef = useRef<HTMLDivElement>(null)
 
@@ -200,6 +202,18 @@ export default function IDCardStudio({
         timeStyle: 'short',
       }),
     })
+  }
+
+  const handleScanVerified = (data: VerificationData) => {
+    setVerificationModalData(data)
+  }
+
+  const handleSelectPersonFromScan = (type: 'student' | 'employee', id: string) => {
+    if (type !== cardType) {
+      setCardType(type)
+    }
+    setSelectedId(id)
+    setToast(`Loaded profile for ${type === 'student' ? 'Student' : 'Staff'}`)
   }
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -538,12 +552,21 @@ export default function IDCardStudio({
         </div>
 
         <div className="studio-actions">
+          <button
+            type="button"
+            className="primary"
+            onClick={() => setIsScannerOpen(true)}
+            style={{ backgroundColor: '#0284c7', borderColor: '#0284c7', color: '#ffffff' }}
+            title="Scan physical ID cards or digital QR codes using browser camera"
+          >
+            <Camera size={15} />
+            Scan QR Code
+          </button>
           <button onClick={download} disabled={busy || !selected}>
             <Download />
             Download PDF
           </button>
           <button
-            className="primary"
             onClick={save}
             disabled={busy || !selected}
           >
@@ -577,7 +600,7 @@ export default function IDCardStudio({
             <img src={logo} alt="School Crest" />
             <div>
               <b>ST. JOHN'S ENGLISH SCHOOL</b>
-              <span>Dankuni, Hooghly · W.B. 712311</span>
+              <span>T.N. Mukherjee Road Dankuni, Hooghly · W.B. 712311</span>
             </div>
           </header>
 
@@ -695,8 +718,26 @@ export default function IDCardStudio({
         <DigitalVerificationModal
           data={verificationModalData}
           onClose={() => setVerificationModalData(null)}
+          onScanAgain={() => setIsScannerOpen(true)}
+          onSelectInStudio={
+            verificationModalData.dbId
+              ? () =>
+                  handleSelectPersonFromScan(
+                    (verificationModalData.type as 'student' | 'employee') || 'student',
+                    verificationModalData.dbId!
+                  )
+              : undefined
+          }
         />
       )}
+
+      {/* Real-time Camera QR Code Scanner */}
+      <QRScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onVerified={handleScanVerified}
+        onSelectPerson={handleSelectPersonFromScan}
+      />
     </div>
   )
 }

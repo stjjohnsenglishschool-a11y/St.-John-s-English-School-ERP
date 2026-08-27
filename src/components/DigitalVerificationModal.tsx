@@ -13,6 +13,7 @@ export interface VerificationData {
   school?: string
   verifiedAt?: string
   photoUrl?: string
+  dbId?: string
 }
 
 const logo =
@@ -21,9 +22,13 @@ const logo =
 export default function DigitalVerificationModal({
   data,
   onClose,
+  onScanAgain,
+  onSelectInStudio,
 }: {
   data: VerificationData
   onClose: () => void
+  onScanAgain?: () => void
+  onSelectInStudio?: () => void
 }) {
   const [imgError, setImgError] = useState(false)
 
@@ -135,7 +140,7 @@ export default function DigitalVerificationModal({
                 ST. JOHN'S ENGLISH SCHOOL
               </h2>
               <span style={{ fontSize: '11px', color: '#cbd5e1' }}>
-                Dankuni, Hooghly · W.B. 712311 · Affiliated Institution
+                T.N. Mukherjee Road Dankuni, Hooghly · W.B. 712311 · Affiliated Institution
               </span>
             </div>
           </div>
@@ -339,10 +344,60 @@ export default function DigitalVerificationModal({
             backgroundColor: '#f8fafc',
             borderTop: '1px solid #e2e8f0',
             display: 'flex',
-            justifyContent: 'flex-end',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             gap: '10px',
+            flexWrap: 'wrap',
           }}
         >
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {onScanAgain && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onScanAgain()
+                }}
+                style={{
+                  padding: '8px 14px',
+                  backgroundColor: '#ffffff',
+                  color: '#1e293b',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                Scan Another QR
+              </button>
+            )}
+            {onSelectInStudio && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectInStudio()
+                  onClose()
+                }}
+                style={{
+                  padding: '8px 14px',
+                  backgroundColor: '#eff6ff',
+                  color: '#2563eb',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Edit in ID Studio
+              </button>
+            )}
+          </div>
+
           <button
             onClick={onClose}
             style={{
