@@ -646,7 +646,7 @@ export default function IDCardStudio({
             </div>
           </div>
 
-          {/* Portrait Footer with QR Code, Helpline & Authorised Signatory */}
+          {/* Portrait Footer with QR Code, Emergency Contact & Authorised Signatory */}
           <footer className="id-footer-portrait">
             <div className="id-footer-left">
               <div
@@ -664,12 +664,9 @@ export default function IDCardStudio({
                 <span className="id-qr-tag">SCAN TO VERIFY</span>
               </div>
 
-              <div className="id-emergency-pill">
-                <div className="id-emergency-badge">
-                  <PhoneCall size={9} />
-                  <span>24×7 HELPLINE</span>
-                </div>
-                <b className="id-emergency-num">9674368297</b>
+              <div className="id-emergency-text">
+                Emergency:
+                <b>9674368297</b>
               </div>
             </div>
 
