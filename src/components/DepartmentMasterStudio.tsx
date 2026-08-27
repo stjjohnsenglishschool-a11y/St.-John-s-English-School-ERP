@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { supabase, logActivity } from "../lib/supabase";
 import { modules } from "../modules";
+import { downloadSampleCsv } from "../lib/csvUtils";
 import CsvImportModal from "./CsvImportModal";
 
 export interface Department {
@@ -576,9 +577,9 @@ export default function DepartmentMasterStudio({
             </button>
           </div>
 
-          <button onClick={handleExportCsv} title="Export departments to CSV" style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" }}>
+          <button onClick={() => downloadSampleCsv(modules.department_master)} title="Download pre-filled sample CSV template for bulk department upload" style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "6px", border: "1px solid #bae6fd", background: "#e0f2fe", color: "#0369a1", fontWeight: 600, cursor: "pointer" }}>
             <Download size={15} />
-            Export CSV
+            Sample CSV
           </button>
 
           <button onClick={() => setCsvModalOpen(true)} title="Import departments from CSV" style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" }}>

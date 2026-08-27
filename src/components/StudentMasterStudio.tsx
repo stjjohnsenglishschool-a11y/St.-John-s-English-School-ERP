@@ -27,6 +27,7 @@ import {
 import { supabase, uploadToSupabaseStorage, logActivity } from '../lib/supabase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
+import { downloadSampleCsv } from '../lib/csvUtils'
 import CsvImportModal from './CsvImportModal'
 
 type Student = {
@@ -456,8 +457,12 @@ export default function StudentMasterStudio({
           <p>Comprehensive admission, academic, parent contact, medical, and document directory</p>
         </div>
         <div className="hero-actions">
-          <button className="btn-secondary" onClick={handleExportCsv} title="Export current list">
-            <Download size={16} /> Export CSV
+          <button
+            className="btn-secondary"
+            onClick={() => downloadSampleCsv(modules.student_master)}
+            title="Download pre-filled sample CSV template for bulk student upload"
+          >
+            <Download size={16} /> Sample CSV
           </button>
           <button
             className="btn-secondary"

@@ -248,46 +248,94 @@ export function sanitizeRecordForTable(
 }
 
 /**
- * Generates sample CSV template text for a module
+ * Generates sample CSV template text for a module with 2 realistic pre-filled sample rows
  */
 export function generateSampleCsv(mod: Module): string {
   const fields = mod.fields.filter((f) => f.key !== mod.primaryKey)
   const headers = fields.map((f) => f.label)
 
-  const sampleRow: string[] = fields.map((f) => {
-    if (f.key === 'department_name') return 'Mathematics'
-    if (f.key === 'department_code') return 'DEPT-MATH'
-    if (f.key === 'description') return 'Department of Mathematics'
-    if (f.key === 'class_name') return 'CLASS I'
-    if (f.key === 'academic_year') return getCurrentAcademicYear()
-    if (f.key === 'capacity') return '40'
-    if (f.key === 'subject_name') return 'English Grammar'
-    if (f.key === 'subject_type') return 'Scholastic'
-    if (f.key === 'vendor_name') return 'Oxford University Press'
-    if (f.key === 'contact_person') return 'Debashis Roy'
-    if (f.key === 'phone_primary' || f.key === 'mobile_primary') return '9830112233'
-    if (f.key === 'email' || f.key === 'official_email') return 'contact@example.com'
-    if (f.key === 'address' || f.key === 'current_address') return 'Dankuni, Hooghly, West Bengal'
-    if (f.key === 'first_name') return 'Aarav'
-    if (f.key === 'last_name') return 'Sharma'
-    if (f.key === 'full_name') return 'Aarav Sharma'
-    if (f.key === 'gender') return 'Male'
-    if (f.key === 'date_of_birth') return '2016-05-15'
-    if (f.key === 'admission_no') return 'ADM-2026-001'
-    if (f.key === 'roll_no') return '1'
-    if (f.key === 'section') return 'A'
-    if (f.key === 'father_name') return 'Rajesh Sharma'
-    if (f.key === 'father_mobile') return '9876543210'
-    if (f.key === 'mother_name') return 'Sunita Sharma'
-    if (f.key === 'emp_code') return 'EMP-001'
-    if (f.key === 'designation') return 'Senior Teacher'
-    if (f.key === 'employee_category') return 'Teaching'
-    if (f.key === 'date_of_joining') return '2022-04-01'
-    if (f.key === 'basic_salary') return '35000'
-    if (f.type === 'boolean') return 'true'
-    if (f.type === 'number') return '100'
-    return 'Sample Value'
-  })
+  const getSampleVal = (f: Field, rowIndex: number): string => {
+    const k = f.key.toLowerCase()
 
-  return [headers.join(','), sampleRow.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')].join('\n')
+    if (k === 'department_name') return rowIndex === 0 ? 'Mathematics' : 'Science & Technology'
+    if (k === 'department_code') return rowIndex === 0 ? 'DEPT-MATH' : 'DEPT-SCI'
+    if (k === 'description') return rowIndex === 0 ? 'Department of Mathematics' : 'Department of Natural Sciences'
+    if (k === 'class_name') return rowIndex === 0 ? 'CLASS I' : 'CLASS II'
+    if (k === 'academic_year') return getCurrentAcademicYear()
+    if (k === 'capacity') return rowIndex === 0 ? '40' : '45'
+    if (k === 'subject_name') return rowIndex === 0 ? 'English Grammar' : 'Mathematics'
+    if (k === 'subject_type') return rowIndex === 0 ? 'Scholastic' : 'Co-Scholastic'
+    if (k === 'vendor_name') return rowIndex === 0 ? 'Oxford University Press' : 'Camlin Stationary Pvt Ltd'
+    if (k === 'vendor_code') return rowIndex === 0 ? 'VND-0001' : 'VND-0002'
+    if (k === 'contact_person') return rowIndex === 0 ? 'Debashis Roy' : 'Sujata Banerjee'
+    if (k === 'phone_primary' || k === 'mobile_primary' || k === 'whatsapp_number' || k === 'phone')
+      return rowIndex === 0 ? '9830112233' : '9830998877'
+    if (k === 'email' || k === 'official_email' || k === 'personal_email')
+      return rowIndex === 0 ? 'contact@stjohns.edu' : 'info@stjohns.edu'
+    if (k === 'address' || k === 'current_address' || k === 'permanent_address')
+      return rowIndex === 0 ? 'Station Road, Dankuni, Hooghly, WB' : 'GT Road, Serampore, Hooghly, WB'
+    if (k === 'first_name') return rowIndex === 0 ? 'Aarav' : 'Ananya'
+    if (k === 'last_name') return rowIndex === 0 ? 'Sharma' : 'Sen'
+    if (k === 'full_name' || k === 'student_name') return rowIndex === 0 ? 'Aarav Sharma' : 'Ananya Sen'
+    if (k === 'gender') return rowIndex === 0 ? 'Male' : 'Female'
+    if (k === 'date_of_birth' || k === 'dob') return rowIndex === 0 ? '2016-05-15' : '2017-08-22'
+    if (k === 'admission_no' || k === 'admission_number') return rowIndex === 0 ? 'ADM-2026-001' : 'ADM-2026-002'
+    if (k === 'roll_no' || k === 'roll_number') return rowIndex === 0 ? '1' : '2'
+    if (k === 'section') return rowIndex === 0 ? 'A' : 'B'
+    if (k === 'father_name') return rowIndex === 0 ? 'Rajesh Sharma' : 'Subhash Sen'
+    if (k === 'father_mobile') return rowIndex === 0 ? '9876543210' : '9876543211'
+    if (k === 'mother_name') return rowIndex === 0 ? 'Sunita Sharma' : 'Priti Sen'
+    if (k === 'emp_code' || k === 'employee_code') return rowIndex === 0 ? 'EMP-001' : 'EMP-002'
+    if (k === 'designation') return rowIndex === 0 ? 'Senior Teacher' : 'Assistant Teacher'
+    if (k === 'employee_category') return rowIndex === 0 ? 'Teaching Staff' : 'Administrative Office'
+    if (k === 'department') return rowIndex === 0 ? 'Teaching Staff' : 'Accounts & Finance'
+    if (k === 'date_of_joining' || k === 'doj') return rowIndex === 0 ? '2022-04-01' : '2023-01-10'
+    if (k === 'basic_salary') return rowIndex === 0 ? '35000' : '28000'
+    if (k === 'receipt_number') return rowIndex === 0 ? 'RCPT-2026-101' : 'RCPT-2026-102'
+    if (k === 'receipt_date' || k === 'date') return rowIndex === 0 ? '2026-08-01' : '2026-08-05'
+    if (k === 'amount' || k === 'amount_paid' || k === 'total_amount' || k === 'fee_amount')
+      return rowIndex === 0 ? '2500' : '3200'
+    if (k === 'payment_mode') return rowIndex === 0 ? 'Cash' : 'UPI / Online'
+    if (k === 'user_name' || k === 'username') return rowIndex === 0 ? 'asharma' : 'asen'
+    if (k === 'user_full_name') return rowIndex === 0 ? 'Aarav Sharma' : 'Ananya Sen'
+    if (k === 'password') return rowIndex === 0 ? 'pass123' : 'pass456'
+    if (k === 'role') return rowIndex === 0 ? 'teacher' : 'accounts'
+    if (k === 'item_name') return rowIndex === 0 ? 'Whiteboard Marker Box' : 'A4 Printing Paper Reams'
+    if (k === 'item_code') return rowIndex === 0 ? 'ITM-001' : 'ITM-002'
+    if (k === 'asset_name') return rowIndex === 0 ? 'Dell OptiPlex Desktop' : 'Epson LCD Projector'
+    if (k === 'asset_code') return rowIndex === 0 ? 'AST-001' : 'AST-002'
+    if (k === 'leave_type') return rowIndex === 0 ? 'Casual Leave (CL)' : 'Medical Leave (ML)'
+    if (k === 'title' || k === 'assignment_title' || k === 'notice_title')
+      return rowIndex === 0 ? 'Mathematics Homework Chapter 3' : 'Annual Sports Day Announcement'
+
+    if (f.options && f.options.length > 0) {
+      return f.options[rowIndex % f.options.length]
+    }
+    if (f.type === 'boolean') return 'true'
+    if (f.type === 'number') return rowIndex === 0 ? '100' : '200'
+    if (f.type === 'date') return rowIndex === 0 ? '2026-01-15' : '2026-02-20'
+
+    return rowIndex === 0 ? 'Sample Value 1' : 'Sample Value 2'
+  }
+
+  const row1 = fields.map((f) => getSampleVal(f, 0))
+  const row2 = fields.map((f) => getSampleVal(f, 1))
+
+  return [
+    headers.join(','),
+    row1.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','),
+    row2.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','),
+  ].join('\n')
+}
+
+/**
+ * Downloads pre-filled sample CSV template for bulk upload
+ */
+export function downloadSampleCsv(mod: Module) {
+  const csvContent = generateSampleCsv(mod)
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = `${mod.table}_sample_data.csv`
+  link.click()
 }

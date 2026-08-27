@@ -65,6 +65,7 @@ import LetterPrintModal from "./components/LetterPrintModal";
 import StudentMasterStudio from "./components/StudentMasterStudio";
 import EmployeeMasterStudio from "./components/EmployeeMasterStudio";
 import CsvImportModal from "./components/CsvImportModal";
+import { downloadSampleCsv } from "./lib/csvUtils";
 
 type Row = Record<string, unknown>;
 
@@ -1011,9 +1012,18 @@ function App() {
                     placeholder={`Filter ${moduleName(mod.table)}... (${filtered.length} records)`}
                   />
                 </div>
-                <button onClick={exportCsv} title="Export records to CSV">
+                <button
+                  onClick={() => downloadSampleCsv(mod)}
+                  title="Download pre-filled sample CSV template for bulk upload"
+                  style={{
+                    background: "#e0f2fe",
+                    color: "#0369a1",
+                    border: "1px solid #bae6fd",
+                    fontWeight: 600,
+                  }}
+                >
                   <Download size={15} />
-                  Export CSV
+                  Sample CSV
                 </button>
                 {mod.fields.length > 0 && (
                   <button

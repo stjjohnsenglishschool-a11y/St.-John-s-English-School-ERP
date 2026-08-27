@@ -25,6 +25,7 @@ import {
 import { supabase, uploadToSupabaseStorage, logActivity } from '../lib/supabase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
+import { downloadSampleCsv } from '../lib/csvUtils'
 import CsvImportModal from './CsvImportModal'
 
 type Employee = {
@@ -456,8 +457,12 @@ export default function EmployeeMasterStudio({
           <p>Faculty and administrative staff credentials, assignments, qualifications and payroll profiles</p>
         </div>
         <div className="hero-actions">
-          <button className="btn-secondary" onClick={handleExportCsv} title="Export CSV">
-            <Download size={16} /> Export CSV
+          <button
+            className="btn-secondary"
+            onClick={() => downloadSampleCsv(modules.employee_master)}
+            title="Download pre-filled sample CSV template for bulk employee upload"
+          >
+            <Download size={16} /> Sample CSV
           </button>
           <button
             className="btn-secondary"
