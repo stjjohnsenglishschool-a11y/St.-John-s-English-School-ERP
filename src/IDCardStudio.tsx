@@ -137,6 +137,9 @@ export default function IDCardStudio({
     }
   }, [selected])
 
+  const visiblePhoto = photoPreview || photoUrl
+  const visibleSignature = signaturePreview || signatureUrl || DEFAULT_SIGNATORY_SVG
+
   useEffect(() => {
     const code = selected?.code || (cardType === 'student' ? 'ADM-001' : 'EMP-013')
     const name = selected?.fullName || (cardType === 'student' ? 'Student Name' : 'Ananya Manna')
@@ -147,7 +150,7 @@ export default function IDCardStudio({
     // Generate a web-verifiable URL compatible with standard smartphone cameras and QR scanners
     const baseOrigin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://stjohns-school.edu'
     const pathname = typeof window !== 'undefined' ? window.location.pathname : '/'
-    const queryParams = new URLSearchParams({
+    const queryParamsObj: Record<string, string> = {
       verify: code,
       name: name,
       type: type,
@@ -155,8 +158,12 @@ export default function IDCardStudio({
       dept: dept,
       valid: expiry,
       school: "St. John's English School",
-    }).toString()
+    }
+    if (visiblePhoto && !visiblePhoto.startsWith('blob:')) {
+      queryParamsObj.photo = visiblePhoto
+    }
 
+    const queryParams = new URLSearchParams(queryParamsObj).toString()
     const verificationUrl = `${baseOrigin}${pathname}?${queryParams}`
 
     QRCode.toDataURL(verificationUrl, {
@@ -170,7 +177,7 @@ export default function IDCardStudio({
     })
       .then(setQr)
       .catch(() => setQr(''))
-  }, [selected, cardType, className, designation, department, expiry])
+  }, [selected, cardType, className, designation, department, expiry, visiblePhoto])
 
   const openVerificationModal = () => {
     const code = selected?.code || (cardType === 'student' ? 'ADM-001' : 'EMP-013')
@@ -186,7 +193,7 @@ export default function IDCardStudio({
       className: className || undefined,
       validUntil: expiry,
       school: "St. John's English School",
-      photoUrl: visiblePhoto || undefined,
+      photoUrl: visiblePhoto || selected?.photoUrl || undefined,
       verifiedAt: new Date().toLocaleString('en-IN', {
         timeZone: 'Asia/Kolkata',
         dateStyle: 'medium',
@@ -194,9 +201,6 @@ export default function IDCardStudio({
       }),
     })
   }
-
-  const visiblePhoto = photoPreview || photoUrl
-  const visibleSignature = signaturePreview || signatureUrl || DEFAULT_SIGNATORY_SVG
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]

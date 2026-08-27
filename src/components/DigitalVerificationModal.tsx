@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { CheckCircle2, ShieldCheck, X, Building2, Phone, Calendar, User, ExternalLink, Award } from 'lucide-react'
+import { formatImageUrl } from '../lib/imageUtils'
 
 export interface VerificationData {
   code: string
@@ -23,11 +25,27 @@ export default function DigitalVerificationModal({
   data: VerificationData
   onClose: () => void
 }) {
+  const [imgError, setImgError] = useState(false)
+
   const verifiedTimestamp = data.verifiedAt || new Date().toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
     dateStyle: 'medium',
     timeStyle: 'short',
   })
+
+  // Generate initials for avatar fallback
+  const initials = data.name
+    ? data.name
+        .trim()
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((n) => n[0].toUpperCase())
+        .join('')
+    : 'ID'
+
+  const formattedPhoto = data.photoUrl ? formatImageUrl(data.photoUrl) : ''
+  const hasValidPhoto = Boolean(formattedPhoto && !imgError)
 
   return (
     <div
@@ -166,7 +184,7 @@ export default function DigitalVerificationModal({
               alignItems: 'center',
               gap: '16px',
               marginBottom: '16px',
-              padding: '12px',
+              padding: '12px 14px',
               backgroundColor: '#f8fafc',
               borderRadius: '12px',
               border: '1px solid #e2e8f0',
@@ -174,25 +192,48 @@ export default function DigitalVerificationModal({
           >
             <div
               style={{
-                width: '64px',
-                height: '76px',
-                borderRadius: '8px',
+                width: '68px',
+                height: '80px',
+                borderRadius: '9px',
                 backgroundColor: '#e2e8f0',
                 overflow: 'hidden',
                 display: 'grid',
                 placeItems: 'center',
                 flexShrink: 0,
-                border: '1.5px solid #cbd5e1',
+                border: '2px solid #cbd5e1',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                position: 'relative',
               }}
             >
-              {data.photoUrl ? (
+              {hasValidPhoto ? (
                 <img
-                  src={data.photoUrl}
-                  alt={data.name}
+                  src={formattedPhoto}
+                  alt={data.name || 'Member Photo'}
+                  referrerPolicy="no-referrer"
+                  onError={() => setImgError(true)}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               ) : (
-                <User size={30} color="#94a3b8" />
+                <div
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    background: 'linear-gradient(135deg, #1e3a5f 0%, #0d233a 100%)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '2px',
+                  }}
+                >
+                  <span style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '1px', color: '#f8fafc' }}>
+                    {initials}
+                  </span>
+                  <span style={{ fontSize: '8px', fontWeight: 700, color: '#93c5fd', letterSpacing: '0.5px' }}>
+                    VERIFIED
+                  </span>
+                </div>
               )}
             </div>
 
