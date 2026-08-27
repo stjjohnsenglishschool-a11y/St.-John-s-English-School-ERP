@@ -1,11 +1,12 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { Download, Printer, Save, Upload, UserCheck, GraduationCap, PenTool, RefreshCw } from 'lucide-react'
+import { Download, Printer, Save, Upload, UserCheck, GraduationCap, PenTool, RefreshCw, QrCode as QrCodeIcon, ShieldCheck, PhoneCall, CheckCircle2 } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
 import { supabase, logActivity, uploadToSupabaseStorage } from './lib/supabase'
 import { formatImageUrl, handleImageError } from './lib/imageUtils'
 import { DEFAULT_SIGNATORY_SVG } from './lib/signatureData'
+import DigitalVerificationModal, { VerificationData } from './components/DigitalVerificationModal'
 
 type Person = {
   id: string
@@ -57,6 +58,7 @@ export default function IDCardStudio({
   const [qr, setQr] = useState('')
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [verificationModalData, setVerificationModalData] = useState<VerificationData | null>(null)
 
   const cardRef = useRef<HTMLDivElement>(null)
 
@@ -136,21 +138,62 @@ export default function IDCardStudio({
   }, [selected])
 
   useEffect(() => {
-    if (!selected) {
-      setQr('')
-      return
-    }
-    const payload = JSON.stringify({
-      school: 'SJES',
-      type: selected.type,
-      code: selected.code,
-      name: selected.fullName,
-      id: selected.id,
+    const code = selected?.code || (cardType === 'student' ? 'ADM-001' : 'EMP-013')
+    const name = selected?.fullName || (cardType === 'student' ? 'Student Name' : 'Ananya Manna')
+    const type = cardType
+    const role = cardType === 'student' ? (className ? `Class: ${className}` : 'Student') : (designation || 'Teacher')
+    const dept = department || 'Teaching Staff'
+    
+    // Generate a web-verifiable URL compatible with standard smartphone cameras and QR scanners
+    const baseOrigin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://stjohns-school.edu'
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '/'
+    const queryParams = new URLSearchParams({
+      verify: code,
+      name: name,
+      type: type,
+      role: role,
+      dept: dept,
+      valid: expiry,
+      school: "St. John's English School",
+    }).toString()
+
+    const verificationUrl = `${baseOrigin}${pathname}?${queryParams}`
+
+    QRCode.toDataURL(verificationUrl, {
+      width: 220,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: {
+        dark: '#09233f',
+        light: '#ffffff',
+      },
     })
-    QRCode.toDataURL(payload, { width: 180, margin: 1 })
       .then(setQr)
       .catch(() => setQr(''))
-  }, [selected])
+  }, [selected, cardType, className, designation, department, expiry])
+
+  const openVerificationModal = () => {
+    const code = selected?.code || (cardType === 'student' ? 'ADM-001' : 'EMP-013')
+    const name = selected?.fullName || (cardType === 'student' ? 'Student Name' : 'Ananya Manna')
+    const role = cardType === 'student' ? (className ? `Class: ${className}` : 'Student') : (designation || 'Teacher')
+    
+    setVerificationModalData({
+      code,
+      name,
+      type: cardType,
+      role,
+      department: department || 'Teaching Staff',
+      className: className || undefined,
+      validUntil: expiry,
+      school: "St. John's English School",
+      photoUrl: visiblePhoto || undefined,
+      verifiedAt: new Date().toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }),
+    })
+  }
 
   const visiblePhoto = photoPreview || photoUrl
   const visibleSignature = signaturePreview || signatureUrl || DEFAULT_SIGNATORY_SVG
@@ -503,6 +546,15 @@ export default function IDCardStudio({
             <Save />
             {busy ? 'Saving…' : 'Save card record'}
           </button>
+          <button
+            type="button"
+            onClick={openVerificationModal}
+            style={{ borderColor: '#2563eb', color: '#1d4ed8', background: '#eff6ff', fontWeight: 800 }}
+            title="Preview what a phone camera sees when scanning this QR"
+          >
+            <ShieldCheck size={14} />
+            Test QR Scan
+          </button>
           <button onClick={() => window.print()} disabled={!selected}>
             <Printer />
             Print
@@ -551,7 +603,7 @@ export default function IDCardStudio({
               )}
             </div>
 
-            <h3 className="id-name-portrait">{selected?.fullName || 'Person Name'}</h3>
+            <h3 className="id-name-portrait">{selected?.fullName || (cardType === 'student' ? 'Student Name' : 'Person Name')}</h3>
             
             <div className="id-role-tag">
               {cardType === 'student'
@@ -562,63 +614,101 @@ export default function IDCardStudio({
             <div className="id-details-portrait">
               <dl>
                 <dt>{cardType === 'student' ? 'Adm No.' : 'Emp Code'}</dt>
-                <dd>{selected?.code || '—'}</dd>
+                <dd>{selected?.code || (cardType === 'student' ? 'ADM-2024-001' : 'EMP-013')}</dd>
 
                 {cardType === 'student' ? (
                   <>
                     <dt>Class</dt>
-                    <dd>{className || '—'}</dd>
+                    <dd>{className || 'Class X - A'}</dd>
                     <dt>Roll No.</dt>
-                    <dd>{selected?.rollNo || '—'}</dd>
+                    <dd>{selected?.rollNo || '12'}</dd>
                     <dt>DOB</dt>
-                    <dd>{selected?.dateOfBirth || '—'}</dd>
+                    <dd>{selected?.dateOfBirth || '2010-05-14'}</dd>
                   </>
                 ) : (
                   <>
                     <dt>Designation</dt>
-                    <dd>{designation || '—'}</dd>
+                    <dd>{designation || 'Senior Faculty'}</dd>
                     <dt>Department</dt>
-                    <dd>{department || '—'}</dd>
+                    <dd>{department || 'Academic Affairs'}</dd>
                   </>
                 )}
 
                 <dt>Mobile</dt>
-                <dd>{selected?.mobile || '—'}</dd>
+                <dd>{selected?.mobile || '9876543210'}</dd>
                 <dt>Valid Until</dt>
                 <dd>{expiry}</dd>
               </dl>
             </div>
           </div>
 
-          {/* Portrait Footer with QR Code & Authorised Signatory */}
+          {/* Security Thread Divider */}
+          <div className="id-security-thread">
+            <span>✦ OFFICIAL INSTITUTIONAL IDENTITY ✦</span>
+          </div>
+
+          {/* Portrait Footer with Stylized QR, Emergency Badge & Authorised Signatory */}
           <footer className="id-footer-portrait">
             <div className="id-footer-left">
-              {qr ? (
-                <img className="id-qr-portrait" src={qr} alt="Card Verification QR" />
-              ) : (
-                <div className="id-qr-portrait" style={{ display: 'grid', placeItems: 'center', fontSize: '8px', color: '#94a3b8' }}>QR</div>
-              )}
-              <div className="id-emergency-text">
-                Emergency:
-                <b>9674368297</b>
+              <div
+                className="id-qr-box"
+                onClick={openVerificationModal}
+                title="Click to test / view live digital QR certificate"
+              >
+                {qr ? (
+                  <img className="id-qr-img" src={qr} alt="Card Verification QR" />
+                ) : (
+                  <div className="id-qr-placeholder">
+                    <QrCodeIcon size={22} />
+                  </div>
+                )}
+                <span className="id-qr-tag">SCAN TO VERIFY</span>
+              </div>
+
+              <div className="id-emergency-pill">
+                <div className="id-emergency-badge">
+                  <PhoneCall size={9} />
+                  <span>24×7 HELPLINE</span>
+                </div>
+                <b className="id-emergency-num">9674368297</b>
               </div>
             </div>
 
             <div className="id-signatory-block">
-              <img
-                src={visibleSignature}
-                alt="Authorised Signatory"
-                className="id-signature-img"
-              />
-              <span className="id-signatory-title">AUTHORISED SIGNATORY</span>
+              <div className="id-signatory-wrap">
+                <div className="id-seal-bg">SEAL</div>
+                <img
+                  src={visibleSignature}
+                  alt="Authorised Signatory"
+                  className="id-signature-img"
+                />
+              </div>
+              <div className="id-signatory-line">
+                <span className="id-signatory-star">★</span>
+                <span className="id-signatory-title">AUTHORISED SIGNATORY</span>
+                <span className="id-signatory-star">★</span>
+              </div>
             </div>
           </footer>
+
+          {/* Bottom Accreditation Micro Ribbon */}
+          <div className="id-bottom-ribbon">
+            <span>WBBSE AFFILIATED · DANKUNI HOOGHLY · SECURED CREDENTIAL</span>
+          </div>
         </div>
 
         <p className="preview-note">
-          Live ISO/IEC 7810 ID-1 portrait standard (54mm × 85.6mm) · Vector printable output
+          Live ISO/IEC 7810 ID-1 portrait standard (54mm × 85.6mm) · Tap QR code or click 'Test QR Scan' to preview live verification
         </p>
       </section>
+
+      {/* Digital Identity Verification Certificate Modal */}
+      {verificationModalData && (
+        <DigitalVerificationModal
+          data={verificationModalData}
+          onClose={() => setVerificationModalData(null)}
+        />
+      )}
     </div>
   )
 }

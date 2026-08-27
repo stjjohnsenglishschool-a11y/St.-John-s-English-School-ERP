@@ -65,6 +65,7 @@ import LetterPrintModal from "./components/LetterPrintModal";
 import StudentMasterStudio from "./components/StudentMasterStudio";
 import EmployeeMasterStudio from "./components/EmployeeMasterStudio";
 import CsvImportModal from "./components/CsvImportModal";
+import DigitalVerificationModal, { VerificationData } from "./components/DigitalVerificationModal";
 import { downloadSampleCsv } from "./lib/csvUtils";
 import { formatImageUrl, handleImageError } from "./lib/imageUtils";
 
@@ -226,6 +227,27 @@ function App() {
   const [toast, setToast] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [csvModalOpen, setCsvModalOpen] = useState(false);
+  const [urlVerificationData, setUrlVerificationData] = useState<VerificationData | null>(null);
+
+  // Auto-detect ?verify= query param from scanned QR codes
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search) {
+      const params = new URLSearchParams(window.location.search);
+      const verifyCode = params.get("verify");
+      if (verifyCode) {
+        setUrlVerificationData({
+          code: verifyCode,
+          name: params.get("name") || "Verified Member",
+          type: params.get("type") || "student",
+          role: params.get("role") || undefined,
+          department: params.get("dept") || undefined,
+          validUntil: params.get("valid") || "2027-03-31",
+          school: params.get("school") || "St. John's English School",
+          photoUrl: params.get("photo") || undefined,
+        });
+      }
+    }
+  }, []);
 
   // Sorting & Pagination
   const [sortCol, setSortCol] = useState<string | null>(null);
@@ -1200,6 +1222,13 @@ function App() {
           session={session}
           setToast={setToast}
           onLogout={handleLogout}
+        />
+      )}
+
+      {urlVerificationData && (
+        <DigitalVerificationModal
+          data={urlVerificationData}
+          onClose={() => setUrlVerificationData(null)}
         />
       )}
 
