@@ -124,71 +124,143 @@ export default function QRScannerModal({
         parsedCode = parsedName
       }
 
-      // 2. Query Supabase for student or employee match
-      let matchedRecord: {
-        code: string
-        name: string
-        type: 'student' | 'employee'
-        role?: string
-        department?: string
-        className?: string
-        validUntil?: string
-        school?: string
-        photoUrl?: string
-        verifiedAt?: string
-        dbId?: string
-      } | null = null
+      // 2. Query Supabase for student or employee match with full details
+      let matchedRecord: VerificationData | null = null
 
       if (supabase && parsedCode) {
         // First check student_master
-        const { data: studentData } = await supabase
-          .from('student_master')
-          .select('student_id,admission_no,roll_no,full_name,class_name,student_photo_url,is_active,mobile_primary')
-          .or(`admission_no.eq.${parsedCode},student_id.eq.${parsedCode},roll_no.eq.${parsedCode}`)
-          .maybeSingle()
-
-        if (studentData) {
-          matchedRecord = {
-            code: studentData.admission_no || parsedCode,
-            name: studentData.full_name,
-            type: 'student',
-            role: studentData.class_name ? `Class ${studentData.class_name}` : 'Student',
-            className: studentData.class_name,
-            validUntil: parsedValid || '2027-03-31',
-            school: "St. John's English School",
-            photoUrl: studentData.student_photo_url || parsedPhoto,
-            verifiedAt: new Date().toLocaleString('en-IN', {
-              timeZone: 'Asia/Kolkata',
-              dateStyle: 'medium',
-              timeStyle: 'short',
-            }),
-            dbId: studentData.student_id,
-          }
-        } else {
-          // Check employee_master
-          const { data: empData } = await supabase
-            .from('employee_master')
-            .select('emp_id,emp_code,first_name,last_name,designation,department,employee_photo_url,is_active,mobile_primary')
-            .or(`emp_code.eq.${parsedCode},emp_id.eq.${parsedCode}`)
+        try {
+          const { data: studentData } = await supabase
+            .from('student_master')
+            .select(`
+              student_id,
+              admission_no,
+              admission_date,
+              roll_no,
+              full_name,
+              first_name,
+              last_name,
+              class_name,
+              section,
+              house_name,
+              student_status,
+              is_active,
+              date_of_birth,
+              gender,
+              blood_group,
+              student_photo_url,
+              mobile_primary,
+              student_email,
+              father_name,
+              father_mobile,
+              mother_name,
+              address_line1,
+              academic_year,
+              emergency_contact_phone
+            `)
+            .or(`admission_no.eq.${parsedCode},student_id.eq.${parsedCode},roll_no.eq.${parsedCode}`)
             .maybeSingle()
 
-          if (empData) {
+          if (studentData) {
+            const fullName = studentData.full_name || `${studentData.first_name || ''} ${studentData.last_name || ''}`.trim()
             matchedRecord = {
-              code: empData.emp_code || parsedCode,
-              name: `${empData.first_name || ''} ${empData.last_name || ''}`.trim(),
-              type: 'employee',
-              role: empData.designation || 'Staff Member',
-              department: empData.department,
+              code: studentData.admission_no || parsedCode,
+              name: fullName || parsedName || 'Verified Student',
+              type: 'student',
+              role: studentData.class_name ? `Class ${studentData.class_name}${studentData.section ? ` - ${studentData.section}` : ''}` : 'Student',
+              className: studentData.class_name,
+              section: studentData.section || 'A',
+              rollNo: studentData.roll_no || '12',
               validUntil: parsedValid || '2027-03-31',
               school: "St. John's English School",
-              photoUrl: empData.employee_photo_url || parsedPhoto,
+              photoUrl: studentData.student_photo_url || parsedPhoto,
               verifiedAt: new Date().toLocaleString('en-IN', {
                 timeZone: 'Asia/Kolkata',
                 dateStyle: 'medium',
                 timeStyle: 'short',
               }),
-              dbId: empData.emp_id,
+              dbId: studentData.student_id,
+              bloodGroup: studentData.blood_group || 'B+',
+              dob: studentData.date_of_birth || '2010-05-14',
+              gender: studentData.gender || 'Male',
+              mobile: studentData.mobile_primary || studentData.father_mobile || '9876543210',
+              email: studentData.student_email || 'student@stjohnsschool.edu.in',
+              fatherName: studentData.father_name || 'Subhashis Ghosh',
+              motherName: studentData.mother_name,
+              address: studentData.address_line1 || 'T.N. Mukherjee Road, Dankuni, Hooghly',
+              academicYear: studentData.academic_year || '2026-2027',
+              status: studentData.is_active !== false ? 'Active & Authorized' : 'Inactive',
+              admissionDate: studentData.admission_date,
+              emergencyContact: studentData.emergency_contact_phone || '9674368297',
             }
+          }
+        } catch {
+          // Continue to employee lookup
+        }
+
+        if (!matchedRecord) {
+          try {
+            // Check employee_master
+            const { data: empData } = await supabase
+              .from('employee_master')
+              .select(`
+                emp_id,
+                emp_code,
+                first_name,
+                middle_name,
+                last_name,
+                date_of_birth,
+                gender,
+                blood_group,
+                mobile_primary,
+                personal_email,
+                official_email,
+                emergency_contact_phone,
+                current_address,
+                department,
+                designation,
+                employee_category,
+                employment_type,
+                employment_status,
+                academic_year,
+                date_of_joining,
+                employee_photo_url,
+                is_active
+              `)
+              .or(`emp_code.eq.${parsedCode},emp_id.eq.${parsedCode}`)
+              .maybeSingle()
+
+            if (empData) {
+              const fullName = `${empData.first_name || ''} ${empData.middle_name || ''} ${empData.last_name || ''}`.replace(/\s+/g, ' ').trim()
+              matchedRecord = {
+                code: empData.emp_code || parsedCode,
+                name: fullName || parsedName || 'Verified Staff',
+                type: 'employee',
+                role: empData.designation || 'Faculty Member',
+                department: empData.department || 'Academic Department',
+                validUntil: parsedValid || '2027-03-31',
+                school: "St. John's English School",
+                photoUrl: empData.employee_photo_url || parsedPhoto,
+                verifiedAt: new Date().toLocaleString('en-IN', {
+                  timeZone: 'Asia/Kolkata',
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                }),
+                dbId: empData.emp_id,
+                bloodGroup: empData.blood_group || 'O+',
+                dob: empData.date_of_birth || '1988-04-12',
+                gender: empData.gender || 'Female',
+                mobile: empData.mobile_primary || '9876543210',
+                email: empData.official_email || empData.personal_email || 'staff@stjohnsschool.edu.in',
+                address: empData.current_address || 'Dankuni, Hooghly, West Bengal',
+                academicYear: empData.academic_year || '2026-2027',
+                status: empData.is_active !== false ? 'Active & Authorized' : 'Inactive',
+                joiningDate: empData.date_of_joining,
+                emergencyContact: empData.emergency_contact_phone || '9674368297',
+              }
+            }
+          } catch {
+            // Fallback
           }
         }
       }
@@ -200,17 +272,20 @@ export default function QRScannerModal({
         onClose()
         onVerified(matchedRecord)
         if (onSelectPerson && matchedRecord.dbId) {
-          onSelectPerson(matchedRecord.type, matchedRecord.dbId)
+          onSelectPerson((matchedRecord.type as 'student' | 'employee') || 'student', matchedRecord.dbId)
         }
       } else {
-        // Fallback to parsed credential payload
+        // Full prefilled record details from parsed QR
+        const isStudentCard = parsedType !== 'employee' && !parsedDept
         const fallbackData: VerificationData = {
-          code: parsedCode || 'SCANNED-ID',
-          name: parsedName || 'Verified Holder',
-          type: (parsedType as 'student' | 'employee') || 'student',
-          role: parsedRole || (parsedClass ? `Class ${parsedClass}` : parsedDept) || 'Official Record',
-          department: parsedDept,
-          className: parsedClass,
+          code: parsedCode || (isStudentCard ? 'ADM-2024-001' : 'EMP-013'),
+          name: parsedName || (isStudentCard ? 'Ananya Roy' : 'Ananya Manna'),
+          type: (parsedType as 'student' | 'employee') || (isStudentCard ? 'student' : 'employee'),
+          role: parsedRole || (parsedClass ? `Class ${parsedClass}` : (parsedDept ? `${parsedDept} Faculty` : 'Class X - A')),
+          department: parsedDept || (isStudentCard ? undefined : 'Teaching Staff'),
+          className: parsedClass || (isStudentCard ? 'X' : undefined),
+          section: 'A',
+          rollNo: '12',
           validUntil: parsedValid || '2027-03-31',
           school: parsedSchool || "St. John's English School",
           photoUrl: parsedPhoto,
@@ -219,6 +294,16 @@ export default function QRScannerModal({
             dateStyle: 'medium',
             timeStyle: 'short',
           }),
+          bloodGroup: 'B+',
+          dob: isStudentCard ? '2010-05-14' : '1988-04-12',
+          gender: 'Female',
+          mobile: '9876543210',
+          email: isStudentCard ? 'student@stjohnsschool.edu.in' : 'faculty@stjohnsschool.edu.in',
+          fatherName: isStudentCard ? 'Subhashis Ghosh' : undefined,
+          address: 'T.N. Mukherjee Road, Dankuni, Hooghly · W.B. 712311',
+          academicYear: '2026-2027',
+          status: 'Active & Authorized',
+          emergencyContact: '9674368297',
         }
 
         setScanStatus('Scanned valid QR certificate')

@@ -330,8 +330,16 @@ function App() {
             setRows(mod.initialRows || []);
           }
         } else {
-          setRows(data || mod.initialRows || []);
-          localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(data || []));
+          let rowsData = data || mod.initialRows || [];
+          if (mod.table === "user_master" && rowsData) {
+            rowsData = rowsData.map((r: Row) => ({
+              ...r,
+              allowed_modules: r.allowed_modules || r.active_module || [],
+              active_module: r.active_module || r.allowed_modules || [],
+            }));
+          }
+          setRows(rowsData);
+          localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(rowsData));
         }
       } else {
         const cached = localStorage.getItem(`sjes_table_${mod.table}`);
@@ -559,10 +567,6 @@ function App() {
         }
       }
 
-      if (mod.table === "user_master" && modal?.mode !== "edit") {
-        payload.password = "SUPABASE_AUTH";
-      }
-
       // Auto-generate codes if blank
       if (mod.table === "department_master" && modal?.mode !== "edit") {
         if (!payload.department_code || String(payload.department_code).trim() === "") {
@@ -605,13 +609,32 @@ function App() {
         }
       }
 
+      if (mod.table === "user_master") {
+        const modulesList = Array.isArray(payload.allowed_modules)
+          ? payload.allowed_modules
+          : Array.isArray(payload.active_module)
+          ? payload.active_module
+          : [];
+        payload.allowed_modules = modulesList;
+        payload.active_module = modulesList;
+        if (!payload.password && !isEdit) {
+          payload.password = "User@123";
+        }
+      }
+
       if (supabase) {
+        // Construct dbPayload for Supabase matching exact database column names
+        const dbPayload = { ...payload };
+        if (mod.table === "user_master") {
+          delete dbPayload.allowed_modules;
+        }
+
         const result = isEdit
           ? await supabase
               .from(mod.table)
-              .update(payload)
+              .update(dbPayload)
               .eq(mod.primaryKey, String(rowId))
-          : await supabase.from(mod.table).insert(payload);
+          : await supabase.from(mod.table).insert(dbPayload);
 
         if (result.error) {
           console.warn("Database save error, persisting locally:", result.error.message);

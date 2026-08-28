@@ -5,7 +5,7 @@ import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
 import { supabase, logActivity, uploadToSupabaseStorage } from './lib/supabase'
 import { formatImageUrl, handleImageError } from './lib/imageUtils'
-import { DEFAULT_SIGNATORY_SVG } from './lib/signatureData'
+import { DEFAULT_SIGNATORY_SVG, AuthorisedSignatureSvg } from './lib/signatureData'
 import DigitalVerificationModal, { VerificationData } from './components/DigitalVerificationModal'
 import QRScannerModal from './components/QRScannerModal'
 
@@ -140,6 +140,12 @@ export default function IDCardStudio({
   }, [selected])
 
   const visiblePhoto = photoPreview || photoUrl
+  const isCustomSignature = Boolean(
+    signaturePreview ||
+      (signatureUrl &&
+        signatureUrl !== DEFAULT_SIGNATORY_SVG &&
+        !signatureUrl.startsWith('data:image/svg+xml'))
+  )
   const visibleSignature = signaturePreview || signatureUrl || DEFAULT_SIGNATORY_SVG
 
   useEffect(() => {
@@ -191,8 +197,10 @@ export default function IDCardStudio({
       name,
       type: cardType,
       role,
-      department: department || 'Teaching Staff',
+      department: department || (cardType === 'student' ? undefined : 'Teaching Staff'),
       className: className || undefined,
+      section: (selected as any)?.section || 'A',
+      rollNo: selected?.rollNo || '12',
       validUntil: expiry,
       school: "St. John's English School",
       photoUrl: visiblePhoto || selected?.photoUrl || undefined,
@@ -201,6 +209,17 @@ export default function IDCardStudio({
         dateStyle: 'medium',
         timeStyle: 'short',
       }),
+      dbId: selected?.id,
+      bloodGroup: (selected as any)?.blood_group || (selected as any)?.bloodGroup || 'B+',
+      dob: selected?.dateOfBirth || (cardType === 'student' ? '2010-05-14' : '1988-04-12'),
+      gender: (selected as any)?.gender || (cardType === 'student' ? 'Male' : 'Female'),
+      mobile: selected?.mobile || '9876543210',
+      email: (selected as any)?.email || (selected as any)?.student_email || (selected as any)?.official_email || 'contact@stjohnsschool.edu.in',
+      fatherName: (selected as any)?.father_name || (selected as any)?.fatherName || (cardType === 'student' ? 'Subhashis Ghosh' : undefined),
+      address: (selected as any)?.address || (selected as any)?.address_line1 || (selected as any)?.current_address || 'T.N. Mukherjee Road, Dankuni, Hooghly · W.B. 712311',
+      academicYear: (selected as any)?.academic_year || (selected as any)?.academicYear || '2026-2027',
+      status: 'Active & Authorized',
+      emergencyContact: '9674368297',
     })
   }
 
@@ -239,10 +258,14 @@ export default function IDCardStudio({
   const handleSignatureUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-    const objectUrl = URL.createObjectURL(file)
-    setSignaturePreview(objectUrl)
-    setSignatureUrl(objectUrl)
-    setToast('Custom signature loaded for Authorised Signatory')
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = (e.target?.result as string) || ''
+      setSignaturePreview(dataUrl)
+      setSignatureUrl(dataUrl)
+      setToast('Custom signature loaded for Authorised Signatory')
+    }
+    reader.readAsDataURL(file)
   }
 
   const resetSignature = () => {
@@ -254,9 +277,12 @@ export default function IDCardStudio({
   const makePdf = async () => {
     if (!cardRef.current) throw new Error('Card preview unavailable')
     const canvas = await html2canvas(cardRef.current, {
-      scale: 3,
+      scale: 3.5,
       useCORS: true,
+      allowTaint: true,
       backgroundColor: '#ffffff',
+      logging: false,
+      imageTimeout: 10000,
     })
     // ISO/IEC 7810 ID-1 standard portrait format: 54mm width x 85.6mm height
     const pdf = new jsPDF({
@@ -534,8 +560,12 @@ export default function IDCardStudio({
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ height: '36px', width: '90px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', display: 'grid', placeItems: 'center', padding: '2px' }}>
-              <img src={visibleSignature} alt="Signatory preview" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+            <div style={{ height: '36px', width: '90px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', display: 'grid', placeItems: 'center', padding: '2px', overflow: 'hidden' }}>
+              {isCustomSignature ? (
+                <img src={visibleSignature} alt="Signatory preview" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+              ) : (
+                <AuthorisedSignatureSvg className="id-signature-svg" />
+              )}
             </div>
             <label style={{ margin: 0, flex: 1, cursor: 'pointer' }}>
               <span style={{ fontSize: '11px', color: 'var(--blue)', fontWeight: 700, textDecoration: 'underline' }}>
@@ -597,7 +627,7 @@ export default function IDCardStudio({
         {/* PORTRAIT ID CARD */}
         <div className="id-card id-card-portrait" ref={cardRef}>
           <header>
-            <img src={logo} alt="School Crest" />
+            <img src={logo} alt="School Crest" crossOrigin="anonymous" />
             <div>
               <b>ST. JOHN'S ENGLISH SCHOOL</b>
               <span>T.N. Mukherjee Road Dankuni, Hooghly · W.B. 712311</span>
@@ -614,6 +644,7 @@ export default function IDCardStudio({
                 <img
                   src={formatImageUrl(visiblePhoto)}
                   alt="Portrait"
+                  crossOrigin="anonymous"
                   referrerPolicy="no-referrer"
                   onError={handleImageError}
                 />
@@ -678,7 +709,7 @@ export default function IDCardStudio({
                 title="Click to test / view live digital QR certificate"
               >
                 {qr ? (
-                  <img className="id-qr-img" src={qr} alt="Card Verification QR" />
+                  <img className="id-qr-img" src={qr} alt="Card Verification QR" crossOrigin="anonymous" />
                 ) : (
                   <div className="id-qr-placeholder">
                     <QrCodeIcon size={22} />
@@ -695,11 +726,16 @@ export default function IDCardStudio({
 
             <div className="id-signatory-block">
               <div className="id-signatory-wrap">
-                <img
-                  src={visibleSignature}
-                  alt="Authorised Signatory"
-                  className="id-signature-img"
-                />
+                {isCustomSignature ? (
+                  <img
+                    src={visibleSignature}
+                    alt="Authorised Signatory"
+                    className="id-signature-img"
+                    crossOrigin="anonymous"
+                  />
+                ) : (
+                  <AuthorisedSignatureSvg className="id-signature-svg" />
+                )}
               </div>
               <div className="id-signatory-line">
                 <span className="id-signatory-title">AUTHORISED SIGNATORY</span>

@@ -145,10 +145,10 @@ export async function seedSupabaseDatabase(force = false): Promise<{ success: bo
       'school_master', 'department_master', 'class_master', 'subject_master', 'vendor_master', 'student_master', 'employee_master', 'user_master', 'student_attendance', 'employee_attendance', 'fees_collection', 'expense_master', 'income_master', 'salary_slip', 'leave_application', 'leave_balance', 'warning_letter', 'offer_letter', 'employee_document', 'asset_master', 'inventory_master', 'teacher_idcard', 'student_idcard', 'escort_card', 'assignments_master', 'notice_automation', 'userlog_master'
     ]
     await safeSeedTable('user_master', [
-      { user_full_name: 'Administrator', user_name: 'admin', department: 'Management', role: 'admin', status: 'active', is_active: true, password: 'admin123', allowed_modules: allModuleKeys },
-      { user_full_name: 'John Stevens', user_name: 'principal', department: 'Management', role: 'principal', status: 'active', is_active: true, password: 'principal123', allowed_modules: ['school_master', 'department_master', 'class_master', 'student_master', 'employee_master', 'student_attendance', 'employee_attendance', 'fees_collection', 'notice_automation'] },
-      { user_full_name: 'Soma Chakraborty', user_name: 'schakraborty', department: 'Teaching Staff', role: 'teacher', status: 'active', is_active: true, password: 'teacher123', allowed_modules: ['student_master', 'student_attendance', 'assignments_master', 'notice_automation', 'student_idcard'] },
-      { user_full_name: 'Ramesh Dutta', user_name: 'rdutta', department: 'Accounts & Finance', role: 'accounts', status: 'active', is_active: true, password: 'accounts123', allowed_modules: ['fees_collection', 'expense_master', 'income_master', 'salary_slip', 'vendor_master'] },
+      { user_full_name: 'Administrator', user_name: 'admin', department: 'Management', role: 'admin', status: 'active', is_active: true, password: 'admin123', active_module: allModuleKeys },
+      { user_full_name: 'John Stevens', user_name: 'principal', department: 'Management', role: 'principal', status: 'active', is_active: true, password: 'principal123', active_module: ['school_master', 'department_master', 'class_master', 'student_master', 'employee_master', 'student_attendance', 'employee_attendance', 'fees_collection', 'notice_automation'] },
+      { user_full_name: 'Soma Chakraborty', user_name: 'schakraborty', department: 'Teaching Staff', role: 'teacher', status: 'active', is_active: true, password: 'teacher123', active_module: ['student_master', 'student_attendance', 'assignments_master', 'notice_automation', 'student_idcard'] },
+      { user_full_name: 'Ramesh Dutta', user_name: 'rdutta', department: 'Accounts & Finance', role: 'accounts', status: 'active', is_active: true, password: 'accounts123', active_module: ['fees_collection', 'expense_master', 'income_master', 'salary_slip', 'vendor_master'] },
     ])
 
     if (errors.length > 0) {
