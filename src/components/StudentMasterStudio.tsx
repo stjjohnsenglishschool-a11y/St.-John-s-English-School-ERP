@@ -17,8 +17,6 @@ import {
   User,
   Phone,
   Home,
-  HeartPulse,
-  Award,
   ChevronLeft,
   ChevronRight,
   Printer,
@@ -73,12 +71,6 @@ type Student = {
   emergency_contact_phone?: string
   address?: string
   permanent_address?: string
-  previous_school?: string
-  previous_class?: string
-  medical_conditions?: string
-  allergies?: string
-  doctor_name?: string
-  doctor_phone?: string
   birth_certificate_no?: string
   document_url?: string
   is_active?: boolean
@@ -112,7 +104,7 @@ export default function StudentMasterStudio({
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view' | null>(null)
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [activeTab, setActiveTab] = useState<
-    'admission' | 'personal' | 'contact' | 'parents' | 'address' | 'previous' | 'medical' | 'docs'
+    'admission' | 'personal' | 'contact' | 'parents' | 'address' | 'docs'
   >('admission')
   const [formState, setFormState] = useState<Student>({})
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
@@ -792,22 +784,10 @@ export default function StudentMasterStudio({
                 5. Address
               </button>
               <button
-                className={`tab-btn ${activeTab === 'previous' ? 'active' : ''}`}
-                onClick={() => setActiveTab('previous')}
-              >
-                6. Previous School
-              </button>
-              <button
-                className={`tab-btn ${activeTab === 'medical' ? 'active' : ''}`}
-                onClick={() => setActiveTab('medical')}
-              >
-                7. Medical
-              </button>
-              <button
                 className={`tab-btn ${activeTab === 'docs' ? 'active' : ''}`}
                 onClick={() => setActiveTab('docs')}
               >
-                8. Documents
+                6. Documents
               </button>
             </div>
 
@@ -1342,81 +1322,7 @@ export default function StudentMasterStudio({
                 </div>
               )}
 
-              {/* TAB 6: PREVIOUS SCHOOL */}
-              {activeTab === 'previous' && (
-                <div className="tab-pane">
-                  <div className="form-row-2">
-                    <label>
-                      <span>Previous School Name</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.previous_school || ''}
-                        onChange={(e) => updateForm('previous_school', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Previous Class Attended</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.previous_class || ''}
-                        onChange={(e) => updateForm('previous_class', e.target.value)}
-                      />
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 7: MEDICAL */}
-              {activeTab === 'medical' && (
-                <div className="tab-pane">
-                  <div className="form-row-2">
-                    <label>
-                      <span>Known Medical Conditions / Chronic Illness</span>
-                      <textarea
-                        rows={2}
-                        disabled={modalMode === 'view'}
-                        value={formState.medical_conditions || ''}
-                        placeholder="e.g. Asthma, Diabetes, Heart condition"
-                        onChange={(e) => updateForm('medical_conditions', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Known Allergies</span>
-                      <textarea
-                        rows={2}
-                        disabled={modalMode === 'view'}
-                        value={formState.allergies || ''}
-                        placeholder="e.g. Peanut allergy, Penicillin allergy"
-                        onChange={(e) => updateForm('allergies', e.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <div className="form-row-2">
-                    <label>
-                      <span>Family Doctor / Clinic Name</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.doctor_name || ''}
-                        onChange={(e) => updateForm('doctor_name', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Doctor Phone Number</span>
-                      <input
-                        type="tel"
-                        disabled={modalMode === 'view'}
-                        value={formState.doctor_phone || ''}
-                        onChange={(e) => updateForm('doctor_phone', e.target.value)}
-                      />
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 8: DOCUMENTS */}
+              {/* TAB 6: DOCUMENTS */}
               {activeTab === 'docs' && (
                 <div className="tab-pane">
                   <div className="form-row-2">

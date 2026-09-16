@@ -82,6 +82,11 @@ export const ALL_SUBMENU_MODULES = [
   { key: 'assignments_master', label: 'Assignments', group: 'Academics' },
   { key: 'notice_automation', label: 'Notice Automation', group: 'Communication' },
   { key: 'userlog_master', label: 'User Activity Logs', group: 'Administration' },
+  { key: 'google_workspace', label: 'Google Workspace Hub', group: 'Google Workspace' },
+  { key: 'workspace_drive', label: 'Google Drive', group: 'Google Workspace' },
+  { key: 'workspace_sheets', label: 'Google Sheets', group: 'Google Workspace' },
+  { key: 'workspace_gmail', label: 'Gmail', group: 'Google Workspace' },
+  { key: 'workspace_docs', label: 'Google Docs', group: 'Google Workspace' },
 ]
 
 export const ALL_MODULE_KEYS = ALL_SUBMENU_MODULES.map((m) => m.key)
@@ -244,14 +249,6 @@ export const modules: Record<string, Module> = {
       f('emergency_contact_phone', 'Emergency contact phone', 'tel'),
       f('address', 'Current address', 'textarea'),
       f('permanent_address', 'Permanent address', 'textarea'),
-      f('previous_school', 'Previous school'),
-      f('previous_class', 'Previous class'),
-      f('medical_conditions', 'Medical conditions', 'textarea'),
-      f('allergies', 'Allergies', 'textarea'),
-      f('doctor_name', 'Doctor / clinic name'),
-      f('doctor_phone', 'Doctor phone', 'tel'),
-      f('birth_certificate_no', 'Birth certificate number'),
-      f('document_url', 'Document URL'),
       f('is_active', 'Active', 'boolean'),
     ],
     columns: ['admission_no', 'full_name', 'class_name', 'section', 'roll_no', 'father_mobile', 'student_status', 'is_active'],
@@ -818,6 +815,18 @@ export const navGroups: NavGroup[] = [
       items: ['notice_automation'],
     },
   ]),
+  group('Google Workspace', [
+    {
+      label: 'Google Workspace Cloud',
+      items: [
+        'google_workspace',
+        'workspace_drive',
+        'workspace_sheets',
+        'workspace_gmail',
+        'workspace_docs',
+      ],
+    },
+  ]),
   group('Administration', [
     {
       label: 'System Admin',
@@ -854,6 +863,11 @@ export const label = (key: string) => {
   if (key === 'assignments_master') return 'Assignments'
   if (key === 'notice_automation') return 'Notice Automation'
   if (key === 'userlog_master') return 'User Activity Logs'
+  if (key === 'google_workspace') return 'Google Workspace Hub'
+  if (key === 'workspace_drive') return 'Google Drive'
+  if (key === 'workspace_sheets') return 'Google Sheets'
+  if (key === 'workspace_gmail') return 'Gmail'
+  if (key === 'workspace_docs') return 'Google Docs'
 
   return key
     .split('_')
