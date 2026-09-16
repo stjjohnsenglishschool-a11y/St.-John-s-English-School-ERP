@@ -3,7 +3,7 @@ import { Download, Printer, Save, Upload, UserCheck, GraduationCap, PenTool, Ref
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
-import { supabase, logActivity, uploadToSupabaseStorage } from './lib/supabase'
+import { supabase, logActivity, uploadToSupabaseStorage } from './lib/firebase'
 import { formatImageUrl, handleImageError } from './lib/imageUtils'
 import { DEFAULT_SIGNATORY_SVG, AuthorisedSignatureSvg } from './lib/signatureData'
 import DigitalVerificationModal, { VerificationData } from './components/DigitalVerificationModal'

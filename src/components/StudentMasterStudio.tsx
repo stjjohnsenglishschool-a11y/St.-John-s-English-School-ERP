@@ -22,7 +22,7 @@ import {
   Printer,
   Sparkles,
 } from 'lucide-react'
-import { supabase, uploadToSupabaseStorage, logActivity, deleteDocument } from '../lib/supabase'
+import { supabase, uploadToSupabaseStorage, logActivity, deleteDocument } from '../lib/firebase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
 import { downloadSampleCsv } from '../lib/csvUtils'

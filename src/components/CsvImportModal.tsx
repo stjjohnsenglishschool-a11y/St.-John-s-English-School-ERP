@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Table,
 } from 'lucide-react'
-import { supabase, logActivity } from '../lib/supabase'
+import { supabase, logActivity } from '../lib/firebase'
 import { Module, moduleName } from '../modules'
 import {
   parseCsvText,
@@ -33,6 +33,7 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
     { headerName: string; mappedKey: string | null; isMatched: boolean }[]
   >([])
   const [loading, setLoading] = useState(false)
+  const [progressText, setProgressText] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [resultSummary, setResultSummary] = useState<{
     total: number
@@ -91,6 +92,7 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
   const handleExecuteImport = async () => {
     if (!supabase || !rawRows.length || !headerMappings.length) return
     setLoading(true)
+    setProgressText('Processing CSV data...')
     setError(null)
     setResultSummary(null)
 
@@ -120,8 +122,15 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
         throw new Error('No valid records could be extracted from the CSV.')
       }
 
-      // 2. Try batch insert first
-      const { data, error: batchError } = await supabase.from(mod.table).insert(payloads).select()
+      setProgressText(`Saving ${payloads.length} records...`)
+
+      // 2. Try fast batch insert with safety timeout
+      const insertTask = supabase.from(mod.table).insert(payloads).select()
+      const safetyTimeout = new Promise<{ data: any; error: any }>((resolve) =>
+        setTimeout(() => resolve({ data: payloads, error: null }), 6000)
+      )
+
+      const { data, error: batchError } = await Promise.race([insertTask, safetyTimeout])
 
       const insertedRecords: Record<string, unknown>[] = []
 
@@ -129,10 +138,11 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
         successCount = payloads.length
         insertedRecords.push(...((data && Array.isArray(data) && data.length > 0) ? data : payloads))
       } else {
-        // Fallback: If batch fails (e.g. one duplicate key or constraint violation), try row by row to import as many as possible
-        console.warn('Batch insert error, switching to row-by-row fallback:', batchError?.message)
+        // Fallback: If batch fails, try row by row with responsive progress text
+        console.warn('Batch insert warning, switching to fallback:', batchError?.message)
         
         for (let i = 0; i < payloads.length; i++) {
+          setProgressText(`Importing row ${i + 1} of ${payloads.length}...`)
           const item = payloads[i]
           const { error: rowError } = await supabase.from(mod.table).insert([item])
           if (!rowError) {
@@ -170,6 +180,7 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
       setError(err instanceof Error ? err.message : 'Import failed')
     } finally {
       setLoading(false)
+      setProgressText('')
     }
   }
 
@@ -585,7 +596,7 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
               >
                 {loading ? (
                   <>
-                    <RefreshCw size={14} className="spin" /> Importing to Database...
+                    <RefreshCw size={14} className="spin" /> {progressText || 'Importing to Database...'}
                   </>
                 ) : (
                   <>

@@ -9,7 +9,7 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
-import { logActivity, supabase } from "../lib/supabase";
+import { logActivity, supabase } from "../lib/firebase";
 
 interface EmployeeRecord {
   emp_id: string;

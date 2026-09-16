@@ -12,7 +12,7 @@ import {
   XCircle,
   AlertCircle,
 } from "lucide-react";
-import { logActivity, supabase } from "../lib/supabase";
+import { logActivity, supabase } from "../lib/firebase";
 
 interface StudentRecord {
   student_id: string;

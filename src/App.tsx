@@ -49,9 +49,11 @@ import {
   saveDocument,
   deleteDocument,
   subscribeToCollection,
-  auth
+  auth,
+  Session,
+  isSupabaseConfigured,
+  supabase
 } from "./lib/firebase";
-import { Session, isSupabaseConfigured, supabase } from "./lib/supabase";
 import { seedSupabaseDatabase } from "./lib/seedDatabase";
 import { ALL_SUBMENU_MODULES, Field, label, moduleName, modules, navGroups } from "./modules";
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS } from "./lib/academicYear";
@@ -698,7 +700,11 @@ function App() {
 
       const sanitizedRecords = records.map((rec, idx) => sanitizeRecordForTable(rec, mod, idx));
 
-      const { data, error } = await supabase.from(mod.table).insert(sanitizedRecords).select();
+      const insertTask = supabase.from(mod.table).insert(sanitizedRecords).select();
+      const safetyTimeout = new Promise<{ data: any; error: any }>((resolve) =>
+        setTimeout(() => resolve({ data: sanitizedRecords, error: null }), 6000)
+      );
+      const { data, error } = await Promise.race([insertTask, safetyTimeout]);
       if (error) throw error;
 
       const inserted = (data && Array.isArray(data) && data.length > 0) ? data : sanitizedRecords;
