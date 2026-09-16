@@ -157,11 +157,11 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
       }
 
       try {
-        await logActivity({
+        logActivity({
           action: `CSV Import: ${successCount} inserted, ${failCount} failed in ${mod.table}`,
           module: mod.table,
           status: successCount > 0 ? 'success' : 'failed',
-        })
+        }).catch(() => {})
       } catch (logErr) {
         console.warn('Log activity error ignored:', logErr)
       }
@@ -245,7 +245,7 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
                 Import CSV to {moduleName(mod.table)}
               </h2>
               <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
-                Target Supabase table: <code>{mod.table}</code>
+                Target collection: <code>{mod.table}</code>
               </p>
             </div>
           </div>

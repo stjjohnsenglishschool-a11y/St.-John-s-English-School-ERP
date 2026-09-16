@@ -62,7 +62,21 @@ export async function logActivity(params: {
       created_at: new Date().toISOString()
     }
 
-    await setDoc(doc(db, 'userlog_master', logId), logData)
+    // Instantly save to local audit logs
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const raw = localStorage.getItem('sjes_userlogs')
+        const logs = raw ? JSON.parse(raw) : []
+        localStorage.setItem('sjes_userlogs', JSON.stringify([logData, ...logs.slice(0, 99)]))
+      } catch {
+        // ignore quota
+      }
+    }
+
+    // Fire and forget to Firestore with strict 600ms timeout
+    const setPromise = setDoc(doc(db, 'userlog_master', logId), logData).catch(() => {})
+    const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 600))
+    await Promise.race([setPromise, timeoutPromise])
   } catch (error) {
     console.warn('Failed to record audit log in Firebase:', error)
   }
@@ -284,10 +298,12 @@ export async function saveDocument(
         updated_at: new Date().toISOString(),
       },
       { merge: true }
-    )
+    ).catch((err) => {
+      console.warn(`Firestore save note for ${collectionName}:`, err?.message)
+    })
 
     const timeoutPromise = new Promise<{ success: boolean }>((resolve) =>
-      setTimeout(() => resolve({ success: true }), 1500)
+      setTimeout(() => resolve({ success: true }), 1000)
     )
 
     await Promise.race([setPromise, timeoutPromise])
@@ -380,8 +396,10 @@ export async function saveBatchDocuments(
         const docRef = doc(db, collectionName, item._docId)
         batch.set(docRef, item, { merge: true })
       })
-      const batchPromise = batch.commit()
-      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2000))
+      const batchPromise = batch.commit().catch((err) => {
+        console.warn(`Firestore batch commit note for ${collectionName}:`, err?.message)
+      })
+      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1000))
       await Promise.race([batchPromise, timeoutPromise])
     }
   } catch (err) {
@@ -525,24 +543,29 @@ export function subscribeToCollection<T = any>(
   collectionName: string,
   onData: (data: T[]) => void
 ): Unsubscribe {
-  return onSnapshot(
-    collection(db, collectionName),
-    (snapshot) => {
-      const items: T[] = []
-      snapshot.forEach((docSnap) => {
-        const d = docSnap.data() || {}
-        items.push({
-          _docId: docSnap.id,
-          id: d.id || docSnap.id,
-          ...d,
-        } as T)
-      })
-      onData(items)
-    },
-    (err) => {
-      console.warn(`Snapshot listener error for ${collectionName}:`, err)
-    }
-  )
+  try {
+    return onSnapshot(
+      collection(db, collectionName),
+      (snapshot) => {
+        const items: T[] = []
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() || {}
+          items.push({
+            _docId: docSnap.id,
+            id: d.id || docSnap.id,
+            ...d,
+          } as T)
+        })
+        onData(items)
+      },
+      (err) => {
+        console.warn(`Real-time listener notice for ${collectionName}:`, err?.message || err)
+      }
+    )
+  } catch (err: any) {
+    console.warn(`Failed to initialize listener for ${collectionName}:`, err?.message || err)
+    return () => {}
+  }
 }
 
 export type Session = any

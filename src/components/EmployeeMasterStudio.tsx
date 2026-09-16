@@ -1395,7 +1395,7 @@ export default function EmployeeMasterStudio({
                     <div style={{ marginTop: '1rem' }}>
                       <label className="btn-upload-label">
                         <Upload size={14} />{' '}
-                        {uploadingDoc ? 'Uploading...' : 'Upload Document to Supabase'}
+                        {uploadingDoc ? 'Uploading...' : 'Upload Document to Cloud Storage'}
                         <input
                           type="file"
                           accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"

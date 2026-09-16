@@ -531,7 +531,7 @@ export default function IDCardStudio({
           <Upload />
           <span>
             {uploading
-              ? 'Uploading to Supabase Storage...'
+              ? 'Uploading to Cloud Storage...'
               : 'Upload photograph or portrait'}
           </span>
           <input

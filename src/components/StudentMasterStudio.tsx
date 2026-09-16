@@ -1351,7 +1351,7 @@ export default function StudentMasterStudio({
                     <div style={{ marginTop: '1rem' }}>
                       <label className="btn-upload-label">
                         <Upload size={14} />{' '}
-                        {uploadingDoc ? 'Uploading document...' : 'Upload Document to Supabase Storage'}
+                        {uploadingDoc ? 'Uploading document...' : 'Upload Document to Cloud Storage'}
                         <input
                           type="file"
                           accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"

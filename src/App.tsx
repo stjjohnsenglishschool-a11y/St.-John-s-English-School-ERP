@@ -1302,7 +1302,7 @@ function DataTable({
     return (
       <div className="empty">
         <RefreshCw className="spin" />
-        <h3>Loading from Supabase...</h3>
+        <h3>Loading from Database...</h3>
         <p>Querying real-time database records.</p>
       </div>
     );
@@ -1652,7 +1652,7 @@ function RecordModal({
             <p>
               {mode === "view"
                 ? "Review saved database record."
-                : "Complete the fields below. Changes persist directly to Supabase."}
+                : "Complete the fields below. Changes persist directly to Firebase."}
             </p>
           </div>
           <button type="button" onClick={close} aria-label="Close modal">
