@@ -22,7 +22,7 @@ import {
 interface CsvImportModalProps {
   mod: Module
   onClose: () => void
-  onSuccess: (count: number) => void
+  onSuccess: (count: number, insertedItems?: Record<string, unknown>[]) => void
 }
 
 export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportModalProps) {
@@ -123,30 +123,38 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
       // 2. Try batch insert first
       const { data, error: batchError } = await supabase.from(mod.table).insert(payloads).select()
 
+      const insertedRecords: Record<string, unknown>[] = []
+
       if (!batchError) {
         successCount = payloads.length
+        insertedRecords.push(...((data && Array.isArray(data) && data.length > 0) ? data : payloads))
       } else {
         // Fallback: If batch fails (e.g. one duplicate key or constraint violation), try row by row to import as many as possible
-        console.warn('Batch insert error, switching to row-by-row fallback:', batchError.message)
+        console.warn('Batch insert error, switching to row-by-row fallback:', batchError?.message)
         
         for (let i = 0; i < payloads.length; i++) {
           const item = payloads[i]
           const { error: rowError } = await supabase.from(mod.table).insert([item])
           if (!rowError) {
             successCount++
+            insertedRecords.push(item)
           } else {
             failCount++
             const rowIdentifier = Object.values(item)[0] || `Row #${i + 2}`
-            errors.push(`Row ${i + 2} (${rowIdentifier}): ${rowError.message}`)
+            errors.push(`Row ${i + 2} (${rowIdentifier}): ${rowError?.message || 'Insert error'}`)
           }
         }
       }
 
-      await logActivity({
-        action: `CSV Import: ${successCount} inserted, ${failCount} failed in ${mod.table}`,
-        module: mod.table,
-        status: successCount > 0 ? 'success' : 'failed',
-      })
+      try {
+        await logActivity({
+          action: `CSV Import: ${successCount} inserted, ${failCount} failed in ${mod.table}`,
+          module: mod.table,
+          status: successCount > 0 ? 'success' : 'failed',
+        })
+      } catch (logErr) {
+        console.warn('Log activity error ignored:', logErr)
+      }
 
       setResultSummary({
         total: payloads.length,
@@ -156,7 +164,7 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
       })
 
       if (successCount > 0) {
-        onSuccess(successCount)
+        onSuccess(successCount, insertedRecords)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed')

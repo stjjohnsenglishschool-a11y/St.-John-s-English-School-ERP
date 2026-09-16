@@ -142,7 +142,7 @@ export function mapCsvHeaders(
  * Sanitize and coerce record values for Supabase Postgres insertion
  */
 export function sanitizeRecordForTable(
-  rawRow: Record<string, string>,
+  rawRow: Record<string, any>,
   mod: Module,
   rowIndex: number
 ): Record<string, unknown> {
@@ -193,13 +193,16 @@ export function sanitizeRecordForTable(
     }
   }
 
-  // Auto-generate missing unique codes if required
+  // Auto-generate missing unique codes and primary keys if required
   if (mod.table === 'department_master') {
     if (!payload.department_code || String(payload.department_code).trim() === '') {
       const name = String(payload.department_name || `DEPT${rowIndex + 1}`)
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '')
-      payload.department_code = `DEPT-${name.slice(0, 4) || 'GEN'}`
+      payload.department_code = `DEPT-${name.slice(0, 4) || 'GEN'}-${rowIndex + 1}`
+    }
+    if (!payload.department_id || String(payload.department_id).trim() === '') {
+      payload.department_id = String(payload.department_code)
     }
     if (payload.is_active === undefined) payload.is_active = true
   }
@@ -209,12 +212,57 @@ export function sanitizeRecordForTable(
       const pad = String(rowIndex + 1).padStart(4, '0')
       payload.vendor_code = `VND-${pad}`
     }
+    if (!payload.vendor_id || String(payload.vendor_id).trim() === '') {
+      payload.vendor_id = String(payload.vendor_code)
+    }
     if (payload.is_active === undefined) payload.is_active = true
   }
 
   if (mod.table === 'class_master') {
+    if (!payload.class_id || String(payload.class_id).trim() === '') {
+      const cname = String(payload.class_name || `CLASS_${rowIndex + 1}`)
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '_')
+      payload.class_id = `CLS-${cname}`
+    }
     if (!payload.academic_year) {
       payload.academic_year = getCurrentAcademicYear()
+    }
+    if (payload.is_active === undefined) payload.is_active = true
+  }
+
+  if (mod.table === 'subject_master') {
+    if (!payload.subject_id || String(payload.subject_id).trim() === '') {
+      const cname = String(payload.class_name || 'ALL')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '_')
+      const sname = String(payload.subject_name || `SUB_${rowIndex + 1}`)
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '_')
+      payload.subject_id = `SUB-${cname}_${sname}`
+    }
+    if (payload.is_active === undefined) payload.is_active = true
+  }
+
+  if (mod.table === 'asset_master') {
+    if (!payload.asset_code || String(payload.asset_code).trim() === '') {
+      payload.asset_code = `AST-${String(rowIndex + 1).padStart(4, '0')}`
+    }
+    if (!payload.asset_id || String(payload.asset_id).trim() === '') {
+      payload.asset_id = String(payload.asset_code)
+    }
+    if (payload.is_active === undefined) payload.is_active = true
+  }
+
+  if (mod.table === 'inventory_master') {
+    if (!payload.item_code || String(payload.item_code).trim() === '') {
+      payload.item_code = `ITM-${String(rowIndex + 1).padStart(4, '0')}`
+    }
+    if (!payload.item_id || String(payload.item_id).trim() === '') {
+      payload.item_id = String(payload.item_code)
     }
     if (payload.is_active === undefined) payload.is_active = true
   }
@@ -222,6 +270,9 @@ export function sanitizeRecordForTable(
   if (mod.table === 'student_master') {
     if (!payload.admission_no || String(payload.admission_no).trim() === '') {
       payload.admission_no = `ADM-${Date.now().toString().slice(-4)}${rowIndex + 1}`
+    }
+    if (!payload.student_id || String(payload.student_id).trim() === '') {
+      payload.student_id = String(payload.admission_no)
     }
     if (!payload.academic_year) {
       payload.academic_year = getCurrentAcademicYear()
@@ -237,12 +288,107 @@ export function sanitizeRecordForTable(
     if (!payload.emp_code || String(payload.emp_code).trim() === '') {
       payload.emp_code = `EMP-${Date.now().toString().slice(-4)}${rowIndex + 1}`
     }
+    if (!payload.emp_id || String(payload.emp_id).trim() === '') {
+      payload.emp_id = String(payload.emp_code)
+    }
     if (!payload.academic_year) {
       payload.academic_year = getCurrentAcademicYear()
     }
     if (payload.is_active === undefined) payload.is_active = true
     if (!payload.employment_status) payload.employment_status = 'Active'
   }
+
+  if (mod.table === 'user_master') {
+    if (!payload.user_id || String(payload.user_id).trim() === '') {
+      payload.user_id = `USR-${Date.now().toString().slice(-4)}${rowIndex + 1}`
+    }
+    if (payload.is_active === undefined) payload.is_active = true
+  }
+
+  if (mod.table === 'notice_automation') {
+    if (!payload.notice_id || String(payload.notice_id).trim() === '') {
+      payload.notice_id = `NTC-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  if (mod.table === 'assignments_master') {
+    if (!payload.assignment_id || String(payload.assignment_id).trim() === '') {
+      payload.assignment_id = `ASG-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  if (mod.table === 'fees_collection') {
+    if (!payload.fee_id || String(payload.fee_id).trim() === '') {
+      payload.fee_id = String(payload.receipt_number || `FEE-${Date.now().toString().slice(-4)}_${rowIndex + 1}`)
+    }
+  }
+
+  if (mod.table === 'expense_master') {
+    if (!payload.expense_id || String(payload.expense_id).trim() === '') {
+      payload.expense_id = `EXP-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  if (mod.table === 'income_master') {
+    if (!payload.income_id || String(payload.income_id).trim() === '') {
+      payload.income_id = `INC-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  if (mod.table === 'salary_slip') {
+    if (!payload.slip_id || String(payload.slip_id).trim() === '') {
+      payload.slip_id = `SLP-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  if (mod.table === 'leave_application') {
+    if (!payload.leave_app_id || String(payload.leave_app_id).trim() === '') {
+      payload.leave_app_id = `LV-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  if (mod.table === 'leave_balance') {
+    if (!payload.balance_id || String(payload.balance_id).trim() === '') {
+      payload.balance_id = `BAL-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  if (mod.table === 'warning_letter') {
+    if (!payload.letter_id || String(payload.letter_id).trim() === '') {
+      payload.letter_id = `WRN-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  if (mod.table === 'offer_letter') {
+    if (!payload.offer_id || String(payload.offer_id).trim() === '') {
+      payload.offer_id = `OFR-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  if (mod.table === 'employee_document') {
+    if (!payload.doc_id || String(payload.doc_id).trim() === '') {
+      payload.doc_id = `DOC-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  if (mod.table === 'student_attendance' || mod.table === 'employee_attendance') {
+    if (!payload.attendance_id || String(payload.attendance_id).trim() === '') {
+      payload.attendance_id = `ATT-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  if (['teacher_idcard', 'student_idcard', 'escort_card'].includes(mod.table)) {
+    if (!payload.card_id || String(payload.card_id).trim() === '') {
+      payload.card_id = `CRD-${Date.now().toString().slice(-4)}_${rowIndex + 1}`
+    }
+  }
+
+  // Universal fallback for primary key & _docId across any table
+  const pkField = mod.primaryKey || 'id'
+  if (!payload[pkField] || String(payload[pkField]).trim() === '') {
+    payload[pkField] = `${mod.table.slice(0, 4).toUpperCase()}-${Date.now().toString().slice(-5)}-${rowIndex + 1}`
+  }
+  payload._docId = String(payload[pkField])
 
   return payload
 }

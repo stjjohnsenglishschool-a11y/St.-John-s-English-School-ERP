@@ -95,44 +95,152 @@ export async function uploadToFirebaseStorage(
 }
 
 /**
- * Fetch all documents from a Firestore collection
+ * Fetch all documents from a Firestore collection with local fallback
  */
 export async function fetchCollectionData<T = any>(collectionName: string): Promise<T[]> {
   try {
-    const querySnapshot = await getDocs(collection(db, collectionName))
-    const results: T[] = []
-    querySnapshot.forEach((docSnap) => {
-      const d = docSnap.data() || {}
-      results.push({
-        _docId: docSnap.id,
-        id: d.id || docSnap.id,
-        ...d,
-      } as T)
-    })
-    return results
+    const fetchPromise = getDocs(collection(db, collectionName))
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000))
+    const querySnapshot = await Promise.race([fetchPromise, timeoutPromise])
+
+    if (querySnapshot && typeof (querySnapshot as any).forEach === 'function') {
+      const results: T[] = []
+      querySnapshot.forEach((docSnap) => {
+        const d = docSnap.data() || {}
+        results.push({
+          _docId: docSnap.id,
+          id: d.id || docSnap.id,
+          ...d,
+        } as T)
+      })
+      if (results.length > 0) {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          try {
+            localStorage.setItem(`sjes_table_${collectionName}`, JSON.stringify(results))
+          } catch {
+            // ignore localStorage quota errors
+          }
+        }
+        return results
+      }
+    }
   } catch (err) {
     console.error(`Error fetching collection ${collectionName} from Firebase:`, err)
-    return []
   }
+
+  // Fallback to localStorage if Firebase is empty, offline, or timed out
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const cached = localStorage.getItem(`sjes_table_${collectionName}`)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed as T[]
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return []
 }
 
 /**
- * Save (insert or update) a document in Firestore
+ * Save (insert or update) a document in Firestore with localStorage write-through
  */
-export async function saveDocument(collectionName: string, primaryKeyField: string, data: Record<string, any>): Promise<{ success: boolean; error?: string }> {
+export async function saveDocument(
+  collectionName: string,
+  primaryKeyField: string,
+  data: Record<string, any>,
+  skipLocalStorage = false
+): Promise<{ success: boolean; error?: string }> {
   try {
-    let docId = data._docId || data[primaryKeyField] || data.id || data.code || data.user_id || data.student_id || data.emp_id || data.employee_id
+    if (collectionName === 'class_master' && !data.class_id && data.class_name) {
+      data.class_id = 'CLS-' + String(data.class_name).trim().toUpperCase().replace(/[^A-Z0-9]/g, '_')
+    }
+
+    let docId =
+      data._docId ||
+      data[primaryKeyField] ||
+      data.student_id ||
+      data.emp_id ||
+      data.department_id ||
+      data.class_id ||
+      data.subject_id ||
+      data.vendor_id ||
+      data.asset_id ||
+      data.item_id ||
+      data.user_id ||
+      data.notice_id ||
+      data.assignment_id ||
+      data.fee_id ||
+      data.expense_id ||
+      data.income_id ||
+      data.slip_id ||
+      data.leave_app_id ||
+      data.balance_id ||
+      data.letter_id ||
+      data.offer_id ||
+      data.doc_id ||
+      data.card_id ||
+      data.attendance_id ||
+      data.admission_no ||
+      data.emp_code ||
+      data.department_code ||
+      data.vendor_code ||
+      data.receipt_number ||
+      data.asset_code ||
+      data.item_code ||
+      data.code ||
+      data.id
+
     if (!docId) {
       docId = doc(collection(db, collectionName)).id
     }
     docId = String(docId)
     data[primaryKeyField] = data[primaryKeyField] || docId
+    data._docId = docId
 
-    await setDoc(doc(db, collectionName, docId), {
-      ...data,
-      _docId: docId,
-      updated_at: new Date().toISOString()
-    }, { merge: true })
+    // Write through to localStorage immediately so table is never empty or stuck (unless skipped for batch)
+    if (!skipLocalStorage && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cacheKey = `sjes_table_${collectionName}`
+        const cachedStr = localStorage.getItem(cacheKey)
+        let cachedList: any[] = cachedStr ? JSON.parse(cachedStr) : []
+        const existingIdx = cachedList.findIndex(
+          (item: any) =>
+            String(item._docId) === docId ||
+            (primaryKeyField && String(item[primaryKeyField]) === docId) ||
+            (data[primaryKeyField] && String(item[primaryKeyField]) === String(data[primaryKeyField]))
+        )
+        const updatedItem = { ...data, _docId: docId, updated_at: new Date().toISOString() }
+        if (existingIdx >= 0) {
+          cachedList[existingIdx] = { ...cachedList[existingIdx], ...updatedItem }
+        } else {
+          cachedList = [updatedItem, ...cachedList]
+        }
+        localStorage.setItem(cacheKey, JSON.stringify(cachedList))
+      } catch {
+        // ignore localStorage error
+      }
+    }
+
+    // Attempt Firebase setDoc with timeout protection so offline/slow states don't hang
+    const setPromise = setDoc(
+      doc(db, collectionName, docId),
+      {
+        ...data,
+        _docId: docId,
+        updated_at: new Date().toISOString(),
+      },
+      { merge: true }
+    )
+
+    const timeoutPromise = new Promise<{ success: boolean }>((resolve) =>
+      setTimeout(() => resolve({ success: true }), 3500)
+    )
+
+    await Promise.race([setPromise, timeoutPromise])
 
     return { success: true }
   } catch (err: any) {
@@ -169,7 +277,7 @@ export async function deleteDocument(
       if (additionalInfo.emp_code) targetDocIds.add(String(additionalInfo.emp_code))
       if (additionalInfo.emp_id) targetDocIds.add(String(additionalInfo.emp_id))
       if (additionalInfo.class_id) targetDocIds.add(String(additionalInfo.class_id))
-      if (additionalInfo.class_name) targetDocIds.add(String(additionalInfo.class_name))
+      if (collectionName === 'class_master' && additionalInfo.class_name) targetDocIds.add(String(additionalInfo.class_name))
       if (additionalInfo.subject_id) targetDocIds.add(String(additionalInfo.subject_id))
       if (additionalInfo.subject_name) targetDocIds.add(String(additionalInfo.subject_name))
       if (additionalInfo.user_id) targetDocIds.add(String(additionalInfo.user_id))
@@ -208,7 +316,7 @@ export async function deleteDocument(
         data.id, data._docId, data.vendor_id, data.vendor_code,
         data.department_id, data.department_code, data.student_id, data.admission_no,
         data.emp_id, data.emp_code, data.user_id, data.user_name,
-        data.class_id, data.class_name, data.subject_id, data.subject_name,
+        data.class_id, collectionName === 'class_master' ? data.class_name : null, data.subject_id,
         data.fee_id, data.receipt_number, data.expense_id, data.income_id,
         data.asset_id, data.asset_code, data.item_id, data.item_code,
         data.code
@@ -224,6 +332,41 @@ export async function deleteDocument(
 
     for (const ref of toDeleteRefs) {
       await deleteDoc(ref)
+    }
+
+    // Also remove from localStorage cache
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cacheKey = `sjes_table_${collectionName}`
+        const cachedStr = localStorage.getItem(cacheKey)
+        if (cachedStr) {
+          const cachedList: any[] = JSON.parse(cachedStr)
+          const filteredList = cachedList.filter((item: any) => {
+            const keys = [
+              item._docId,
+              item.id,
+              item.class_id,
+              item.class_name,
+              item.student_id,
+              item.admission_no,
+              item.emp_id,
+              item.emp_code,
+              item.department_id,
+              item.department_code,
+              item.vendor_id,
+              item.vendor_code,
+              item.user_id,
+              item.user_name,
+              item.receipt_number,
+              item.code,
+            ].filter(Boolean).map(String)
+            return !keys.some((k) => targetDocIds.has(k))
+          })
+          localStorage.setItem(cacheKey, JSON.stringify(filteredList))
+        }
+      } catch {
+        // ignore
+      }
     }
 
     return { success: true }

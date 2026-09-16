@@ -897,8 +897,25 @@ export default function DepartmentMasterStudio({
         <CsvImportModal
           mod={modules["department_master"]}
           onClose={() => setCsvModalOpen(false)}
-          onSuccess={(count) => {
+          onSuccess={(count, insertedItems) => {
             setCsvModalOpen(false);
+            if (insertedItems && insertedItems.length > 0) {
+              setDepartments((prev) => {
+                const combined = [...(insertedItems as unknown as Department[]), ...prev];
+                const seen = new Set<string>();
+                const deduped: Department[] = [];
+                for (const d of combined) {
+                  const did = String(d.department_id || d.department_code || (d as any)._docId || JSON.stringify(d));
+                  if (!seen.has(did)) {
+                    seen.add(did);
+                    deduped.push(d);
+                  }
+                }
+                localStorage.setItem("sjes_department_master", JSON.stringify(deduped));
+                localStorage.setItem("sjes_table_department_master", JSON.stringify(deduped));
+                return deduped;
+              });
+            }
             fetchDepartments();
             setToast(`Successfully imported ${count} departments!`);
           }}

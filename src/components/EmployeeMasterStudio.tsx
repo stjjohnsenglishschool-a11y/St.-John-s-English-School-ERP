@@ -1445,8 +1445,24 @@ export default function EmployeeMasterStudio({
         <CsvImportModal
           mod={modules['employee_master']}
           onClose={() => setShowCsvModal(false)}
-          onSuccess={(count) => {
+          onSuccess={(count, insertedItems) => {
             setToast(`✓ Successfully imported ${count} staff records!`)
+            if (insertedItems && insertedItems.length > 0) {
+              setEmployees((prev) => {
+                const combined = [...(insertedItems as unknown as Employee[]), ...prev]
+                const seen = new Set<string>()
+                const deduped: Employee[] = []
+                for (const emp of combined) {
+                  const eid = String(emp.emp_id || emp.emp_code || (emp as any)._docId || JSON.stringify(emp))
+                  if (!seen.has(eid)) {
+                    seen.add(eid)
+                    deduped.push(emp)
+                  }
+                }
+                localStorage.setItem('sjes_table_employee_master', JSON.stringify(deduped))
+                return deduped
+              })
+            }
             loadEmployees()
           }}
         />

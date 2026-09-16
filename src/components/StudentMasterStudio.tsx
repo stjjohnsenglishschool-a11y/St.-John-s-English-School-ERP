@@ -1397,8 +1397,24 @@ export default function StudentMasterStudio({
         <CsvImportModal
           mod={modules['student_master']}
           onClose={() => setShowCsvModal(false)}
-          onSuccess={(count) => {
+          onSuccess={(count, insertedItems) => {
             setToast(`✓ Successfully imported ${count} students!`)
+            if (insertedItems && insertedItems.length > 0) {
+              setStudents((prev) => {
+                const combined = [...(insertedItems as unknown as Student[]), ...prev]
+                const seen = new Set<string>()
+                const deduped: Student[] = []
+                for (const s of combined) {
+                  const sid = String(s.student_id || s.admission_no || (s as any)._docId || JSON.stringify(s))
+                  if (!seen.has(sid)) {
+                    seen.add(sid)
+                    deduped.push(s)
+                  }
+                }
+                localStorage.setItem('sjes_table_student_master', JSON.stringify(deduped))
+                return deduped
+              })
+            }
             loadStudents()
           }}
         />

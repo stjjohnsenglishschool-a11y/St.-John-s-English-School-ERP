@@ -51,7 +51,7 @@ import {
   subscribeToCollection,
   auth
 } from "./lib/firebase";
-import { Session, isSupabaseConfigured } from "./lib/supabase";
+import { Session, isSupabaseConfigured, supabase } from "./lib/supabase";
 import { seedSupabaseDatabase } from "./lib/seedDatabase";
 import { ALL_SUBMENU_MODULES, Field, label, moduleName, modules, navGroups } from "./modules";
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS } from "./lib/academicYear";
@@ -69,7 +69,7 @@ import StudentMasterStudio from "./components/StudentMasterStudio";
 import EmployeeMasterStudio from "./components/EmployeeMasterStudio";
 import CsvImportModal from "./components/CsvImportModal";
 import DigitalVerificationModal, { VerificationData } from "./components/DigitalVerificationModal";
-import { downloadSampleCsv } from "./lib/csvUtils";
+import { downloadSampleCsv, sanitizeRecordForTable } from "./lib/csvUtils";
 import { formatImageUrl, handleImageError } from "./lib/imageUtils";
 
 type Row = Record<string, unknown>;
@@ -696,9 +696,51 @@ function App() {
       if (!records.length)
         throw new Error("No usable records were found in this CSV.");
 
-      for (const rec of records) {
-        await saveDocument(mod.table, mod.primaryKey, rec);
-      }
+      const sanitizedRecords = records.map((rec, idx) => sanitizeRecordForTable(rec, mod, idx));
+
+      const { data, error } = await supabase.from(mod.table).insert(sanitizedRecords).select();
+      if (error) throw error;
+
+      const inserted = (data && Array.isArray(data) && data.length > 0) ? data : sanitizedRecords;
+
+      setRows((prev) => {
+        const combined = [...inserted, ...prev];
+        const seen = new Set<string>();
+        const deduped: Row[] = [];
+        for (const r of combined) {
+          const id = String(
+            r._docId ||
+            (mod.primaryKey && r[mod.primaryKey]) ||
+            r.student_id ||
+            r.emp_id ||
+            r.department_id ||
+            r.class_id ||
+            r.subject_id ||
+            r.vendor_id ||
+            r.asset_id ||
+            r.item_id ||
+            r.fee_id ||
+            r.notice_id ||
+            r.assignment_id ||
+            r.expense_id ||
+            r.income_id ||
+            r.slip_id ||
+            r.admission_no ||
+            r.emp_code ||
+            r.department_code ||
+            r.vendor_code ||
+            r.id ||
+            r.code ||
+            JSON.stringify(r)
+          );
+          if (!seen.has(id)) {
+            seen.add(id);
+            deduped.push(r);
+          }
+        }
+        localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(deduped));
+        return deduped;
+      });
 
       await logActivity({
         action: `Imported ${records.length} records into ${mod.table} via CSV`,
@@ -934,7 +976,7 @@ function App() {
         ) : active === "student_idcard" || active === "teacher_idcard" || active === "escort_card" ? (
           <IDCardStudio
             setToast={setToast}
-            onUploadCsv={() => csvImportRef.current?.click()}
+            onUploadCsv={() => setCsvModalOpen(true)}
             initialType={active === "teacher_idcard" ? "employee" : "student"}
           />
         ) : (
@@ -1128,8 +1170,48 @@ function App() {
         <CsvImportModal
           mod={mod}
           onClose={() => setCsvModalOpen(false)}
-          onSuccess={(count) => {
+          onSuccess={(count, insertedItems) => {
             setToast(`✓ Successfully imported ${count} records into ${moduleName(mod.table)}!`);
+            if (insertedItems && insertedItems.length > 0) {
+              setRows((prev) => {
+                const combined = [...(insertedItems as Row[]), ...prev];
+                const seen = new Set<string>();
+                const deduped: Row[] = [];
+                for (const r of combined) {
+                  const id = String(
+                    r._docId ||
+                    (mod.primaryKey && r[mod.primaryKey]) ||
+                    r.student_id ||
+                    r.emp_id ||
+                    r.department_id ||
+                    r.class_id ||
+                    r.subject_id ||
+                    r.vendor_id ||
+                    r.asset_id ||
+                    r.item_id ||
+                    r.fee_id ||
+                    r.notice_id ||
+                    r.assignment_id ||
+                    r.expense_id ||
+                    r.income_id ||
+                    r.slip_id ||
+                    r.admission_no ||
+                    r.emp_code ||
+                    r.department_code ||
+                    r.vendor_code ||
+                    r.id ||
+                    r.code ||
+                    JSON.stringify(r)
+                  );
+                  if (!seen.has(id)) {
+                    seen.add(id);
+                    deduped.push(r);
+                  }
+                }
+                localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(deduped));
+                return deduped;
+              });
+            }
             refresh();
           }}
         />
