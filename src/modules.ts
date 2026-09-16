@@ -82,11 +82,6 @@ export const ALL_SUBMENU_MODULES = [
   { key: 'assignments_master', label: 'Assignments', group: 'Academics' },
   { key: 'notice_automation', label: 'Notice Automation', group: 'Communication' },
   { key: 'userlog_master', label: 'User Activity Logs', group: 'Administration' },
-  { key: 'google_workspace', label: 'Google Workspace Hub', group: 'Google Workspace' },
-  { key: 'workspace_drive', label: 'Google Drive', group: 'Google Workspace' },
-  { key: 'workspace_sheets', label: 'Google Sheets', group: 'Google Workspace' },
-  { key: 'workspace_gmail', label: 'Gmail', group: 'Google Workspace' },
-  { key: 'workspace_docs', label: 'Google Docs', group: 'Google Workspace' },
 ]
 
 export const ALL_MODULE_KEYS = ALL_SUBMENU_MODULES.map((m) => m.key)
@@ -815,18 +810,6 @@ export const navGroups: NavGroup[] = [
       items: ['notice_automation'],
     },
   ]),
-  group('Google Workspace', [
-    {
-      label: 'Google Workspace Cloud',
-      items: [
-        'google_workspace',
-        'workspace_drive',
-        'workspace_sheets',
-        'workspace_gmail',
-        'workspace_docs',
-      ],
-    },
-  ]),
   group('Administration', [
     {
       label: 'System Admin',
@@ -863,11 +846,6 @@ export const label = (key: string) => {
   if (key === 'assignments_master') return 'Assignments'
   if (key === 'notice_automation') return 'Notice Automation'
   if (key === 'userlog_master') return 'User Activity Logs'
-  if (key === 'google_workspace') return 'Google Workspace Hub'
-  if (key === 'workspace_drive') return 'Google Drive'
-  if (key === 'workspace_sheets') return 'Google Sheets'
-  if (key === 'workspace_gmail') return 'Gmail'
-  if (key === 'workspace_docs') return 'Google Docs'
 
   return key
     .split('_')

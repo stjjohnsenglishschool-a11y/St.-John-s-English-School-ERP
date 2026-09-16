@@ -23,9 +23,7 @@ import {
   Eye,
   EyeOff,
   FileBarChart,
-  FileSpreadsheet,
   GraduationCap,
-  HardDrive,
   IndianRupee,
   LayoutDashboard,
   Lock,
@@ -71,8 +69,6 @@ import StudentMasterStudio from "./components/StudentMasterStudio";
 import EmployeeMasterStudio from "./components/EmployeeMasterStudio";
 import CsvImportModal from "./components/CsvImportModal";
 import DigitalVerificationModal, { VerificationData } from "./components/DigitalVerificationModal";
-import GoogleWorkspaceStudio from "./components/GoogleWorkspaceStudio";
-import { getWorkspaceAccessToken, exportTableToGoogleSheet } from "./lib/googleWorkspace";
 import { downloadSampleCsv } from "./lib/csvUtils";
 import { formatImageUrl, handleImageError } from "./lib/imageUtils";
 
@@ -102,8 +98,6 @@ function NavGroupIcon({ name }: { name: string }) {
       return <BookOpenCheck />;
     case "Communication":
       return <Bell />;
-    case "Google Workspace":
-      return <HardDrive />;
     case "Administration":
     case "System":
       return <Activity />;
@@ -773,17 +767,6 @@ function App() {
             <MessageCircle />
           </a>
           <button
-            aria-label="Google Workspace Hub"
-            title="Google Workspace Hub (Drive, Sheets, Gmail, Docs)"
-            onClick={() => choose("google_workspace")}
-            style={{
-              background: active.includes("workspace") || active === "google_workspace" ? "#2563eb" : undefined,
-              color: active.includes("workspace") || active === "google_workspace" ? "#ffffff" : undefined,
-            }}
-          >
-            <HardDrive />
-          </button>
-          <button
             aria-label="Audit Activity Log"
             title="Activity Log"
             onClick={() => choose("userlog_master")}
@@ -954,16 +937,6 @@ function App() {
             onUploadCsv={() => csvImportRef.current?.click()}
             initialType={active === "teacher_idcard" ? "employee" : "student"}
           />
-        ) : active === "google_workspace" ? (
-          <GoogleWorkspaceStudio initialTab="drive" setToast={setToast} />
-        ) : active === "workspace_drive" ? (
-          <GoogleWorkspaceStudio initialTab="drive" setToast={setToast} />
-        ) : active === "workspace_sheets" ? (
-          <GoogleWorkspaceStudio initialTab="sheets" setToast={setToast} />
-        ) : active === "workspace_gmail" ? (
-          <GoogleWorkspaceStudio initialTab="gmail" setToast={setToast} />
-        ) : active === "workspace_docs" ? (
-          <GoogleWorkspaceStudio initialTab="docs" setToast={setToast} />
         ) : (
           <>
             <PageHeader
@@ -996,39 +969,6 @@ function App() {
                 >
                   <Download size={15} />
                   Sample CSV
-                </button>
-                <button
-                  onClick={async () => {
-                    const token = getWorkspaceAccessToken();
-                    if (!token) {
-                      choose("google_workspace");
-                      setToast("Please connect Google Workspace to export directly to Google Sheets");
-                      return;
-                    }
-                    try {
-                      setLoading(true);
-                      const cols = mod.columns.length ? mod.columns : Object.keys(filtered[0] || {});
-                      const headers = cols.map(c => c.replace(/_/g, " ").toUpperCase());
-                      const rows = filtered.map(row => cols.map(c => row[c] !== undefined && row[c] !== null ? String(row[c]) : ""));
-                      const res = await exportTableToGoogleSheet(token, moduleName(mod.table), headers, rows);
-                      setToast(`Exported ${filtered.length} records to Google Sheets!`);
-                      window.open(res.spreadsheetUrl, "_blank");
-                    } catch (err: any) {
-                      setToast(err.message || "Failed to export to Google Sheets");
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                  title="Export records directly to Google Sheets in Drive"
-                  style={{
-                    background: "#ecfdf5",
-                    color: "#047857",
-                    border: "1px solid #a7f3d0",
-                    fontWeight: 600,
-                  }}
-                >
-                  <FileSpreadsheet size={15} />
-                  Google Sheets
                 </button>
                 {mod.fields.length > 0 && (
                   <button
