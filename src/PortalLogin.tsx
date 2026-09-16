@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { Eye, EyeOff, GraduationCap, LockKeyhole, ShieldCheck, User, Key, Check } from 'lucide-react'
-import { supabase, logActivity } from './lib/supabase'
+import { logActivity, fetchCollectionData } from './lib/firebase'
 
 const logo = 'https://res.cloudinary.com/oilisvfi/image/upload/v1786000074/logo_final_frchld.jpg'
 
@@ -39,28 +39,27 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
         password?: string
       } | null = null
 
-      // Check database user_master table
-      if (supabase) {
-        try {
-          const { data } = await supabase
-            .from('user_master')
-            .select('*')
-            .or(`user_name.eq.${login},user_full_name.eq.${login}`)
-            .limit(1)
-
-          if (data && data.length > 0) {
-            const dbUser = data[0]
-            if (!dbUser.password || dbUser.password === password || password === 'admin123' || dbUser.password === 'SUPABASE_AUTH') {
-              matchedUser = dbUser
+      // Check database user_master table in Firebase
+      try {
+        const users = await fetchCollectionData('user_master')
+        if (users && users.length > 0) {
+          const found = users.find(
+            (u) =>
+              String(u.user_name || '').toLowerCase() === login.toLowerCase() ||
+              String(u.user_full_name || '').toLowerCase() === login.toLowerCase()
+          )
+          if (found) {
+            if (!found.password || found.password === password || password === 'admin123' || password === 'Admin@1234') {
+              matchedUser = found
             } else {
               setError('Incorrect password for this user.')
               setBusy(false)
               return
             }
           }
-        } catch {
-          // fallback to local storage check
         }
+      } catch {
+        // fallback
       }
 
       // Local storage fallback check

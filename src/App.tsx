@@ -42,13 +42,16 @@ import {
   Users,
   X,
 } from "lucide-react";
-import type { Session } from "@supabase/supabase-js";
 import {
-  isSupabaseConfigured,
   logActivity,
-  supabase,
-  uploadToSupabaseStorage,
-} from "./lib/supabase";
+  uploadToFirebaseStorage,
+  fetchCollectionData,
+  saveDocument,
+  deleteDocument,
+  subscribeToCollection,
+  auth
+} from "./lib/firebase";
+import { Session, isSupabaseConfigured } from "./lib/supabase";
 import { seedSupabaseDatabase } from "./lib/seedDatabase";
 import { ALL_SUBMENU_MODULES, Field, label, moduleName, modules, navGroups } from "./modules";
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS } from "./lib/academicYear";
@@ -260,31 +263,8 @@ function App() {
   const mod = modules[active];
 
   useEffect(() => {
-    supabase?.auth.getSession().then((x) => {
-      setSession(x.data.session);
-      setAuthReady(true);
-    });
-    const sub = supabase?.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-      setAuthReady(true);
-    });
-    return () => sub?.data.subscription.unsubscribe();
+    setAuthReady(true);
   }, []);
-
-  useEffect(() => {
-    if (!session || !supabase) return;
-    supabase
-      .from("user_roles")
-      .select("school_id,role")
-      .eq("user_id", session.user.id)
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setRole(label(data.role));
-        }
-      });
-  }, [session]);
 
   const refresh = useCallback(async (forceSeed = false) => {
     if (!mod) {
@@ -293,64 +273,26 @@ function App() {
     }
     setLoading(true);
     try {
-      if (supabase) {
-        if (forceSeed) {
-          const result = await seedSupabaseDatabase(true);
-          setToast(result.message);
-        } else {
-          await seedSupabaseDatabase(false);
-        }
-
-        const req = supabase
-          .from(mod.table)
-          .select("*")
-          .order(mod.primaryKey, { ascending: false })
-          .limit(1000);
-        let { data, error } = await req;
-
-        // Auto-seed table in Supabase if table is empty and initialRows are available
-        if (!error && (!data || data.length === 0) && mod.initialRows && mod.initialRows.length > 0) {
-          const { error: seedErr } = await supabase.from(mod.table).insert(mod.initialRows);
-          if (!seedErr) {
-            const reFetch = await supabase.from(mod.table).select("*").order(mod.primaryKey, { ascending: false }).limit(1000);
-            if (reFetch.data && reFetch.data.length > 0) {
-              data = reFetch.data;
-            }
-          } else {
-            console.warn("Auto-insert into Supabase table failed:", seedErr.message);
-          }
-        }
-
-        if (error) {
-          console.warn("Supabase load error, reading local cache:", error.message);
-          const cached = localStorage.getItem(`sjes_table_${mod.table}`);
-          if (cached) {
-            setRows(JSON.parse(cached));
-          } else {
-            setRows(mod.initialRows || []);
-          }
-        } else {
-          let rowsData = data || mod.initialRows || [];
-          if (mod.table === "user_master" && rowsData) {
-            rowsData = rowsData.map((r: Row) => ({
-              ...r,
-              allowed_modules: r.allowed_modules || r.active_module || [],
-              active_module: r.active_module || r.allowed_modules || [],
-            }));
-          }
-          setRows(rowsData);
-          localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(rowsData));
-        }
-      } else {
-        const cached = localStorage.getItem(`sjes_table_${mod.table}`);
-        if (cached) {
-          setRows(JSON.parse(cached));
-        } else {
-          setRows([]);
-        }
+      if (forceSeed) {
+        const result = await seedSupabaseDatabase(true);
+        setToast(result.message);
       }
+
+      const data = await fetchCollectionData(mod.table);
+
+      // Do NOT auto-reseed on empty data: if user deleted records, table must remain empty!
+      let rowsData = data || [];
+      if (mod.table === "user_master" && rowsData) {
+        rowsData = rowsData.map((r: Row) => ({
+          ...r,
+          allowed_modules: r.allowed_modules || r.active_module || [],
+          active_module: r.active_module || r.allowed_modules || [],
+        }));
+      }
+      setRows(rowsData);
+      localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(rowsData));
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Failed to load records");
+      setToast(e instanceof Error ? e.message : "Failed to load records from Firebase");
     } finally {
       setLoading(false);
     }
@@ -361,48 +303,26 @@ function App() {
     setPage(1);
   }, [refresh]);
 
-  // Realtime updates on active table
+  // Realtime updates on active table via Firebase Firestore
   useEffect(() => {
-    if (!supabase || !mod) return;
-    const channel = supabase
-      .channel(`table-rt-${mod.table}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: mod.table },
-        (payload) => {
-          if (payload.eventType === "INSERT" && payload.new) {
-            setRows((prev) => {
-              const pKey = mod.primaryKey;
-              if (prev.some((r) => String(r[pKey]) === String(payload.new[pKey]))) return prev;
-              return [payload.new as Row, ...prev];
-            });
-          } else if (payload.eventType === "UPDATE" && payload.new) {
-            setRows((prev) => {
-              const pKey = mod.primaryKey;
-              return prev.map((r) =>
-                String(r[pKey]) === String(payload.new[pKey]) ? { ...r, ...(payload.new as Row) } : r
-              );
-            });
-          } else if (payload.eventType === "DELETE" && payload.old) {
-            setRows((prev) => {
-              const pKey = mod.primaryKey;
-              return prev.filter((r) => String(r[pKey]) !== String(payload.old[pKey]));
-            });
-          } else {
-            refresh();
-          }
-        }
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          console.log(`Live Supabase sync active on table ${mod.table}`);
-        }
-      });
+    if (!mod) return;
+    const unsub = subscribeToCollection(mod.table, (items) => {
+      let rowsData = items || [];
+      if (mod.table === "user_master" && rowsData) {
+        rowsData = rowsData.map((r: Row) => ({
+          ...r,
+          allowed_modules: r.allowed_modules || r.active_module || [],
+          active_module: r.active_module || r.allowed_modules || [],
+        }));
+      }
+      setRows(rowsData);
+      localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(rowsData));
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsub();
     };
-  }, [mod, refresh]);
+  }, [mod]);
 
   useEffect(() => {
     const focusSearch = (event: KeyboardEvent) => {
@@ -473,12 +393,10 @@ function App() {
   };
 
   const handleLogout = async () => {
-    if (supabase) {
-      try {
-        await supabase.auth.signOut();
-      } catch {
-        // ignore
-      }
+    try {
+      await auth.signOut();
+    } catch {
+      // ignore
     }
     localStorage.setItem("sjes_logged_out", "true");
     localStorage.removeItem("sjes_demo_session");
@@ -488,8 +406,8 @@ function App() {
     setToast("Successfully signed out of ERP.");
   };
 
-  if (isSupabaseConfigured && !authReady)
-    return <div className="auth-loading">Connecting to Supabase…</div>;
+  if (!authReady)
+    return <div className="auth-loading">Connecting to Firebase…</div>;
 
   if (
     loggedOut ||
@@ -622,43 +540,9 @@ function App() {
         }
       }
 
-      if (supabase) {
-        // Construct dbPayload for Supabase matching exact database column names
-        const dbPayload = { ...payload };
-        if (mod.table === "user_master") {
-          delete dbPayload.allowed_modules;
-        }
-
-        const result = isEdit
-          ? await supabase
-              .from(mod.table)
-              .update(dbPayload)
-              .eq(mod.primaryKey, String(rowId))
-          : await supabase.from(mod.table).insert(dbPayload);
-
-        if (result.error) {
-          console.warn("Database save error, persisting locally:", result.error.message);
-          // Fallback to local storage
-          const tableKey = `sjes_table_${mod.table}`;
-          const existingStr = localStorage.getItem(tableKey);
-          let currentRows: Row[] = existingStr ? JSON.parse(existingStr) : rows;
-          if (isEdit) {
-            currentRows = currentRows.map((r) =>
-              r[mod.primaryKey] === rowId ? { ...r, ...payload, [mod.primaryKey]: rowId } : r
-            );
-          } else {
-            const genId = crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}`;
-            currentRows = [{ ...payload, [mod.primaryKey]: genId }, ...currentRows];
-          }
-          localStorage.setItem(tableKey, JSON.stringify(currentRows));
-          setRows(currentRows);
-          setModal(null);
-          setToast(isEdit ? "Record updated" : "Record created successfully");
-          setLoading(false);
-          return;
-        }
-      } else {
-        // Fallback local storage persistence
+      const saveRes = await saveDocument(mod.table, mod.primaryKey, payload);
+      if (!saveRes.success) {
+        console.warn("Database save warning, persisting locally:", saveRes.error);
         const tableKey = `sjes_table_${mod.table}`;
         const existingStr = localStorage.getItem(tableKey);
         let currentRows: Row[] = existingStr ? JSON.parse(existingStr) : rows;
@@ -696,34 +580,45 @@ function App() {
 
   const remove = async (row: Row) => {
     if (!mod || !confirm("Delete this record?")) return;
-    const rowId = row[mod.primaryKey];
+    const rowId = row._docId || row[mod.primaryKey] || row.id || row.vendor_code || row.code;
     if (!rowId) return setToast("Record identifier is missing");
     try {
-      if (supabase) {
-        const { error } = await supabase
-          .from(mod.table)
-          .delete()
-          .eq(mod.primaryKey, String(rowId));
-        if (error) {
-          console.warn("Supabase delete failed, removing locally:", error.message);
-        }
+      const delRes = await deleteDocument(mod.table, String(rowId), row);
+      if (!delRes.success) {
+        console.warn("Firebase delete warning:", delRes.error);
       }
 
       const tableKey = `sjes_table_${mod.table}`;
       const existingStr = localStorage.getItem(tableKey);
       if (existingStr) {
         const currentRows: Row[] = JSON.parse(existingStr);
-        const filteredRows = currentRows.filter((r) => r[mod.primaryKey] !== rowId);
+        const filteredRows = currentRows.filter((r) => 
+          r[mod.primaryKey] !== rowId &&
+          (!row._docId || r._docId !== row._docId) &&
+          (!row.id || r.id !== row.id) &&
+          (!row.vendor_code || r.vendor_code !== row.vendor_code) &&
+          (!row.department_code || r.department_code !== row.department_code) &&
+          (!row.admission_no || r.admission_no !== row.admission_no) &&
+          (!row.emp_code || r.emp_code !== row.emp_code)
+        );
         localStorage.setItem(tableKey, JSON.stringify(filteredRows));
       }
-      setRows((prev) => prev.filter((r) => r[mod.primaryKey] !== rowId));
+      setRows((prev) => prev.filter((r) => 
+        r[mod.primaryKey] !== rowId &&
+        (!row._docId || r._docId !== row._docId) &&
+        (!row.id || r.id !== row.id) &&
+        (!row.vendor_code || r.vendor_code !== row.vendor_code) &&
+        (!row.department_code || r.department_code !== row.department_code) &&
+        (!row.admission_no || r.admission_no !== row.admission_no) &&
+        (!row.emp_code || r.emp_code !== row.emp_code)
+      ));
 
       await logActivity({
         action: `Deleted record from ${mod.table} (ID: ${rowId})`,
         module: mod.table,
       });
       setToast("Record deleted");
-      refresh();
+      await refresh();
     } catch (e) {
       setToast(e instanceof Error ? e.message : "Delete failed");
     }
@@ -752,7 +647,7 @@ function App() {
   };
 
   const importCsv = async (file?: File) => {
-    if (!file || !mod || !supabase) return;
+    if (!file || !mod) return;
     setLoading(true);
     try {
       const [headers, ...sourceRows] = parseCsv(await file.text());
@@ -801,8 +696,9 @@ function App() {
       if (!records.length)
         throw new Error("No usable records were found in this CSV.");
 
-      const { error } = await supabase.from(mod.table).insert(records);
-      if (error) throw error;
+      for (const rec of records) {
+        await saveDocument(mod.table, mod.primaryKey, rec);
+      }
 
       await logActivity({
         action: `Imported ${records.length} records into ${mod.table} via CSV`,
@@ -812,7 +708,7 @@ function App() {
       setToast(
         `${records.length} record${
           records.length === 1 ? "" : "s"
-        } imported to Supabase successfully`
+        } imported to Firebase successfully`
       );
       await refresh();
     } catch (error) {
@@ -998,13 +894,13 @@ function App() {
           <strong>{active === "Overview" ? "Dashboard" : moduleName(active)}</strong>
         </div>
         <div>
-          <button onClick={() => refresh(true)} title="Sync and auto-seed live data to Supabase">
+          <button onClick={() => refresh(false)} title="Sync live data from Firebase">
             <RefreshCw className={loading ? "spin" : ""} />
             <span>Sync Live Data</span>
           </button>
           <span className="live">
             <i />
-            Live Supabase
+            Live Firebase
           </span>
         </div>
       </div>
@@ -1725,16 +1621,11 @@ function FormField({
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (field.type !== "relation" || !field.reference || !supabase) return;
+    if (field.type !== "relation" || !field.reference) return;
     const reference = field.reference;
-    supabase
-      .from(reference.table)
-      .select("*")
-      .order(reference.label)
-      .limit(500)
-      .then(({ data }) => {
-        setRelationOptions((data || []) as unknown as Array<Record<string, unknown>>);
-      });
+    fetchCollectionData(reference.table).then((data) => {
+      setRelationOptions((data || []) as unknown as Array<Record<string, unknown>>);
+    });
   }, [field]);
 
   const isUrlOrFileField =
@@ -1747,7 +1638,7 @@ function FormField({
     if (!file) return;
     setUploading(true);
     try {
-      const publicUrl = await uploadToSupabaseStorage(
+      const publicUrl = await uploadToFirebaseStorage(
         file,
         "school-documents",
         "records"
@@ -2091,23 +1982,14 @@ function Login({
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!supabase) return;
     setBusy(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      await logActivity({
+        action: "User signed in to portal",
+        module: "auth",
       });
-      if (error) {
-        setToast(error.message);
-      } else {
-        await logActivity({
-          action: "User signed in to portal",
-          module: "auth",
-        });
-        setToast("Signed in successfully");
-        close();
-      }
+      setToast("Signed in successfully");
+      close();
     } catch (err) {
       setToast(err instanceof Error ? err.message : "Sign-in error");
     } finally {

@@ -1,0 +1,112 @@
+{
+  "entities": {
+    "schools": {
+      "title": "Schools",
+      "description": "School details master"
+    },
+    "department_master": {
+      "title": "Department Master",
+      "description": "Department details"
+    },
+    "class_master": {
+      "title": "Class Master",
+      "description": "Classes and sections"
+    },
+    "subject_master": {
+      "title": "Subject Master",
+      "description": "Subjects details"
+    },
+    "vendor_master": {
+      "title": "Vendor Master",
+      "description": "Vendors details"
+    },
+    "student_master": {
+      "title": "Student Master",
+      "description": "Student profiles and details"
+    },
+    "employee_master": {
+      "title": "Employee Master",
+      "description": "Employee and staff details"
+    },
+    "user_master": {
+      "title": "User Master",
+      "description": "System login users and access permissions"
+    },
+    "student_attendance": {
+      "title": "Student Attendance",
+      "description": "Daily student attendance records"
+    },
+    "employee_attendance": {
+      "title": "Employee Attendance",
+      "description": "Daily employee attendance records"
+    },
+    "fees_collection": {
+      "title": "Fees Collection",
+      "description": "Fee payment records"
+    },
+    "expense_master": {
+      "title": "Expense Master",
+      "description": "Expense records"
+    },
+    "income_master": {
+      "title": "Income Master",
+      "description": "Income records"
+    },
+    "salary_slip": {
+      "title": "Salary Slip",
+      "description": "Employee salary slips"
+    },
+    "leave_application": {
+      "title": "Leave Application",
+      "description": "Leave requests"
+    },
+    "leave_balance": {
+      "title": "Leave Balance",
+      "description": "Leave balance tracking"
+    },
+    "warning_letter": {
+      "title": "Warning Letter",
+      "description": "Warning letters issued"
+    },
+    "offer_letter": {
+      "title": "Offer Letter",
+      "description": "Offer letters issued"
+    },
+    "employee_document": {
+      "title": "Employee Documents",
+      "description": "Uploaded employee files and documents"
+    },
+    "asset_master": {
+      "title": "Asset Master",
+      "description": "School assets and equipment"
+    },
+    "inventory_master": {
+      "title": "Inventory Master",
+      "description": "Stock and inventory items"
+    },
+    "teacher_idcard": {
+      "title": "Teacher ID Cards",
+      "description": "Generated teacher ID card records"
+    },
+    "student_idcard": {
+      "title": "Student ID Cards",
+      "description": "Generated student ID card records"
+    },
+    "escort_card": {
+      "title": "Escort Cards",
+      "description": "Guardian escort cards"
+    },
+    "assignments_master": {
+      "title": "Assignments Master",
+      "description": "Homework and class assignments"
+    },
+    "notice_automation": {
+      "title": "Notice Automation",
+      "description": "Notices and announcements"
+    },
+    "userlog_master": {
+      "title": "User Log Master",
+      "description": "Audit trail and activity logs"
+    }
+  }
+}

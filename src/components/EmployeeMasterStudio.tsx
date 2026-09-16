@@ -22,7 +22,7 @@ import {
   FileText,
   FileSpreadsheet,
 } from 'lucide-react'
-import { supabase, uploadToSupabaseStorage, logActivity } from '../lib/supabase'
+import { supabase, uploadToSupabaseStorage, logActivity, deleteDocument } from '../lib/supabase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
 import { downloadSampleCsv } from '../lib/csvUtils'
@@ -388,15 +388,12 @@ export default function EmployeeMasterStudio({
 
   // Delete
   const handleDelete = async (emp: Employee) => {
-    if (!supabase || !emp.emp_id) return
+    const eId = (emp as any)._docId || emp.emp_id || emp.emp_code
+    if (!eId) return
     if (!confirm(`Delete employee record for ${emp.first_name} ${emp.last_name}?`)) return
 
     try {
-      const { error } = await supabase
-        .from('employee_master')
-        .delete()
-        .eq('emp_id', emp.emp_id)
-      if (error) throw error
+      await deleteDocument('employee_master', eId, emp)
       await logActivity({
         action: `Deleted employee: ${emp.first_name} ${emp.last_name} (${emp.emp_code})`,
         module: 'employee_master',

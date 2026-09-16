@@ -24,7 +24,7 @@ import {
   Printer,
   Sparkles,
 } from 'lucide-react'
-import { supabase, uploadToSupabaseStorage, logActivity } from '../lib/supabase'
+import { supabase, uploadToSupabaseStorage, logActivity, deleteDocument } from '../lib/supabase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
 import { downloadSampleCsv } from '../lib/csvUtils'
@@ -382,15 +382,12 @@ export default function StudentMasterStudio({
 
   // Delete Student
   const handleDelete = async (student: Student) => {
-    if (!supabase || !student.student_id) return
+    const sId = (student as any)._docId || student.student_id || student.admission_no
+    if (!sId) return
     if (!confirm(`Are you sure you want to remove ${student.full_name}?`)) return
 
     try {
-      const { error } = await supabase
-        .from('student_master')
-        .delete()
-        .eq('student_id', student.student_id)
-      if (error) throw error
+      await deleteDocument('student_master', sId, student)
       await logActivity({
         action: `Deleted student: ${student.full_name} (${student.admission_no})`,
         module: 'student_master',

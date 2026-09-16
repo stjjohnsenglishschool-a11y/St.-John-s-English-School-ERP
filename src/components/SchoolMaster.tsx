@@ -335,7 +335,7 @@ export default function SchoolMaster({
                   <div style={{ color: "var(--muted)", fontSize: "10px" }}>
                     Database Security
                   </div>
-                  <b style={{ color: "#10b981" }}>Live Supabase ERP Connected</b>
+                  <b style={{ color: "#10b981" }}>Live Firebase ERP Connected</b>
                 </div>
               </div>
             </div>

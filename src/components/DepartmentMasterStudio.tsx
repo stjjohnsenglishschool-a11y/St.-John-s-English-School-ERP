@@ -15,7 +15,7 @@ import {
   ShieldAlert,
   Sparkles,
 } from "lucide-react";
-import { supabase, logActivity } from "../lib/supabase";
+import { supabase, logActivity, deleteDocument } from "../lib/supabase";
 import { modules } from "../modules";
 import { downloadSampleCsv } from "../lib/csvUtils";
 import CsvImportModal from "./CsvImportModal";
@@ -89,10 +89,10 @@ export default function DepartmentMasterStudio({
 }) {
   const [departments, setDepartments] = useState<Department[]>(() => {
     const saved = localStorage.getItem("sjes_department_master");
-    if (saved) {
+    if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       } catch {
         // use default
       }
@@ -133,10 +133,11 @@ export default function DepartmentMasterStudio({
           .order("department_name", { ascending: true });
 
         if (error) {
-          console.warn("Supabase fetch error, fallback to local storage:", error.message);
-        } else if (data && data.length > 0) {
+          console.warn("Fetch error, fallback to local storage:", error.message);
+        } else if (data) {
           const mapped: Department[] = data.map((d: any) => ({
-            department_id: d.department_id,
+            _docId: d._docId,
+            department_id: d.department_id || d._docId,
             department_code: d.department_code || `DEPT-${(d.department_name || "").slice(0, 3).toUpperCase()}`,
             department_name: d.department_name || "Unnamed Department",
             description: d.description || "",
@@ -325,10 +326,15 @@ export default function DepartmentMasterStudio({
   // Delete Department
   const handleDelete = async (dept: Department) => {
     try {
-      if (supabase && dept.department_id) {
-        await supabase.from("department_master").delete().eq("department_id", dept.department_id);
+      const docId = (dept as any)._docId || dept.department_id || dept.department_code;
+      if (docId) {
+        await deleteDocument("department_master", docId, dept);
       }
-      const updated = departments.filter((d) => d.department_id !== dept.department_id && d.department_code !== dept.department_code);
+      const updated = departments.filter((d) => 
+        (!dept.department_id || d.department_id !== dept.department_id) && 
+        (!dept.department_code || d.department_code !== dept.department_code) &&
+        (!(dept as any)._docId || (d as any)._docId !== (dept as any)._docId)
+      );
       persistLocal(updated);
       await logActivity({
         action: `Deleted department: ${dept.department_name}`,
