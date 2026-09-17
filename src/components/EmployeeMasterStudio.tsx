@@ -52,6 +52,7 @@ import {
   STAFF_GOOGLE_SHEET_TAB_NAME,
   uploadStaffPhotoToGoogleDrive,
   syncAllEmployeesToGoogleSheet,
+  syncSingleEmployeeToGoogleSheet,
   fetchEmployeesFromGoogleSheet,
   generateStaffAppsScriptCode,
   subscribeGoogleAuth,
@@ -291,7 +292,11 @@ export default function EmployeeMasterStudio({
   // Quick toggle employee Active / Inactive status
   const handleToggleEmployeeActive = async (emp: Employee, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
-    const currentlyActive = emp.is_active !== false && emp.employment_status !== 'Inactive' && emp.employment_status !== 'Resigned' && emp.employment_status !== 'Retired'
+    const currentlyActive =
+      emp.is_active !== false &&
+      emp.employment_status !== 'Inactive' &&
+      emp.employment_status !== 'Resigned' &&
+      emp.employment_status !== 'Retired'
     const newActive = !currentlyActive
     const newStatus = newActive ? 'Active' : 'Inactive'
 
@@ -302,13 +307,20 @@ export default function EmployeeMasterStudio({
       updated_at: new Date().toISOString(),
     }
 
-    setEmployees((prev) =>
-      prev.map((item) =>
-        (item.emp_code === emp.emp_code || item.emp_id === emp.emp_id || (item as any)._docId === (emp as any)._docId)
+    setEmployees((prev) => {
+      const updated = prev.map((item) =>
+        item.emp_code === emp.emp_code ||
+        item.emp_id === emp.emp_id ||
+        (item as any)._docId === (emp as any)._docId
           ? updatedEmp
           : item
       )
-    )
+      try {
+        localStorage.setItem('sjes_table_employee_master', JSON.stringify(updated))
+        localStorage.setItem('sjes_table_employees', JSON.stringify(updated))
+      } catch {}
+      return updated
+    })
 
     const pk = emp.emp_code || emp.emp_id || (emp as any)._docId || `EMP-${Date.now()}`
     await saveDocument('employee_master', 'emp_code', {
@@ -319,9 +331,8 @@ export default function EmployeeMasterStudio({
     const displayName = [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.emp_code || 'Staff'
     setToast(`✓ Staff member ${displayName} marked as ${newStatus}`)
 
-    if (autoSyncEnabled && googleConnected) {
-      handleSyncToGoogleSheet()
-    }
+    // Real-time synchronization to Google Sheet (staff_data)
+    syncSingleEmployeeToGoogleSheet(updatedEmp).catch(() => {})
   }
 
   // Quick change employee status
@@ -334,13 +345,20 @@ export default function EmployeeMasterStudio({
       updated_at: new Date().toISOString(),
     }
 
-    setEmployees((prev) =>
-      prev.map((item) =>
-        (item.emp_code === emp.emp_code || item.emp_id === emp.emp_id || (item as any)._docId === (emp as any)._docId)
+    setEmployees((prev) => {
+      const updated = prev.map((item) =>
+        item.emp_code === emp.emp_code ||
+        item.emp_id === emp.emp_id ||
+        (item as any)._docId === (emp as any)._docId
           ? updatedEmp
           : item
       )
-    )
+      try {
+        localStorage.setItem('sjes_table_employee_master', JSON.stringify(updated))
+        localStorage.setItem('sjes_table_employees', JSON.stringify(updated))
+      } catch {}
+      return updated
+    })
 
     const pk = emp.emp_code || emp.emp_id || (emp as any)._docId || `EMP-${Date.now()}`
     await saveDocument('employee_master', 'emp_code', {
@@ -351,9 +369,8 @@ export default function EmployeeMasterStudio({
     const displayName = [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.emp_code || 'Staff'
     setToast(`✓ ${displayName} status updated to '${newStatus}'`)
 
-    if (autoSyncEnabled && googleConnected) {
-      handleSyncToGoogleSheet()
-    }
+    // Real-time synchronization to Google Sheet (staff_data)
+    syncSingleEmployeeToGoogleSheet(updatedEmp).catch(() => {})
   }
 
   // Push all staff to Google Sheet (staff_data tab in Sheet 1JUZXNNcIZeMGFyzmFbdfxADLY8Jwb_r3e03rJK5rWgc)
@@ -596,10 +613,10 @@ export default function EmployeeMasterStudio({
       const code = formState.emp_code || 'EMP'
       const name = `${formState.first_name || ''}_${formState.last_name || ''}`.trim() || 'staff'
       const customFileName = `${code}_${name}_photo.${file.name.split('.').pop() || 'jpg'}`
-      const res = await uploadStaffPhotoToGoogleDrive(file, customFileName)
+      const res = await uploadStaffPhotoToGoogleDrive(file, code, customFileName)
       if (res.success && res.url) {
         updateForm('employee_photo_url', res.url)
-        setToast(`✓ Staff photo saved directly to Google Drive folder '${STAFF_GOOGLE_DRIVE_FOLDER_NAME}'!`)
+        setToast(`✓ Staff photo saved to Google Drive folder '${STAFF_GOOGLE_DRIVE_FOLDER_NAME}'!`)
       } else {
         if (res.error?.includes('auth/unauthorized-domain')) {
           setShowDomainModal(true)
@@ -638,7 +655,7 @@ export default function EmployeeMasterStudio({
     }
   }
 
-  // Save handler with Google Sheet sync
+  // Save handler with Firebase persistence & Google Sheet sync
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -665,7 +682,7 @@ export default function EmployeeMasterStudio({
           action: `Added new employee: ${formState.first_name} ${formState.last_name} (${formState.emp_code})`,
           module: 'employee_master',
         })
-        setToast(`Staff member registered successfully in live database`)
+        setToast(`Staff member registered successfully in database`)
       } else if (modalMode === 'edit') {
         const res = await saveDocument('employee_master', 'emp_code', payload)
         if (!res.success) throw new Error(res.error || 'Failed to update employee')
@@ -675,15 +692,37 @@ export default function EmployeeMasterStudio({
         })
         setToast('Staff record updated successfully')
       }
-      closeModal()
-      loadEmployees()
 
-      // Real-time update to Google Sheet if enabled
-      if (googleConnected && autoSyncEnabled) {
-        setTimeout(() => {
-          handleSyncToGoogleSheet()
-        }, 800)
-      }
+      // Update local state immediately so user sees it right away
+      setEmployees((prev) => {
+        const targetCode = String(payload.emp_code || payload.emp_id || '').toLowerCase()
+        const existingIdx = prev.findIndex(
+          (e) => String(e.emp_code || e.emp_id || (e as any)._docId || '').toLowerCase() === targetCode
+        )
+        let updated: Employee[]
+        if (existingIdx >= 0) {
+          updated = [...prev]
+          updated[existingIdx] = { ...updated[existingIdx], ...payload }
+        } else {
+          updated = [payload as Employee, ...prev]
+        }
+        try {
+          localStorage.setItem('sjes_table_employee_master', JSON.stringify(updated))
+          localStorage.setItem('sjes_table_employees', JSON.stringify(updated))
+        } catch {}
+        return updated
+      })
+
+      closeModal()
+
+      // Real-time synchronization to Google Sheet (staff_data)
+      syncSingleEmployeeToGoogleSheet(payload)
+        .then((sheetRes) => {
+          if (sheetRes.success) {
+            setLastSyncTime(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }))
+          }
+        })
+        .catch(() => {})
     } catch (err) {
       console.warn('Employee save error:', err)
       setToast(err instanceof Error ? err.message : 'Save operation failed')
@@ -704,14 +743,17 @@ export default function EmployeeMasterStudio({
         action: `Deleted employee: ${emp.first_name} ${emp.last_name} (${emp.emp_code})`,
         module: 'employee_master',
       })
+      setEmployees((prev) => {
+        const updated = prev.filter(
+          (e) => e.emp_code !== emp.emp_code && e.emp_id !== emp.emp_id && (e as any)._docId !== eId
+        )
+        try {
+          localStorage.setItem('sjes_table_employee_master', JSON.stringify(updated))
+          localStorage.setItem('sjes_table_employees', JSON.stringify(updated))
+        } catch {}
+        return updated
+      })
       setToast('Employee record deleted')
-      loadEmployees()
-
-      if (googleConnected && autoSyncEnabled) {
-        setTimeout(() => {
-          handleSyncToGoogleSheet()
-        }, 800)
-      }
     } catch (err) {
       setToast(err instanceof Error ? err.message : 'Delete failed')
     }
@@ -1414,34 +1456,75 @@ export default function EmployeeMasterStudio({
                       )}
                     </div>
                     {modalMode !== 'view' && (
-                      <div className="photo-actions" style={{ flex: 1 }}>
-                        <label className="btn-upload-label">
-                          <Upload size={14} />{' '}
-                          {uploadingPhoto ? 'Uploading...' : 'Upload Staff Photograph'}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handlePhotoUpload}
-                            disabled={uploadingPhoto}
-                            style={{ display: 'none' }}
-                          />
-                        </label>
-                        <small style={{ display: 'block', marginBottom: '6px' }}>Max 2MB · PNG, JPG</small>
-                        <div style={{ marginTop: '4px' }}>
-                          <input
-                            type="url"
-                            placeholder="Or paste Google Drive / Photo URL..."
-                            value={formState.employee_photo_url || ''}
-                            onChange={(e) => updateForm('employee_photo_url', e.target.value)}
+                      <div className="photo-actions" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <label
+                            className="btn-upload-label"
                             style={{
-                              padding: '6px 10px',
-                              fontSize: '12px',
+                              background: '#2563eb',
+                              color: '#ffffff',
+                              border: 'none',
+                              padding: '6px 12px',
                               borderRadius: '6px',
-                              border: '1px solid #cbd5e1',
-                              width: '100%',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              cursor: uploadingPhotoDrive ? 'wait' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
                             }}
-                          />
+                            title={`Upload photograph to Google Drive folder '${STAFF_GOOGLE_DRIVE_FOLDER_NAME}'`}
+                          >
+                            <Upload size={13} />
+                            {uploadingPhotoDrive ? 'Saving to Drive...' : `Drive (${STAFF_GOOGLE_DRIVE_FOLDER_NAME})`}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleDrivePhotoUpload}
+                              disabled={uploadingPhotoDrive}
+                              style={{ display: 'none' }}
+                            />
+                          </label>
+                          <label
+                            className="btn-upload-label"
+                            style={{
+                              background: '#f1f5f9',
+                              color: '#334155',
+                              border: '1px solid #cbd5e1',
+                              padding: '6px 12px',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              cursor: uploadingPhoto ? 'wait' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                            }}
+                          >
+                            <Upload size={13} />
+                            {uploadingPhoto ? 'Uploading...' : 'Cloud Storage'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handlePhotoUpload}
+                              disabled={uploadingPhoto}
+                              style={{ display: 'none' }}
+                            />
+                          </label>
                         </div>
+                        <input
+                          type="url"
+                          placeholder="Or paste Google Drive Photo link / Direct image URL..."
+                          value={formState.employee_photo_url || ''}
+                          onChange={(e) => updateForm('employee_photo_url', e.target.value)}
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: '12px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            width: '100%',
+                          }}
+                        />
                       </div>
                     )}
                   </div>

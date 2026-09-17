@@ -988,6 +988,121 @@ export async function syncAllEmployeesToGoogleSheet(
 }
 
 /**
+ * Sync / upsert a single employee record to the 'staff_data' Google Sheet tab without overwriting other rows
+ */
+export async function syncSingleEmployeeToGoogleSheet(
+  employee: any
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    let token = cachedAccessToken
+    if (!token) {
+      const conn = await connectGoogleWorkspace()
+      if (!conn.success || !conn.accessToken) {
+        return {
+          success: false,
+          error: conn.error || 'Google authorization required to sync with Google Sheets.',
+        }
+      }
+      token = conn.accessToken
+    }
+
+    await ensureStaffSheetTabExists(token)
+
+    // Fetch existing rows from 'staff_data'
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1:Z2000`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    )
+
+    let rows: string[][] = []
+    if (res.ok) {
+      const json = await res.json().catch(() => ({}))
+      rows = json.values || []
+    }
+
+    const rowData = employeeToSheetRow(employee)
+    const targetEmpCode = String(employee.emp_code || employee.emp_id || '').trim().toLowerCase()
+
+    if (rows.length === 0) {
+      // Create headers and first row
+      const newRows = [STAFF_SHEET_HEADERS, rowData]
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1?valueInputOption=USER_ENTERED`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            range: `'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1:X${newRows.length}`,
+            majorDimension: 'ROWS',
+            values: newRows,
+          }),
+        }
+      )
+      return { success: true, message: `Added to ${STAFF_GOOGLE_SHEET_TAB_NAME} sheet` }
+    }
+
+    // Find row index (1-indexed for sheets)
+    let rowIndex = -1
+    for (let i = 1; i < rows.length; i++) {
+      const currentCode = String(rows[i]?.[0] || '').trim().toLowerCase()
+      if (currentCode && currentCode === targetEmpCode) {
+        rowIndex = i + 1 // 1-based index
+        break
+      }
+    }
+
+    if (rowIndex > 0) {
+      // Update existing row
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A${rowIndex}:X${rowIndex}?valueInputOption=USER_ENTERED`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            range: `'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A${rowIndex}:X${rowIndex}`,
+            majorDimension: 'ROWS',
+            values: [rowData],
+          }),
+        }
+      )
+      return { success: true, message: `Updated row ${rowIndex} in Google Sheet (${STAFF_GOOGLE_SHEET_TAB_NAME})` }
+    } else {
+      // Append new row
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1:append?valueInputOption=USER_ENTERED`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            range: `'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1`,
+            majorDimension: 'ROWS',
+            values: [rowData],
+          }),
+        }
+      )
+      return { success: true, message: `Appended new staff row to Google Sheet (${STAFF_GOOGLE_SHEET_TAB_NAME})` }
+    }
+  } catch (err: any) {
+    console.error('syncSingleEmployeeToGoogleSheet Error:', err)
+    return {
+      success: false,
+      error: err.message || 'Failed to sync employee record with Google Sheet',
+    }
+  }
+}
+
+/**
  * Pulls employee data from Google Sheet ('staff_data' or first available sheet tab)
  */
 export async function fetchEmployeesFromGoogleSheet(): Promise<{
