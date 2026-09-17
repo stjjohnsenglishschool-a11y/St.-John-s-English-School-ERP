@@ -2,22 +2,13 @@ import { fetchCollectionData, saveDocument } from './firebase'
 
 export async function seedSupabaseDatabase(force = false): Promise<{ success: boolean; message: string; seededCount: number }> {
   try {
-    const isAlreadySeeded = localStorage.getItem('sjes_database_seeded') === 'true'
-    if (!force && isAlreadySeeded) {
-      return {
-        success: true,
-        message: 'Database is up to date',
-        seededCount: 0,
-      }
-    }
-
     let count = 0
     const errors: string[] = []
 
     const safeSeedTable = async (tableName: string, records: any[], primaryKey = 'code') => {
       try {
         const existing = await fetchCollectionData(tableName)
-        if (force || (!isAlreadySeeded && (!existing || existing.length === 0))) {
+        if (force || !existing || existing.length === 0) {
           for (const rec of records) {
             let pk = primaryKey
             if (rec.department_code) pk = 'department_code'
@@ -80,7 +71,15 @@ export async function seedSupabaseDatabase(force = false): Promise<{ success: bo
       { class_name: 'CLASS V', subject_name: 'Computer Applications', subject_type: 'Co-scholastic', is_active: true },
     ])
 
-    // 4. Seed User Master
+    // 4. Seed Vendor Master
+    await safeSeedTable('vendor_master', [
+      { vendor_code: 'VEND-001', vendor_name: 'Oxford University Press', service_category: 'Books & Uniforms', phone: '9830012345', city: 'Kolkata', is_active: true },
+      { vendor_code: 'VEND-002', vendor_name: 'Dell Technologies India', service_category: 'IT & Computer Hardware', phone: '9830098765', city: 'Kolkata', is_active: true },
+      { vendor_code: 'VEND-003', vendor_name: 'Super Clean Sanitation', service_category: 'Housekeeping & Hygiene', phone: '9831122334', city: 'Kolkata', is_active: true },
+      { vendor_code: 'VEND-004', vendor_name: 'Eastern Transport Services', service_category: 'Bus Fleet & Fuel', phone: '9832233445', city: 'Kolkata', is_active: true },
+    ])
+
+    // 5. Seed User Master
     const allModuleKeys = [
       'school_master', 'department_master', 'class_master', 'subject_master', 'vendor_master', 'student_master', 'employee_master', 'user_master', 'student_attendance', 'employee_attendance', 'fees_collection', 'expense_master', 'income_master', 'salary_slip', 'leave_application', 'leave_balance', 'warning_letter', 'offer_letter', 'employee_document', 'asset_master', 'inventory_master', 'teacher_idcard', 'student_idcard', 'escort_card', 'assignments_master', 'notice_automation', 'userlog_master'
     ]

@@ -847,49 +847,6 @@ export default function EmployeeMasterStudio({
           </button>
           <button
             className="btn-secondary"
-            onClick={() => setShowAppsScriptModal(true)}
-            title="View Google Apps Script (code.gs) for real-time two-way synchronization"
-            style={{
-              background: '#f8fafc',
-              color: '#0f172a',
-              borderColor: '#cbd5e1',
-              fontWeight: 600,
-            }}
-          >
-            <Code2 size={16} color="#2563eb" /> Apps Script Code (code.gs)
-          </button>
-          <button
-            className="btn-secondary"
-            onClick={() => handleSyncToGoogleSheet()}
-            disabled={syncingSheet}
-            title="Sync all current staff records directly into linked Google Sheet (staff_data)"
-            style={{
-              background: '#f0fdf4',
-              color: '#15803d',
-              borderColor: '#bbf7d0',
-              fontWeight: 600,
-            }}
-          >
-            <RefreshCw size={16} className={syncingSheet ? 'spin' : ''} />
-            {syncingSheet ? 'Syncing...' : 'Sync with Google Sheet'}
-          </button>
-          <button
-            className="btn-secondary"
-            onClick={handlePullFromGoogleSheet}
-            disabled={syncingSheet}
-            title="Import or update staff records directly from linked Google Sheet"
-            style={{
-              background: '#eff6ff',
-              color: '#1d4ed8',
-              borderColor: '#93c5fd',
-              fontWeight: 600,
-            }}
-          >
-            <FileSpreadsheet size={16} className={syncingSheet ? 'spin' : ''} />
-            {syncingSheet ? 'Importing Sheet...' : 'Import Google Sheet'}
-          </button>
-          <button
-            className="btn-secondary"
             onClick={handleExportCsv}
             title="Export filtered staff records to CSV"
           >

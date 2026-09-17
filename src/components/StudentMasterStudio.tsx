@@ -672,36 +672,6 @@ export default function StudentMasterStudio({
           </button>
           <button
             className="btn-secondary"
-            onClick={handleSyncToGoogleSheet}
-            disabled={syncingSheet}
-            title="Sync all current student records directly into linked Google Sheet (student_data)"
-            style={{
-              background: '#f0fdf4',
-              color: '#15803d',
-              borderColor: '#bbf7d0',
-              fontWeight: 600,
-            }}
-          >
-            <RefreshCw size={16} className={syncingSheet ? 'spin' : ''} />
-            {syncingSheet ? 'Syncing...' : 'Sync with Google Sheet'}
-          </button>
-          <button
-            className="btn-secondary"
-            onClick={handlePullFromGoogleSheet}
-            disabled={syncingSheet}
-            title="Import or update student records directly from linked Google Sheet"
-            style={{
-              background: '#eff6ff',
-              color: '#1d4ed8',
-              borderColor: '#93c5fd',
-              fontWeight: 600,
-            }}
-          >
-            <FileSpreadsheet size={16} className={syncingSheet ? 'spin' : ''} />
-            {syncingSheet ? 'Importing Sheet...' : 'Import Google Sheet'}
-          </button>
-          <button
-            className="btn-secondary"
             onClick={handleExportCsv}
             title="Export full filtered roster to CSV"
           >

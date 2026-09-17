@@ -352,9 +352,22 @@ function App() {
         setToast(result.message);
       }
 
-      const data = await fetchCollectionData(mod.table);
+      let data = await fetchCollectionData(mod.table);
 
-      // Do NOT auto-reseed on empty data: if user deleted records, table must remain empty!
+      const isMasterTable = [
+        "department_master",
+        "class_master",
+        "subject_master",
+        "vendor_master",
+        "school_master",
+        "user_master"
+      ].includes(mod.table);
+
+      if ((!data || data.length === 0) && isMasterTable) {
+        await seedSupabaseDatabase(false);
+        data = await fetchCollectionData(mod.table);
+      }
+
       let rowsData = data || [];
       if (mod.table === "user_master" && rowsData) {
         rowsData = rowsData.map((r: Row) => ({
@@ -384,15 +397,13 @@ function App() {
         "leave_balance",
         "fees_collection",
       ];
-      await Promise.all([
-        ...collectionsToSync.map((col) => fetchCollectionData(col)),
-        fetchStaffFromWebApp().catch(() => null),
-        fetchStudentsFromWebApp().catch(() => null),
-      ]);
+      await Promise.all(
+        collectionsToSync.map((col) => fetchCollectionData(col))
+      );
       if (mod) {
         await refresh();
       }
-      setToast("✓ Live Cloud Sync Complete: Synchronized with Google Sheets & Firebase Firestore!");
+      setToast("✓ Live Cloud Sync Complete: Synchronized with Firebase Firestore!");
     } catch (e: any) {
       setToast(e?.message || "Sync completed.");
     } finally {
@@ -400,7 +411,7 @@ function App() {
     }
   }, [mod, refresh]);
 
-  // Initial cloud synchronization check on mount (Firestore + Google Web Apps)
+  // Initial cloud synchronization check on mount (Firestore)
   useEffect(() => {
     const initSync = async () => {
       try {
@@ -408,8 +419,9 @@ function App() {
           fetchCollectionData("employee_master"),
           fetchCollectionData("student_master"),
           fetchCollectionData("department_master"),
-          fetchStaffFromWebApp().catch(() => null),
-          fetchStudentsFromWebApp().catch(() => null),
+          fetchCollectionData("class_master"),
+          fetchCollectionData("subject_master"),
+          fetchCollectionData("vendor_master"),
         ]);
       } catch {
         // continue
