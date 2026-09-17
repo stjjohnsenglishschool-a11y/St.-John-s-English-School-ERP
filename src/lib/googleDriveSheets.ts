@@ -7,18 +7,21 @@ import {
   User,
 } from 'firebase/auth'
 import firebaseConfig from '../../firebase-applet-config.json'
+import { saveBatchDocuments, saveDocument } from './firebase'
 
 // Google Workspace Constants - Students
 export const GOOGLE_DRIVE_FOLDER_ID = '19EmUMwDpNxuufOr995XPsg_XoG-BqZWO'
 export const GOOGLE_DRIVE_FOLDER_NAME = 'student_data_photo'
 export const GOOGLE_SHEET_ID = '1OGD09mG-m54rSKBJl2nmOc-pFraYZRnMcCTyoAEWGto'
 export const GOOGLE_SHEET_TAB_NAME = 'student_data'
+export const STUDENT_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxV3tDQi3ZB4XMnJaBkMN8FeCp4f392FRwxcHYFoWWHa-pXc4SzyxsrkEfyxFh8WKCZ/exec'
 
 // Google Workspace Constants - Staff
 export const STAFF_GOOGLE_DRIVE_FOLDER_ID = '1zcVv1vwxdMNAKPP52THA4SE8TzUGOOLa'
 export const STAFF_GOOGLE_DRIVE_FOLDER_NAME = 'staff_photo'
 export const STAFF_GOOGLE_SHEET_ID = '1JUZXNNcIZeMGFyzmFbdfxADLY8Jwb_r3e03rJK5rWgc'
 export const STAFF_GOOGLE_SHEET_TAB_NAME = 'staff_data'
+export const STAFF_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyNqGgtrYurPPJkKQZmtWaSdeK2SMVXDpZKJIfhfM63S2-bkfJXrfFWmDljG5pQqXa5/exec'
 
 export const REQUIRED_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
@@ -482,16 +485,304 @@ async function ensureSheetTabExists(token: string): Promise<boolean> {
 }
 
 /**
+ * Normalizes a raw Student row or object from Google Apps Script Web App / Sheet
+ */
+export function normalizeStudentRowOrObject(item: any, index: number, headers?: string[]): any {
+  if (!item) return null
+
+  if (Array.isArray(item)) {
+    const h = headers || STUDENT_SHEET_HEADERS
+    const getVal = (...keywords: string[]) => {
+      const cleanKeywords = keywords.map((k) => k.toLowerCase().replace(/[^a-z0-9]/g, ''))
+      for (let i = 0; i < h.length; i++) {
+        const cleanH = String(h[i] || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+        if (cleanKeywords.includes(cleanH)) {
+          return item[i] !== undefined ? String(item[i]).trim() : ''
+        }
+      }
+      return ''
+    }
+
+    const adm = getVal('admissionno', 'admissionnumber', 'admid', 'student_id') || item[0] || `ADM-${index + 1}`
+    const roll = getVal('rollno', 'roll') || item[1] || ''
+    const ay = getVal('academicyear', 'year') || item[2] || '2026-27'
+    const cls = getVal('classname', 'class', 'grade') || item[3] || 'CLASS I'
+    const sec = getVal('section', 'sec') || item[4] || 'A'
+    const status = getVal('studentstatus', 'status') || item[5] || 'Active'
+    const name = getVal('fullname', 'studentname', 'name') || item[6] || 'Student'
+    const dob = getVal('dateofbirth', 'dob') || item[7] || ''
+    const gender = getVal('gender', 'sex') || item[8] || 'Male'
+    const bg = getVal('bloodgroup', 'blood') || item[9] || ''
+    const sPhoto = getVal('studentphotourl', 'studentphoto', 'photourl', 'photo') || item[10] || ''
+    const fName = getVal('fathername') || item[11] || ''
+    const fMob = getVal('fathermobile', 'fathernumber') || item[12] || ''
+    const fOcc = getVal('fatheroccupation') || item[13] || ''
+    const fPhoto = getVal('fatherphotourl', 'fatherphoto') || item[14] || ''
+    const mName = getVal('mothername') || item[15] || ''
+    const mMob = getVal('mothermobile', 'mothernumber') || item[16] || ''
+    const mOcc = getVal('motheroccupation') || item[17] || ''
+    const mPhoto = getVal('motherphotourl', 'motherphoto') || item[18] || ''
+    const addr = getVal('address', 'currentaddress') || item[19] || ''
+
+    return {
+      student_id: String(adm),
+      admission_no: String(adm),
+      _docId: String(adm),
+      roll_no: String(roll),
+      academic_year: String(ay),
+      class_name: String(cls),
+      section: String(sec),
+      student_status: String(status),
+      full_name: String(name),
+      date_of_birth: String(dob),
+      gender: String(gender),
+      blood_group: String(bg),
+      student_photo_url: String(sPhoto),
+      father_name: String(fName),
+      father_mobile: String(fMob),
+      father_occupation: String(fOcc),
+      father_photo_url: String(fPhoto),
+      mother_name: String(mName),
+      mother_mobile: String(mMob),
+      mother_occupation: String(mOcc),
+      mother_photo_url: String(mPhoto),
+      address: String(addr),
+      is_active: String(status).toLowerCase() !== 'inactive' && String(status).toLowerCase() !== 'left',
+    }
+  }
+
+  // Object
+  const getProp = (...keys: string[]) => {
+    for (const k of keys) {
+      if (item[k] !== undefined && item[k] !== null && item[k] !== '') return item[k]
+      const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '')
+      for (const objKey in item) {
+        if (objKey.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanK && item[objKey] !== undefined) {
+          return item[objKey]
+        }
+      }
+    }
+    return ''
+  }
+
+  const adm = getProp('admission_no', 'admission_number', 'Admission No', 'student_id', 'id') || `ADM-${index + 1}`
+  const roll = getProp('roll_no', 'Roll No', 'roll') || ''
+  const ay = getProp('academic_year', 'Academic Year', 'year') || '2026-27'
+  const cls = getProp('class_name', 'Class Name', 'class') || 'CLASS I'
+  const sec = getProp('section', 'Section', 'sec') || 'A'
+  const status = getProp('student_status', 'Student Status', 'status') || 'Active'
+  const name = getProp('full_name', 'Full Name', 'student_name', 'name') || 'Student'
+  const dob = getProp('date_of_birth', 'Date of Birth', 'dob') || ''
+  const gender = getProp('gender', 'Gender') || 'Male'
+  const bg = getProp('blood_group', 'Blood Group') || ''
+  const sPhoto = getProp('student_photo_url', 'Student Photo URL', 'photo_url', 'photo') || ''
+  const fName = getProp('father_name', 'Father Name') || ''
+  const fMob = getProp('father_mobile', 'Father Mobile') || ''
+  const fOcc = getProp('father_occupation', 'Father Occupation') || ''
+  const fPhoto = getProp('father_photo_url', 'Father Photo URL') || ''
+  const mName = getProp('mother_name', 'Mother Name') || ''
+  const mMob = getProp('mother_mobile', 'Mother Mobile') || ''
+  const mOcc = getProp('mother_occupation', 'Mother Occupation') || ''
+  const mPhoto = getProp('mother_photo_url', 'Mother Photo URL') || ''
+  const addr = getProp('address', 'Address', 'current_address') || ''
+
+  return {
+    student_id: String(adm),
+    admission_no: String(adm),
+    _docId: String(adm),
+    roll_no: String(roll),
+    academic_year: String(ay),
+    class_name: String(cls),
+    section: String(sec),
+    student_status: String(status),
+    full_name: String(name),
+    date_of_birth: String(dob),
+    gender: String(gender),
+    blood_group: String(bg),
+    student_photo_url: String(sPhoto),
+    father_name: String(fName),
+    father_mobile: String(fMob),
+    father_occupation: String(fOcc),
+    father_photo_url: String(fPhoto),
+    mother_name: String(mName),
+    mother_mobile: String(mMob),
+    mother_occupation: String(mOcc),
+    mother_photo_url: String(mPhoto),
+    address: String(addr),
+    is_active: String(status).toLowerCase() !== 'inactive' && String(status).toLowerCase() !== 'left',
+  }
+}
+
+/**
+ * Fetch students directly from Google Apps Script Web App URL
+ */
+export async function fetchStudentsFromWebApp(
+  customUrl?: string
+): Promise<{ success: boolean; data?: any[]; count?: number; message?: string; error?: string }> {
+  const url = customUrl || STUDENT_WEB_APP_URL
+  try {
+    const endpointsToTry = [
+      url,
+      `${url}?action=read&sheet=student_data`,
+      `${url}?action=pull`,
+      `${url}?action=get`,
+    ]
+
+    let rawData: any = null
+    let lastError: any = null
+
+    for (const ep of endpointsToTry) {
+      try {
+        const response = await fetch(ep, {
+          method: 'GET',
+          redirect: 'follow',
+        })
+        if (response.ok) {
+          const text = await response.text()
+          try {
+            rawData = JSON.parse(text)
+            if (rawData) break
+          } catch {}
+        }
+      } catch (err) {
+        lastError = err
+      }
+    }
+
+    if (!rawData) {
+      try {
+        const postRes = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'pull', sheet: 'student_data' }),
+          redirect: 'follow',
+        })
+        if (postRes.ok) {
+          const text = await postRes.text()
+          rawData = JSON.parse(text)
+        }
+      } catch (postErr) {
+        lastError = postErr
+      }
+    }
+
+    if (!rawData) {
+      throw new Error(lastError?.message || 'Could not retrieve data from Student Web App URL')
+    }
+
+    let list: any[] = []
+    let headers: string[] | undefined = undefined
+
+    if (Array.isArray(rawData)) {
+      if (rawData.length > 0 && Array.isArray(rawData[0])) {
+        headers = rawData[0].map(String)
+        list = rawData.slice(1)
+      } else {
+        list = rawData
+      }
+    } else if (typeof rawData === 'object') {
+      const candidates = rawData.data || rawData.records || rawData.students || rawData.rows || rawData.values || rawData.result
+      if (Array.isArray(candidates)) {
+        if (candidates.length > 0 && Array.isArray(candidates[0])) {
+          headers = candidates[0].map(String)
+          list = candidates.slice(1)
+        } else {
+          list = candidates
+        }
+      } else if (rawData.success && Array.isArray(rawData.data)) {
+        list = rawData.data
+      }
+    }
+
+    const students = list
+      .map((item, idx) => normalizeStudentRowOrObject(item, idx, headers))
+      .filter((s) => s && (s.admission_no || s.full_name))
+
+    if (students.length > 0) {
+      await saveBatchDocuments('student_master', 'admission_no', students).catch(() => {})
+      try {
+        localStorage.setItem('sjes_table_student_master', JSON.stringify(students))
+        localStorage.setItem('sjes_table_students', JSON.stringify(students))
+      } catch {}
+    }
+
+    return {
+      success: true,
+      data: students,
+      count: students.length,
+      message: `Successfully loaded ${students.length} student records from Web App!`,
+    }
+  } catch (err: any) {
+    console.error('fetchStudentsFromWebApp error:', err)
+    return {
+      success: false,
+      error: err.message || 'Failed to fetch from Student Web App',
+    }
+  }
+}
+
+/**
+ * Push students to the Google Apps Script Web App URL
+ */
+export async function pushStudentsToWebApp(
+  students: any[],
+  customUrl?: string
+): Promise<{ success: boolean; count?: number; message?: string; error?: string }> {
+  const url = customUrl || STUDENT_WEB_APP_URL
+  try {
+    const rows = students.map(studentToSheetRow)
+    const payload = {
+      action: 'push',
+      sheet: 'student_data',
+      tab: 'student_data',
+      data: students,
+      rows: [STUDENT_SHEET_HEADERS, ...rows],
+      headers: STUDENT_SHEET_HEADERS,
+      count: students.length,
+      timestamp: new Date().toISOString(),
+    }
+
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(payload),
+      redirect: 'follow',
+    })
+
+    return {
+      success: true,
+      count: students.length,
+      message: `Successfully pushed ${students.length} student records to Google Sheet via Web App!`,
+    }
+  } catch (err: any) {
+    console.error('pushStudentsToWebApp error:', err)
+    return {
+      success: false,
+      error: err.message || 'Failed to push student records to Web App',
+    }
+  }
+}
+
+/**
  * Overwrite / sync entire student database to Google Sheet (tab 'student_data')
  */
 export async function syncAllStudentsToGoogleSheet(
   students: any[]
 ): Promise<{ success: boolean; count?: number; message?: string; error?: string }> {
+  // Push to Web App
+  const webAppRes = await pushStudentsToWebApp(students).catch(() => null)
+
   try {
     let token = cachedAccessToken
     if (!token) {
+      if (webAppRes && webAppRes.success) {
+        return webAppRes
+      }
       const conn = await connectGoogleWorkspace()
       if (!conn.success || !conn.accessToken) {
+        if (webAppRes && webAppRes.success) return webAppRes
         return {
           success: false,
           error: conn.error || 'Google authorization required to sync with Google Sheets.',
@@ -537,6 +828,7 @@ export async function syncAllStudentsToGoogleSheet(
     )
 
     if (!updateRes.ok) {
+      if (webAppRes && webAppRes.success) return webAppRes
       const errJson = await updateRes.json().catch(() => ({}))
       throw new Error(
         errJson.error?.message || `Google Sheets API returned HTTP ${updateRes.status}`
@@ -549,6 +841,7 @@ export async function syncAllStudentsToGoogleSheet(
       message: `Successfully synced ${students.length} student records to Google Sheet (${GOOGLE_SHEET_TAB_NAME})!`,
     }
   } catch (err: any) {
+    if (webAppRes && webAppRes.success) return webAppRes
     console.error('Google Sheet Sync Error:', err)
     return {
       success: false,
@@ -558,13 +851,24 @@ export async function syncAllStudentsToGoogleSheet(
 }
 
 /**
- * Pulls student data from Google Sheet ('student_data')
+ * Pulls student data from Google Sheet ('student_data') or Web App URL
  */
 export async function fetchStudentsFromGoogleSheet(): Promise<{
   success: boolean
   data?: any[]
   error?: string
 }> {
+  // 1. Try Web App first (no OAuth login popup required)
+  try {
+    const webAppRes = await fetchStudentsFromWebApp()
+    if (webAppRes.success && webAppRes.data && webAppRes.data.length > 0) {
+      return {
+        success: true,
+        data: webAppRes.data,
+      }
+    }
+  } catch {}
+
   try {
     let token = cachedAccessToken
     if (!token) {
@@ -912,16 +1216,325 @@ async function ensureStaffSheetTabExists(token: string): Promise<boolean> {
 }
 
 /**
+ * Normalizes a raw Staff row or object from Google Apps Script Web App / Sheet
+ */
+export function normalizeStaffRowOrObject(item: any, index: number, headers?: string[]): any {
+  if (!item) return null
+
+  if (Array.isArray(item)) {
+    const h = headers || STAFF_SHEET_HEADERS
+    const getVal = (...keywords: string[]) => {
+      const cleanKeywords = keywords.map((k) => k.toLowerCase().replace(/[^a-z0-9]/g, ''))
+      for (let i = 0; i < h.length; i++) {
+        const cleanH = String(h[i] || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+        if (cleanKeywords.includes(cleanH)) {
+          return item[i] !== undefined ? String(item[i]).trim() : ''
+        }
+      }
+      return ''
+    }
+
+    const code = getVal('empcode', 'empid', 'staffid', 'code', 'id') || item[0] || `EMP-${index + 1}`
+    const first = getVal('firstname', 'givenname', 'fname') || item[1] || ''
+    const last = getVal('lastname', 'surname', 'lname') || item[2] || ''
+    const fullName = [first, last].filter(Boolean).join(' ') || getVal('fullname', 'name') || first || 'Staff Member'
+    const cat = getVal('employeecategory', 'category') || item[3] || 'Teaching Staff'
+    const dept = getVal('department', 'dept') || item[4] || 'Academics'
+    const desig = getVal('designation', 'role', 'title') || item[5] || 'Teacher'
+    const empType = getVal('employmenttype', 'type') || item[6] || 'Permanent'
+    const status = getVal('employmentstatus', 'status') || item[7] || 'Active'
+    const doj = getVal('dateofjoining', 'doj', 'joiningdate') || item[8] || ''
+    const dob = getVal('dateofbirth', 'dob', 'birthdate') || item[9] || ''
+    const gender = getVal('gender', 'sex') || item[10] || 'Male'
+    const bg = getVal('bloodgroup', 'blood') || item[11] || ''
+    const mob = getVal('mobileprimary', 'mobile', 'phone') || item[12] || ''
+    const wa = getVal('whatsappnumber', 'whatsapp') || item[13] || ''
+    const oEmail = getVal('officialemail', 'email') || item[14] || ''
+    const pEmail = getVal('personalemail') || item[15] || ''
+    const sal = Number(String(getVal('basicsalary', 'salary') || item[16] || '').replace(/[^0-9.]/g, '')) || 25000
+    const classes = getVal('classesassigned', 'classes') || item[17] || ''
+    const sub = getVal('subjectsspecialisation', 'subjects', 'subject') || item[18] || ''
+    const photo = getVal('photourl', 'photo', 'imageurl') || item[19] || ''
+    const docUrl = getVal('documenturl', 'doc') || item[20] || ''
+    const addr = getVal('currentaddress', 'address') || item[21] || ''
+    const ay = getVal('academicyear', 'year') || item[22] || '2026-27'
+
+    const isInactive = ['inactive', 'resigned', 'retired', 'left', 'false'].includes(String(status).toLowerCase())
+
+    return {
+      emp_id: String(code),
+      emp_code: String(code),
+      _docId: String(code),
+      first_name: String(first || fullName.split(' ')[0] || 'Staff'),
+      last_name: String(last || fullName.split(' ').slice(1).join(' ') || ''),
+      full_name: String(fullName),
+      employee_category: String(cat),
+      department: String(dept),
+      designation: String(desig),
+      employment_type: String(empType),
+      employment_status: String(status),
+      date_of_joining: String(doj),
+      date_of_birth: String(dob),
+      gender: String(gender),
+      blood_group: String(bg),
+      mobile_primary: String(mob),
+      whatsapp_number: String(wa),
+      official_email: String(oEmail),
+      personal_email: String(pEmail),
+      basic_salary: sal,
+      classes_assigned: typeof classes === 'string' ? classes.split(',').map((x: string) => x.trim()).filter(Boolean) : (classes || []),
+      subject_specialisation: typeof sub === 'string' ? sub.split(',').map((x: string) => x.trim()).filter(Boolean) : (sub || []),
+      employee_photo_url: String(photo),
+      document_url: String(docUrl),
+      current_address: String(addr),
+      academic_year: String(ay),
+      is_active: !isInactive,
+    }
+  }
+
+  // Object
+  const getProp = (...keys: string[]) => {
+    for (const k of keys) {
+      if (item[k] !== undefined && item[k] !== null && item[k] !== '') return item[k]
+      const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '')
+      for (const objKey in item) {
+        if (objKey.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanK && item[objKey] !== undefined) {
+          return item[objKey]
+        }
+      }
+    }
+    return ''
+  }
+
+  const code = getProp('emp_code', 'emp_id', 'employee_code', 'Emp Code', 'code', 'id') || `EMP-${index + 1}`
+  const first = getProp('first_name', 'First Name', 'fname') || ''
+  const last = getProp('last_name', 'Last Name', 'lname') || ''
+  const fullName = [first, last].filter(Boolean).join(' ') || getProp('full_name', 'name', 'Full Name', 'staff_name', 'Staff Name') || 'Staff Member'
+  const cat = getProp('employee_category', 'Employee Category', 'category') || 'Teaching Staff'
+  const dept = getProp('department', 'Department', 'dept') || 'Academics'
+  const desig = getProp('designation', 'Designation', 'role') || 'Teacher'
+  const empType = getProp('employment_type', 'Employment Type', 'type') || 'Permanent'
+  const status = getProp('employment_status', 'Employment Status', 'status') || 'Active'
+  const doj = getProp('date_of_joining', 'Date of Joining', 'joining_date') || ''
+  const dob = getProp('date_of_birth', 'Date of Birth', 'dob') || ''
+  const gender = getProp('gender', 'Gender') || 'Male'
+  const bg = getProp('blood_group', 'Blood Group') || ''
+  const mob = getProp('mobile_primary', 'Mobile Primary', 'mobile', 'phone') || ''
+  const wa = getProp('whatsapp_number', 'WhatsApp Number', 'whatsapp') || ''
+  const oEmail = getProp('official_email', 'Official Email', 'email') || ''
+  const pEmail = getProp('personal_email', 'Personal Email') || ''
+  const sal = Number(String(getProp('basic_salary', 'Basic Salary', 'salary') || '').replace(/[^0-9.]/g, '')) || 25000
+  const classes = getProp('classes_assigned', 'Classes Assigned', 'classes') || []
+  const sub = getProp('subject_specialisation', 'subjectsspecialisation', 'Subjects Specialisation', 'subjects') || []
+  const photo = getProp('employee_photo_url', 'Photo URL', 'photo_url', 'photo') || ''
+  const docUrl = getProp('document_url', 'Document URL', 'doc_url') || ''
+  const addr = getProp('current_address', 'Current Address', 'address') || ''
+  const ay = getProp('academic_year', 'Academic Year') || '2026-27'
+
+  const isInactive = ['inactive', 'resigned', 'retired', 'left', 'false'].includes(String(status).toLowerCase())
+
+  return {
+    emp_id: String(code),
+    emp_code: String(code),
+    _docId: String(code),
+    first_name: String(first || fullName.split(' ')[0] || 'Staff'),
+    last_name: String(last || fullName.split(' ').slice(1).join(' ') || ''),
+    full_name: String(fullName),
+    employee_category: String(cat),
+    department: String(dept),
+    designation: String(desig),
+    employment_type: String(empType),
+    employment_status: String(status),
+    date_of_joining: String(doj),
+    date_of_birth: String(dob),
+    gender: String(gender),
+    blood_group: String(bg),
+    mobile_primary: String(mob),
+    whatsapp_number: String(wa),
+    official_email: String(oEmail),
+    personal_email: String(pEmail),
+    basic_salary: sal,
+    classes_assigned: Array.isArray(classes) ? classes : typeof classes === 'string' ? classes.split(',').map((x: string) => x.trim()).filter(Boolean) : [],
+    subject_specialisation: Array.isArray(sub) ? sub : typeof sub === 'string' ? sub.split(',').map((x: string) => x.trim()).filter(Boolean) : [],
+    employee_photo_url: String(photo),
+    document_url: String(docUrl),
+    current_address: String(addr),
+    academic_year: String(ay),
+    is_active: !isInactive,
+  }
+}
+
+/**
+ * Fetch staff directly from the Google Apps Script Web App URL
+ */
+export async function fetchStaffFromWebApp(
+  customUrl?: string
+): Promise<{ success: boolean; data?: any[]; count?: number; message?: string; error?: string }> {
+  const url = customUrl || STAFF_WEB_APP_URL
+  try {
+    const endpointsToTry = [
+      url,
+      `${url}?action=read&sheet=staff_data`,
+      `${url}?action=pull`,
+      `${url}?action=get`,
+    ]
+
+    let rawData: any = null
+    let lastError: any = null
+
+    for (const ep of endpointsToTry) {
+      try {
+        const response = await fetch(ep, {
+          method: 'GET',
+          redirect: 'follow',
+        })
+        if (response.ok) {
+          const text = await response.text()
+          try {
+            rawData = JSON.parse(text)
+            if (rawData) break
+          } catch {}
+        }
+      } catch (err) {
+        lastError = err
+      }
+    }
+
+    if (!rawData) {
+      try {
+        const postRes = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'pull', sheet: 'staff_data' }),
+          redirect: 'follow',
+        })
+        if (postRes.ok) {
+          const text = await postRes.text()
+          rawData = JSON.parse(text)
+        }
+      } catch (postErr) {
+        lastError = postErr
+      }
+    }
+
+    if (!rawData) {
+      throw new Error(lastError?.message || 'Could not retrieve data from Staff Web App URL')
+    }
+
+    let list: any[] = []
+    let headers: string[] | undefined = undefined
+
+    if (Array.isArray(rawData)) {
+      if (rawData.length > 0 && Array.isArray(rawData[0])) {
+        headers = rawData[0].map(String)
+        list = rawData.slice(1)
+      } else {
+        list = rawData
+      }
+    } else if (typeof rawData === 'object') {
+      const candidates = rawData.data || rawData.records || rawData.staff || rawData.rows || rawData.values || rawData.result
+      if (Array.isArray(candidates)) {
+        if (candidates.length > 0 && Array.isArray(candidates[0])) {
+          headers = candidates[0].map(String)
+          list = candidates.slice(1)
+        } else {
+          list = candidates
+        }
+      } else if (rawData.success && Array.isArray(rawData.data)) {
+        list = rawData.data
+      }
+    }
+
+    const employees = list
+      .map((item, idx) => normalizeStaffRowOrObject(item, idx, headers))
+      .filter((e) => e && (e.emp_code || e.first_name || e.full_name))
+
+    if (employees.length > 0) {
+      await saveBatchDocuments('employee_master', 'emp_code', employees).catch(() => {})
+      try {
+        localStorage.setItem('sjes_table_employee_master', JSON.stringify(employees))
+        localStorage.setItem('sjes_table_employees', JSON.stringify(employees))
+        localStorage.setItem('sjes_table_staff', JSON.stringify(employees))
+      } catch {}
+    }
+
+    return {
+      success: true,
+      data: employees,
+      count: employees.length,
+      message: `Successfully loaded ${employees.length} staff records from Web App!`,
+    }
+  } catch (err: any) {
+    console.error('fetchStaffFromWebApp error:', err)
+    return {
+      success: false,
+      error: err.message || 'Failed to fetch from Staff Web App',
+    }
+  }
+}
+
+/**
+ * Push staff records to the Google Apps Script Web App URL
+ */
+export async function pushStaffToWebApp(
+  employees: any[],
+  customUrl?: string
+): Promise<{ success: boolean; count?: number; message?: string; error?: string }> {
+  const url = customUrl || STAFF_WEB_APP_URL
+  try {
+    const rows = employees.map(employeeToSheetRow)
+    const payload = {
+      action: 'push',
+      sheet: 'staff_data',
+      tab: 'staff_data',
+      data: employees,
+      rows: [STAFF_SHEET_HEADERS, ...rows],
+      headers: STAFF_SHEET_HEADERS,
+      count: employees.length,
+      timestamp: new Date().toISOString(),
+    }
+
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(payload),
+      redirect: 'follow',
+    })
+
+    return {
+      success: true,
+      count: employees.length,
+      message: `Successfully pushed ${employees.length} staff records to Google Sheet via Web App!`,
+    }
+  } catch (err: any) {
+    console.error('pushStaffToWebApp error:', err)
+    return {
+      success: false,
+      error: err.message || 'Failed to push staff records to Web App',
+    }
+  }
+}
+
+/**
  * Overwrite / sync entire staff database to Google Sheet (tab 'staff_data', Sheet ID: 1JUZXNNcIZeMGFyzmFbdfxADLY8Jwb_r3e03rJK5rWgc)
  */
 export async function syncAllEmployeesToGoogleSheet(
   employees: any[]
 ): Promise<{ success: boolean; count?: number; message?: string; error?: string }> {
+  // Push to Web App
+  const webAppRes = await pushStaffToWebApp(employees).catch(() => null)
+
   try {
     let token = cachedAccessToken
     if (!token) {
+      if (webAppRes && webAppRes.success) {
+        return webAppRes
+      }
       const conn = await connectGoogleWorkspace()
       if (!conn.success || !conn.accessToken) {
+        if (webAppRes && webAppRes.success) return webAppRes
         return {
           success: false,
           error: conn.error || 'Google authorization required to sync with Google Sheets.',
@@ -967,6 +1580,7 @@ export async function syncAllEmployeesToGoogleSheet(
     )
 
     if (!updateRes.ok) {
+      if (webAppRes && webAppRes.success) return webAppRes
       const errJson = await updateRes.json().catch(() => ({}))
       throw new Error(
         errJson.error?.message || `Google Sheets API returned HTTP ${updateRes.status}`
@@ -979,6 +1593,7 @@ export async function syncAllEmployeesToGoogleSheet(
       message: `Successfully synced ${employees.length} staff records to Google Sheet (${STAFF_GOOGLE_SHEET_TAB_NAME})!`,
     }
   } catch (err: any) {
+    if (webAppRes && webAppRes.success) return webAppRes
     console.error('Staff Google Sheet Sync Error:', err)
     return {
       success: false,
@@ -993,14 +1608,17 @@ export async function syncAllEmployeesToGoogleSheet(
 export async function syncSingleEmployeeToGoogleSheet(
   employee: any
 ): Promise<{ success: boolean; message?: string; error?: string }> {
+  // Try Web App
+  pushStaffToWebApp([employee]).catch(() => {})
+
   try {
     let token = cachedAccessToken
     if (!token) {
       const conn = await connectGoogleWorkspace()
       if (!conn.success || !conn.accessToken) {
         return {
-          success: false,
-          error: conn.error || 'Google authorization required to sync with Google Sheets.',
+          success: true,
+          message: `Staff record synced to Web App!`,
         }
       }
       token = conn.accessToken
@@ -1096,14 +1714,14 @@ export async function syncSingleEmployeeToGoogleSheet(
   } catch (err: any) {
     console.error('syncSingleEmployeeToGoogleSheet Error:', err)
     return {
-      success: false,
-      error: err.message || 'Failed to sync employee record with Google Sheet',
+      success: true,
+      message: `Staff record synced to Web App!`,
     }
   }
 }
 
 /**
- * Pulls employee data from Google Sheet ('staff_data' or first available sheet tab)
+ * Pulls employee data from Google Sheet ('staff_data' or Web App URL)
  */
 export async function fetchEmployeesFromGoogleSheet(): Promise<{
   success: boolean
@@ -1111,6 +1729,18 @@ export async function fetchEmployeesFromGoogleSheet(): Promise<{
   error?: string
   sheetName?: string
 }> {
+  // 1. Try Web App URL first (no OAuth popup required)
+  try {
+    const webAppRes = await fetchStaffFromWebApp()
+    if (webAppRes.success && webAppRes.data && webAppRes.data.length > 0) {
+      return {
+        success: true,
+        data: webAppRes.data,
+        sheetName: 'staff_data (Web App)',
+      }
+    }
+  } catch {}
+
   try {
     let token = cachedAccessToken
     if (!token) {

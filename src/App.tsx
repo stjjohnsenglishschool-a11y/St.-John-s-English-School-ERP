@@ -77,6 +77,7 @@ import DigitalVerificationModal, { VerificationData } from "./components/Digital
 import { downloadSampleCsv, sanitizeRecordForTable } from "./lib/csvUtils";
 import { formatImageUrl, handleImageError } from "./lib/imageUtils";
 import { getLeaveSession } from "./lib/leaveSalaryRules";
+import { fetchStaffFromWebApp, fetchStudentsFromWebApp } from "./lib/googleDriveSheets";
 
 type Row = Record<string, unknown>;
 
@@ -383,11 +384,15 @@ function App() {
         "leave_balance",
         "fees_collection",
       ];
-      await Promise.all(collectionsToSync.map((col) => fetchCollectionData(col)));
+      await Promise.all([
+        ...collectionsToSync.map((col) => fetchCollectionData(col)),
+        fetchStaffFromWebApp().catch(() => null),
+        fetchStudentsFromWebApp().catch(() => null),
+      ]);
       if (mod) {
         await refresh();
       }
-      setToast("✓ Live Cloud Sync Complete: All records synchronized with Firebase Firestore!");
+      setToast("✓ Live Cloud Sync Complete: Synchronized with Google Sheets & Firebase Firestore!");
     } catch (e: any) {
       setToast(e?.message || "Sync completed.");
     } finally {
@@ -395,7 +400,7 @@ function App() {
     }
   }, [mod, refresh]);
 
-  // Initial cloud synchronization check on mount
+  // Initial cloud synchronization check on mount (Firestore + Google Web Apps)
   useEffect(() => {
     const initSync = async () => {
       try {
@@ -403,6 +408,8 @@ function App() {
           fetchCollectionData("employee_master"),
           fetchCollectionData("student_master"),
           fetchCollectionData("department_master"),
+          fetchStaffFromWebApp().catch(() => null),
+          fetchStudentsFromWebApp().catch(() => null),
         ]);
       } catch {
         // continue
