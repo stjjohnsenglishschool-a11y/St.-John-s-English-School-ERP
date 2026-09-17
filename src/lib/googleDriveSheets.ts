@@ -742,6 +742,30 @@ export async function pushStudentsToWebApp(
       timestamp: new Date().toISOString(),
     }
 
+    // Direct Google Sheets API v4 write if OAuth token available
+    if (cachedAccessToken) {
+      try {
+        await ensureSheetTabExists(cachedAccessToken)
+        await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/${GOOGLE_SHEET_TAB_NAME}!A1:U${rows.length + 1}?valueInputOption=USER_ENTERED`,
+          {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${cachedAccessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              range: `${GOOGLE_SHEET_TAB_NAME}!A1:U${rows.length + 1}`,
+              majorDimension: 'ROWS',
+              values: [STUDENT_SHEET_HEADERS, ...rows],
+            }),
+          }
+        )
+      } catch (sheetsApiErr) {
+        console.warn('Sheets API direct write warning:', sheetsApiErr)
+      }
+    }
+
     try {
       await fetch(url, {
         method: 'POST',
@@ -766,7 +790,7 @@ export async function pushStudentsToWebApp(
     return {
       success: true,
       count: students.length,
-      message: `Successfully synced ${students.length} student records to Google Sheet via Web App URL!`,
+      message: `Successfully synced ${students.length} student records to Google Sheet!`,
     }
   } catch (err: any) {
     console.error('pushStudentsToWebApp error:', err)
@@ -1316,6 +1340,30 @@ export async function pushStaffToWebApp(
       timestamp: new Date().toISOString(),
     }
 
+    // Direct Google Sheets API v4 write if OAuth token available
+    if (cachedAccessToken) {
+      try {
+        await ensureStaffSheetTabExists(cachedAccessToken)
+        await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/${STAFF_GOOGLE_SHEET_TAB_NAME}!A1:X${rows.length + 1}?valueInputOption=USER_ENTERED`,
+          {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${cachedAccessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              range: `${STAFF_GOOGLE_SHEET_TAB_NAME}!A1:X${rows.length + 1}`,
+              majorDimension: 'ROWS',
+              values: [STAFF_SHEET_HEADERS, ...rows],
+            }),
+          }
+        )
+      } catch (sheetsApiErr) {
+        console.warn('Staff Sheets API direct write warning:', sheetsApiErr)
+      }
+    }
+
     try {
       await fetch(url, {
         method: 'POST',
@@ -1340,7 +1388,7 @@ export async function pushStaffToWebApp(
     return {
       success: true,
       count: employees.length,
-      message: `Successfully synced ${employees.length} staff records to Google Sheet via Web App URL!`,
+      message: `Successfully synced ${employees.length} staff records to Google Sheet!`,
     }
   } catch (err: any) {
     console.error('pushStaffToWebApp error:', err)
