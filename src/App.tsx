@@ -36,6 +36,7 @@ import {
   RefreshCw,
   Search,
   Shield,
+  ShieldCheck,
   Trash2,
   Upload,
   UserRoundCheck,
@@ -66,6 +67,7 @@ import StudentAttendanceStudio from "./components/StudentAttendanceStudio";
 import EmployeeAttendanceStudio from "./components/EmployeeAttendanceStudio";
 import FeeReceiptModal from "./components/FeeReceiptModal";
 import SalarySlipModal from "./components/SalarySlipModal";
+import LeaveApprovalModal from "./components/LeaveApprovalModal";
 import LetterPrintModal from "./components/LetterPrintModal";
 import StudentMasterStudio from "./components/StudentMasterStudio";
 import EmployeeMasterStudio from "./components/EmployeeMasterStudio";
@@ -73,6 +75,7 @@ import CsvImportModal from "./components/CsvImportModal";
 import DigitalVerificationModal, { VerificationData } from "./components/DigitalVerificationModal";
 import { downloadSampleCsv, sanitizeRecordForTable } from "./lib/csvUtils";
 import { formatImageUrl, handleImageError } from "./lib/imageUtils";
+import { getLeaveSession } from "./lib/leaveSalaryRules";
 
 type Row = Record<string, unknown>;
 
@@ -225,6 +228,7 @@ function App() {
   } | null>(null);
   const [receiptModalRow, setReceiptModalRow] = useState<Row | null>(null);
   const [slipModalRow, setSlipModalRow] = useState<Row | null>(null);
+  const [approvalModalRow, setApprovalModalRow] = useState<Row | null>(null);
   const [letterModal, setLetterModal] = useState<{
     type: "warning" | "offer";
     row: Row;
@@ -987,6 +991,72 @@ function App() {
           />
         ) : (
           <>
+            {mod.table === "leave_application" && (
+              <div
+                style={{
+                  background: "#f0fdf4",
+                  border: "1px solid #bbf7d0",
+                  borderRadius: "10px",
+                  padding: "12px 18px",
+                  marginBottom: "14px",
+                  fontSize: "13px",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "10px",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 800, color: "#166534", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <ShieldCheck size={18} color="#16a34a" />
+                    <span>SJES Leave Accounting Session: {getLeaveSession().sessionName}</span>
+                  </div>
+                  <div style={{ color: "#15803d", fontSize: "12px", marginTop: "3px" }}>
+                    • 6 Months Probation (Probationary → Permanent) • 1 PL Credited on Month 7 milestone • Max 2 PL / Month • Principal approval workflow with LWP salary deduction for rejected absences
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={() => {
+                      setQuery("pending");
+                      setPage(1);
+                    }}
+                    style={{
+                      background: "#dcfce7",
+                      color: "#166534",
+                      border: "1px solid #86efac",
+                      padding: "5px 12px",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Pending Approvals ({rows.filter((r) => String(r.status || "").toLowerCase() === "pending").length})
+                  </button>
+                  <button
+                    onClick={() => {
+                      setQuery("");
+                      setPage(1);
+                    }}
+                    style={{
+                      background: "#fff",
+                      color: "#475569",
+                      border: "1px solid #cbd5e1",
+                      padding: "5px 12px",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    All Records
+                  </button>
+                </div>
+              </div>
+            )}
+
             <PageHeader
               mod={mod}
               total={filtered.length}
@@ -1056,6 +1126,7 @@ function App() {
                 printReceipt={(row) => setReceiptModalRow(row)}
                 printSlip={(row) => setSlipModalRow(row)}
                 printLetter={(type, row) => setLetterModal({ type, row })}
+                onReviewLeave={(row) => setApprovalModalRow(row)}
               />
 
               {/* Pagination Controls */}
@@ -1161,6 +1232,23 @@ function App() {
         <SalarySlipModal
           slip={slipModalRow}
           onClose={() => setSlipModalRow(null)}
+        />
+      )}
+
+      {approvalModalRow && (
+        <LeaveApprovalModal
+          leaveApp={approvalModalRow}
+          employee={
+            rows.find(
+              (r) =>
+                (approvalModalRow.emp_id && (r.emp_id === approvalModalRow.emp_id || r.emp_code === approvalModalRow.emp_id)) ||
+                (approvalModalRow.employee_name && r.employee_name === approvalModalRow.employee_name)
+            ) || {}
+          }
+          allLeaves={rows}
+          onClose={() => setApprovalModalRow(null)}
+          onSuccess={() => refresh()}
+          setToast={setToast}
         />
       )}
 
@@ -1284,6 +1372,7 @@ function DataTable({
   printReceipt,
   printSlip,
   printLetter,
+  onReviewLeave,
 }: {
   mod: (typeof modules)[string];
   rows: Row[];
@@ -1297,6 +1386,7 @@ function DataTable({
   printReceipt?: (r: Row) => void;
   printSlip?: (r: Row) => void;
   printLetter?: (type: "warning" | "offer", r: Row) => void;
+  onReviewLeave?: (r: Row) => void;
 }) {
   if (loading)
     return (
@@ -1454,6 +1544,28 @@ function DataTable({
               ))}
               <td>
                 <div className="row-actions" style={{ justifyContent: "flex-end" }}>
+                  {mod.table === "leave_application" && onReviewLeave && (
+                    <button
+                      onClick={() => onReviewLeave(r)}
+                      title="Principal Review & Leave Approval"
+                      style={{
+                        color: "#0f3661",
+                        background: "#eff6ff",
+                        border: "1px solid #bfdbfe",
+                        padding: "3px 8px",
+                        borderRadius: "5px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <ShieldCheck size={13} color="#1d4ed8" />
+                      <span>Review</span>
+                    </button>
+                  )}
                   {mod.table === "fees_collection" && printReceipt && (
                     <button
                       onClick={() => printReceipt(r)}
@@ -1578,11 +1690,18 @@ function RecordModal({
         const gross = basic + hra + da + otherA;
         next.gross_salary = gross;
 
+        const lwpDays = Number(key === "lwp_days" ? v : next.lwp_days) || 0;
+        let lwpDed = Number(key === "lwp_deduction" ? v : next.lwp_deduction) || 0;
+        if ((key === "lwp_days" || key === "basic_salary") && lwpDays > 0 && basic > 0) {
+          lwpDed = Math.round(lwpDays * (basic / 30));
+          next.lwp_deduction = lwpDed;
+        }
+
         const pf = Number(key === "pf_deduction" ? v : next.pf_deduction) || 0;
         const esi = Number(key === "esi_deduction" ? v : next.esi_deduction) || 0;
         const tds = Number(key === "tds" ? v : next.tds) || 0;
         const otherD = Number(key === "other_deductions" ? v : next.other_deductions) || 0;
-        const deductions = pf + esi + tds + otherD;
+        const deductions = pf + esi + tds + lwpDed + otherD;
         next.total_deductions = deductions;
         next.net_salary = Math.max(0, gross - deductions);
       }

@@ -27,6 +27,7 @@ import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } 
 import { modules } from '../modules'
 import { downloadSampleCsv } from '../lib/csvUtils'
 import { formatImageUrl, handleImageError } from '../lib/imageUtils'
+import { getEmployeeProbationStatus } from '../lib/leaveSalaryRules'
 import CsvImportModal from './CsvImportModal'
 
 type Employee = {
@@ -647,15 +648,32 @@ export default function EmployeeMasterStudio({
                     </a>
                   </td>
                   <td>
-                    <span
-                      className={`status-pill ${
-                        emp.employment_status === 'Active' || emp.is_active
-                          ? 'status-active'
-                          : 'status-inactive'
-                      }`}
-                    >
-                      {emp.employment_status || (emp.is_active ? 'Active' : 'Inactive')}
-                    </span>
+                    {(() => {
+                      const prob = getEmployeeProbationStatus(emp.date_of_joining);
+                      const isProb = prob.status === 'Probationary';
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              background: isProb ? '#fef3c7' : '#dcfce7',
+                              color: isProb ? '#92400e' : '#166534',
+                              border: `1px solid ${isProb ? '#fde68a' : '#bbf7d0'}`,
+                              textAlign: 'center',
+                            }}
+                          >
+                            {prob.status}
+                          </span>
+                          <span style={{ fontSize: '10px', color: '#64748b' }}>
+                            {prob.completedMonths}m completed
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td>
                     <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
@@ -1178,6 +1196,40 @@ export default function EmployeeMasterStudio({
                       />
                     </label>
                   </div>
+
+                  {formState.date_of_joining && (() => {
+                    const prob = getEmployeeProbationStatus(formState.date_of_joining);
+                    return (
+                      <div
+                        style={{
+                          background: prob.isPermanent ? '#f0fdf4' : '#fffbeb',
+                          border: `1px solid ${prob.isPermanent ? '#bbf7d0' : '#fde68a'}`,
+                          borderRadius: '8px',
+                          padding: '10px 14px',
+                          fontSize: '12px',
+                          marginTop: '8px',
+                          color: prob.isPermanent ? '#166534' : '#92400e',
+                        }}
+                      >
+                        <b>SJES Leave & Employment Status Policy:</b>
+                        <div style={{ marginTop: '2px' }}>
+                          Status: <b>{prob.status}</b> ({prob.completedMonths} months completed since {formState.date_of_joining}).
+                          {prob.isPermanent ? (
+                            <span> • Completed 6 months probation period.</span>
+                          ) : (
+                            <span> • On probation until {prob.probationEndDate} (6 months from joining).</span>
+                          )}
+                        </div>
+                        <div style={{ marginTop: '2px', fontSize: '11px' }}>
+                          {prob.hasCompletedSevenMonths ? (
+                            <span>✓ Initial 1 PL (Privilege Leave) credited after 7 months milestone ({prob.initialPLEffectiveDate}). Duplicate crediting strictly prevented.</span>
+                          ) : (
+                            <span>• Initial 1 PL will be automatically credited after completing 7 months ({prob.initialPLEffectiveDate}).</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 

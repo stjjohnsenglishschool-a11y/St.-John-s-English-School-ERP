@@ -475,6 +475,8 @@ export const modules: Record<string, Module> = {
       f('pf_deduction', 'PF deduction', 'number'),
       f('esi_deduction', 'ESI deduction', 'number'),
       f('tds', 'TDS', 'number'),
+      f('lwp_days', 'LWP days', 'number'),
+      f('lwp_deduction', 'Leave Without Pay (LWP) deduction', 'number'),
       f('other_deductions', 'Other deductions', 'number'),
       f('total_deductions', 'Total deductions', 'number'),
       f('net_salary', 'Net salary', 'number'),
@@ -482,7 +484,7 @@ export const modules: Record<string, Module> = {
       f('payment_mode', 'Payment mode'),
       f('status', 'Status', 'select', false, ['draft', 'generated', 'paid', 'cancelled']),
     ],
-    columns: ['employee_name', 'month', 'year', 'gross_salary', 'total_deductions', 'net_salary', 'status'],
+    columns: ['employee_name', 'month', 'year', 'gross_salary', 'lwp_deduction', 'total_deductions', 'net_salary', 'status'],
   },
   'leave_application': {
     title: 'leave_application',
@@ -493,7 +495,7 @@ export const modules: Record<string, Module> = {
     fields: [
       rel('emp_id', 'Employee', 'employee_master', 'emp_id', 'emp_code'),
       f('employee_name', 'Employee name'),
-      f('leave_type', 'Leave type', 'select', false, ['Casual', 'Sick', 'Earned', 'Maternity', 'Paternity', 'Unpaid']),
+      f('leave_type', 'Leave type', 'select', false, ['PL (Privilege Leave)', 'Casual', 'Sick', 'Earned', 'Maternity', 'Unpaid']),
       f('from_date', 'From date', 'date'),
       f('to_date', 'To date', 'date'),
       f('total_days', 'Total days', 'number'),
