@@ -68,7 +68,6 @@ export type Student = {
   gender?: string
   blood_group?: string
   student_photo_url?: string
-  mobile_primary?: string
   father_name?: string
   father_mobile?: string
   father_occupation?: string
@@ -162,12 +161,30 @@ export default function StudentMasterStudio({
     })
   }, [])
 
+  // Helper to sanitize student records and strip deprecated/deleted fields
+  const sanitizeStudentRecord = (record: any): Student => {
+    const clean = { ...record }
+    delete clean.gr_number
+    delete clean.house_name
+    delete clean.house
+    delete clean.first_name
+    delete clean.middle_name
+    delete clean.last_name
+    delete clean.mobile_primary
+    delete clean.student_mobile
+    delete clean.student_email
+    delete clean.father_email
+    delete clean.mother_email
+    return clean as Student
+  }
+
   // Load students from database
   const loadStudents = async () => {
     setLoading(true)
     try {
       const data = await fetchCollectionData('student_master')
-      setStudents(data || [])
+      const sanitized = (data || []).map(sanitizeStudentRecord)
+      setStudents(sanitized)
     } catch (err: any) {
       console.warn('Error loading students:', err)
       setToast(err?.message || 'Failed to load students')
@@ -260,10 +277,10 @@ export default function StudentMasterStudio({
         (s.full_name && s.full_name.toLowerCase().includes(q)) ||
         (s.admission_no && s.admission_no.toLowerCase().includes(q)) ||
         (s.roll_no && s.roll_no.toLowerCase().includes(q)) ||
-        (s.mobile_primary && s.mobile_primary.includes(q)) ||
         (s.father_name && s.father_name.toLowerCase().includes(q)) ||
         (s.father_mobile && s.father_mobile.includes(q)) ||
-        (s.mother_name && s.mother_name.toLowerCase().includes(q))
+        (s.mother_name && s.mother_name.toLowerCase().includes(q)) ||
+        (s.mother_mobile && s.mother_mobile.includes(q))
 
       const matchClass = !filterClass || s.class_name === filterClass
       const matchSection = !filterSection || s.section === filterSection
@@ -363,8 +380,9 @@ export default function StudentMasterStudio({
 
     setSubmitting(true)
     try {
+      const sanitized = sanitizeStudentRecord(formState)
       const payload: Record<string, unknown> = {
-        ...formState,
+        ...sanitized,
         roll_no: formState.roll_no ? String(formState.roll_no).trim() : '',
         academic_year: formState.academic_year || getCurrentAcademicYear(),
         student_status: formState.student_status || 'Active',
@@ -447,7 +465,6 @@ export default function StudentMasterStudio({
       `"${String(s.date_of_birth || '').replace(/"/g, '""')}"`,
       `"${String(s.gender || 'Male').replace(/"/g, '""')}"`,
       `"${String(s.blood_group || '').replace(/"/g, '""')}"`,
-      `"${String(s.mobile_primary || '').replace(/"/g, '""')}"`,
       `"${String(s.student_photo_url || '').replace(/"/g, '""')}"`,
       `"${String(s.father_name || '').replace(/"/g, '""')}"`,
       `"${String(s.father_mobile || '').replace(/"/g, '""')}"`,
@@ -460,7 +477,7 @@ export default function StudentMasterStudio({
       `"${String(s.address || '').replace(/"/g, '""')}"`,
     ])
 
-    const csv = [STUDENT_SHEET_HEADERS.slice(0, 21).join(','), ...rows.map((r) => r.join(','))].join('\n')
+    const csv = [STUDENT_SHEET_HEADERS.slice(0, 20).join(','), ...rows.map((r) => r.join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
@@ -471,7 +488,7 @@ export default function StudentMasterStudio({
 
   // Clean Sample CSV Download
   const handleDownloadCleanSample = () => {
-    const headers = STUDENT_SHEET_HEADERS.slice(0, 21)
+    const headers = STUDENT_SHEET_HEADERS.slice(0, 20)
     const sampleRow1 = [
       'ADM-2026-001',
       '1',
@@ -483,7 +500,6 @@ export default function StudentMasterStudio({
       '2016-05-15',
       'Male',
       'A+',
-      '9830112233',
       'https://lh3.googleusercontent.com/d/1sample_student_id',
       'Rajesh Sharma',
       '9876543210',
@@ -887,11 +903,6 @@ export default function StudentMasterStudio({
                     </td>
                     <td>
                       <div style={{ fontWeight: 600, color: '#0f172a' }}>{student.full_name}</div>
-                      {student.mobile_primary && (
-                        <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Phone size={11} /> {student.mobile_primary}
-                        </div>
-                      )}
                     </td>
                     <td>
                       <span
@@ -1217,7 +1228,7 @@ export default function StudentMasterStudio({
                         </label>
                       </div>
 
-                      <div className="form-row-3">
+                      <div className="form-row-2">
                         <label>
                           <span>Gender</span>
                           <select
@@ -1247,16 +1258,6 @@ export default function StudentMasterStudio({
                             <option value="O+">O+</option>
                             <option value="O-">O-</option>
                           </select>
-                        </label>
-                        <label>
-                          <span>Student Mobile</span>
-                          <input
-                            type="tel"
-                            disabled={modalMode === 'view'}
-                            placeholder="Primary mobile"
-                            value={formState.mobile_primary || ''}
-                            onChange={(e) => updateForm('mobile_primary', e.target.value)}
-                          />
                         </label>
                       </div>
                     </div>
@@ -1801,7 +1802,6 @@ const HEADERS = [
   'Date of Birth',
   'Gender',
   'Blood Group',
-  'Student Mobile',
   'Student Photo URL',
   'Father Name',
   'Father Mobile',

@@ -280,7 +280,6 @@ export const STUDENT_SHEET_HEADERS = [
   'Date of Birth',
   'Gender',
   'Blood Group',
-  'Student Mobile',
   'Student Photo URL',
   'Father Name',
   'Father Mobile',
@@ -309,7 +308,6 @@ export function studentToSheetRow(s: any): string[] {
     String(s.date_of_birth || s.dob || ''),
     String(s.gender || ''),
     String(s.blood_group || ''),
-    String(s.mobile_primary || s.student_mobile || s.phone || ''),
     String(s.student_photo_url || ''),
     String(s.father_name || ''),
     String(s.father_mobile || ''),
@@ -516,7 +514,6 @@ export async function fetchStudentsFromGoogleSheet(): Promise<{
     const dobIdx = getIdx('Date of Birth')
     const genIdx = getIdx('Gender')
     const bgIdx = getIdx('Blood Group')
-    const mobIdx = getIdx('Student Mobile')
     const sPhotoIdx = getIdx('Student Photo URL')
     const fNameIdx = getIdx('Father Name')
     const fMobIdx = getIdx('Father Mobile')
@@ -547,17 +544,16 @@ export async function fetchStudentsFromGoogleSheet(): Promise<{
         date_of_birth: row[dobIdx >= 0 ? dobIdx : 7] || '',
         gender: row[genIdx >= 0 ? genIdx : 8] || 'Male',
         blood_group: row[bgIdx >= 0 ? bgIdx : 9] || '',
-        mobile_primary: row[mobIdx >= 0 ? mobIdx : 10] || '',
-        student_photo_url: row[sPhotoIdx >= 0 ? sPhotoIdx : 11] || '',
-        father_name: row[fNameIdx >= 0 ? fNameIdx : 12] || '',
-        father_mobile: row[fMobIdx >= 0 ? fMobIdx : 13] || '',
-        father_occupation: row[fOccIdx >= 0 ? fOccIdx : 14] || '',
-        father_photo_url: row[fPhotoIdx >= 0 ? fPhotoIdx : 15] || '',
-        mother_name: row[mNameIdx >= 0 ? mNameIdx : 16] || '',
-        mother_mobile: row[mMobIdx >= 0 ? mMobIdx : 17] || '',
-        mother_occupation: row[mOccIdx >= 0 ? mOccIdx : 18] || '',
-        mother_photo_url: row[mPhotoIdx >= 0 ? mPhotoIdx : 19] || '',
-        address: row[addrIdx >= 0 ? addrIdx : 20] || '',
+        student_photo_url: row[sPhotoIdx >= 0 ? sPhotoIdx : 10] || '',
+        father_name: row[fNameIdx >= 0 ? fNameIdx : 11] || '',
+        father_mobile: row[fMobIdx >= 0 ? fMobIdx : 12] || '',
+        father_occupation: row[fOccIdx >= 0 ? fOccIdx : 13] || '',
+        father_photo_url: row[fPhotoIdx >= 0 ? fPhotoIdx : 14] || '',
+        mother_name: row[mNameIdx >= 0 ? mNameIdx : 15] || '',
+        mother_mobile: row[mMobIdx >= 0 ? mMobIdx : 16] || '',
+        mother_occupation: row[mOccIdx >= 0 ? mOccIdx : 17] || '',
+        mother_photo_url: row[mPhotoIdx >= 0 ? mPhotoIdx : 18] || '',
+        address: row[addrIdx >= 0 ? addrIdx : 19] || '',
         is_active: true,
       }
       students.push(student)

@@ -214,7 +214,6 @@ export const modules: Record<string, Module> = {
       f('date_of_birth', 'Date of birth', 'date'),
       f('gender', 'Gender', 'select', false, ['Male', 'Female', 'Other']),
       f('blood_group', 'Blood group', 'select', false, ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']),
-      f('mobile_primary', 'Student mobile', 'tel'),
       f('student_photo_url', 'Student photo URL'),
       f('father_name', 'Father name'),
       f('father_mobile', 'Father mobile', 'tel'),
