@@ -33,7 +33,7 @@ import {
   Copy,
   Info,
 } from 'lucide-react'
-import { supabase, logActivity, deleteDocument, saveDocument, saveBatchDocuments, fetchCollectionData, subscribeToCollection } from '../lib/firebase'
+import { supabase, logActivity, deleteDocument, saveDocument, saveBatchDocuments, fetchCollectionData, subscribeToCollection, uploadToFirebaseStorage } from '../lib/firebase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
 import { downloadSampleCsv } from '../lib/csvUtils'
@@ -130,7 +130,7 @@ export default function StudentMasterStudio({
   // Form / Profile Modal State
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view' | null>(null)
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
-  const [activeTab, setActiveTab] = useState<'student' | 'parents' | 'address'>('student')
+  const [activeTab, setActiveTab] = useState<'personal' | 'contact' | 'academic' | 'parents' | 'health'>('personal')
   const [formState, setFormState] = useState<Student>({})
   const [submitting, setSubmitting] = useState(false)
   const [showCsvModal, setShowCsvModal] = useState(false)
@@ -414,21 +414,47 @@ export default function StudentMasterStudio({
   const openModal = (mode: 'create' | 'edit' | 'view', student?: Student) => {
     setModalMode(mode)
     setSelectedStudent(student || null)
-    setActiveTab('student')
+    setActiveTab('personal')
     if (mode === 'create') {
       const year = getCurrentAcademicYear()
+      const admNo = `ADM-${Date.now().toString().slice(-4)}`
       setFormState({
-        admission_no: `ADM-${Date.now().toString().slice(-4)}`,
+        admission_no: admNo,
         academic_year: year,
         class_name: classes[0] || 'CLASS I',
         section: 'A',
-        student_status: 'Active',
+        student_status: 'New Admission',
         gender: 'Male',
-        blood_group: 'A+',
+        blood_group: 'Unknown',
         is_active: true,
+        first_name: '',
+        middle_name: '',
+        last_name: '',
+        full_name: '',
       })
     } else if (student) {
-      setFormState({ ...student })
+      let first = (student as any).first_name || ''
+      let middle = (student as any).middle_name || ''
+      let last = (student as any).last_name || ''
+      if (!first && !last && student.full_name) {
+        const tokens = student.full_name.trim().split(/\s+/)
+        if (tokens.length === 1) {
+          first = tokens[0]
+        } else if (tokens.length === 2) {
+          first = tokens[0]
+          last = tokens[1]
+        } else if (tokens.length >= 3) {
+          first = tokens[0]
+          middle = tokens.slice(1, -1).join(' ')
+          last = tokens[tokens.length - 1]
+        }
+      }
+      setFormState({
+        ...student,
+        first_name: first,
+        middle_name: middle,
+        last_name: last,
+      })
     }
   }
 
@@ -444,6 +470,20 @@ export default function StudentMasterStudio({
       ...prev,
       [key]: value,
     }))
+  }
+
+  // Synchronize first, middle, last name with full_name
+  const handleNameChange = (field: 'first_name' | 'middle_name' | 'last_name', value: string) => {
+    setFormState((prev) => {
+      const updated = { ...prev, [field]: value }
+      const parts = [
+        updated.first_name || '',
+        updated.middle_name || '',
+        updated.last_name || '',
+      ].filter(Boolean)
+      updated.full_name = parts.join(' ')
+      return updated
+    })
   }
 
   // Google Drive Photo Upload Handler
@@ -479,18 +519,60 @@ export default function StudentMasterStudio({
     }
   }
 
+  // Cloud Storage Photo Upload Handler
+  const handleCloudPhotoUpload = async (
+    file: File | null,
+    photoType: 'student' | 'father' | 'mother'
+  ) => {
+    if (!file) return
+    const setLoader =
+      photoType === 'student'
+        ? setUploadingStudentPhoto
+        : photoType === 'father'
+        ? setUploadingFatherPhoto
+        : setUploadingMotherPhoto
+
+    setLoader(true)
+    try {
+      const identifier = formState.admission_no || 'student'
+      const url = await uploadToFirebaseStorage(
+        file,
+        `student_${identifier}_${photoType}.jpg`,
+        'student_photos'
+      )
+      if (photoType === 'student') updateForm('student_photo_url', url)
+      if (photoType === 'father') updateForm('father_photo_url', url)
+      if (photoType === 'mother') updateForm('mother_photo_url', url)
+      setToast(`${photoType === 'student' ? 'Student' : photoType === 'father' ? "Father's" : "Mother's"} photo uploaded to Cloud Storage`)
+    } catch (err: any) {
+      setToast(err.message || 'Photo upload failed')
+    } finally {
+      setLoader(false)
+    }
+  }
+
   // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formState.admission_no || !formState.full_name || !formState.class_name) {
-      setToast('Please fill in Admission No, Full Name, and Class.')
+    const calculatedFullName =
+      formState.full_name?.trim() ||
+      [formState.first_name, formState.middle_name, formState.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .trim()
+
+    if (!formState.admission_no || !calculatedFullName || !formState.class_name) {
+      setToast('Please fill in Admission No, Name, and Class.')
       return
     }
 
     setSubmitting(true)
     try {
-      const sanitized = sanitizeStudentRecord(formState)
+      const sanitized = sanitizeStudentRecord({
+        ...formState,
+        full_name: calculatedFullName,
+      })
       const payload: Record<string, unknown> = {
         ...sanitized,
         roll_no: formState.roll_no ? String(formState.roll_no).trim() : '',
@@ -1237,350 +1319,552 @@ export default function StudentMasterStudio({
       {/* CREATE / EDIT / VIEW STUDENT MODAL */}
       {modalMode && (
         <div className="modal-backdrop">
-          <div className="modal-card" style={{ maxWidth: '850px', width: '95%' }}>
+          <div className="multi-section-modal">
             <div className="modal-header">
               <div>
                 <span className="modal-tag">STUDENT MASTER</span>
                 <h2>
                   {modalMode === 'create'
-                    ? 'New Student Admission'
+                    ? 'Add New Student / Admission'
                     : modalMode === 'edit'
                     ? `Edit Student: ${formState.full_name || formState.admission_no}`
                     : `Student Profile: ${selectedStudent?.full_name || selectedStudent?.admission_no}`}
                 </h2>
               </div>
-              <button className="close-btn" onClick={closeModal}>
+              <button type="button" className="close-btn" onClick={closeModal}>
                 <X size={20} />
               </button>
             </div>
 
-            {/* Modal Navigation Tabs (Streamlined: Student Info, Parents Info, Address) */}
+            {/* Modal Navigation Tabs */}
             <div className="modal-tab-bar">
               <button
-                className={`tab-btn ${activeTab === 'student' ? 'active' : ''}`}
-                onClick={() => setActiveTab('student')}
+                type="button"
+                className={`tab-btn ${activeTab === 'personal' ? 'active' : ''}`}
+                onClick={() => setActiveTab('personal')}
               >
-                1. Student & Academic Info
+                1. Personal
               </button>
               <button
+                type="button"
+                className={`tab-btn ${activeTab === 'contact' ? 'active' : ''}`}
+                onClick={() => setActiveTab('contact')}
+              >
+                2. Contact & Address
+              </button>
+              <button
+                type="button"
+                className={`tab-btn ${activeTab === 'academic' ? 'active' : ''}`}
+                onClick={() => setActiveTab('academic')}
+              >
+                3. Academic & Class
+              </button>
+              <button
+                type="button"
                 className={`tab-btn ${activeTab === 'parents' ? 'active' : ''}`}
                 onClick={() => setActiveTab('parents')}
               >
-                2. Parents Information
+                4. Parents & Guardian
               </button>
               <button
-                className={`tab-btn ${activeTab === 'address' ? 'active' : ''}`}
-                onClick={() => setActiveTab('address')}
+                type="button"
+                className={`tab-btn ${activeTab === 'health' ? 'active' : ''}`}
+                onClick={() => setActiveTab('health')}
               >
-                3. Address & Status
+                5. Health & Documents
               </button>
             </div>
 
             {/* Modal Body / Tab Content */}
-            <form onSubmit={handleSubmit} className="modal-body-form">
-              {/* TAB 1: STUDENT & ACADEMIC INFO */}
-              {activeTab === 'student' && (
+            <form onSubmit={handleSubmit} className="modal-body-form" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* TAB 1: PERSONAL */}
+              {activeTab === 'personal' && (
                 <div className="tab-pane">
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: '16px' }}>
-                    <div>
-                      <div className="form-row-3">
-                        <label>
-                          <span>
-                            Admission No <b>*</b>
-                          </span>
-                          <input
-                            type="text"
-                            disabled={modalMode === 'view'}
-                            required
-                            value={formState.admission_no || ''}
-                            onChange={(e) => updateForm('admission_no', e.target.value)}
-                          />
-                        </label>
-                        <label>
-                          <span>Roll Number</span>
-                          <input
-                            type="text"
-                            disabled={modalMode === 'view'}
-                            value={formState.roll_no || ''}
-                            onChange={(e) => updateForm('roll_no', e.target.value)}
-                          />
-                        </label>
-                        <label>
-                          <span>Academic Year</span>
-                          <select
-                            disabled={modalMode === 'view'}
-                            value={formState.academic_year || getCurrentAcademicYear()}
-                            onChange={(e) => updateForm('academic_year', e.target.value)}
-                          >
-                            {ACADEMIC_YEAR_OPTIONS.map((yr) => (
-                              <option key={yr} value={yr}>
-                                {yr}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-
-                      <div className="form-row-3">
-                        <label>
-                          <span>
-                            Class <b>*</b>
-                          </span>
-                          <select
-                            disabled={modalMode === 'view'}
-                            required
-                            value={formState.class_name || ''}
-                            onChange={(e) => updateForm('class_name', e.target.value)}
-                          >
-                            <option value="">Select Class</option>
-                            {classes.map((c) => (
-                              <option key={c} value={c}>
-                                {c}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          <span>Section</span>
-                          <input
-                            type="text"
-                            disabled={modalMode === 'view'}
-                            value={formState.section || 'A'}
-                            onChange={(e) => updateForm('section', e.target.value)}
-                          />
-                        </label>
-                        <label>
-                          <span>Student Status</span>
-                          <select
-                            disabled={modalMode === 'view'}
-                            value={formState.student_status || 'Active'}
-                            onChange={(e) => {
-                              const st = e.target.value
-                              updateForm('student_status', st)
-                              updateForm('is_active', st !== 'Inactive' && st !== 'Left')
-                            }}
-                          >
-                            <option value="Active">Active</option>
-                            <option value="Inactive">Inactive</option>
-                            <option value="New Admission">New Admission</option>
-                            <option value="Promoted">Promoted</option>
-                            <option value="Left">Left</option>
-                            <option value="Alumni">Alumni</option>
-                          </select>
-                        </label>
-                      </div>
-
-                      {/* Active Status Toggle Banner */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '10px 14px',
-                          background: formState.is_active !== false && formState.student_status !== 'Inactive' ? '#f0fdf4' : '#fef2f2',
-                          border: `1px solid ${formState.is_active !== false && formState.student_status !== 'Inactive' ? '#bbf7d0' : '#fecaca'}`,
-                          borderRadius: '8px',
-                          marginBottom: '16px',
-                        }}
-                      >
-                        <div>
-                          <div
-                            style={{
-                              fontWeight: 700,
-                              fontSize: '13px',
-                              color: formState.is_active !== false && formState.student_status !== 'Inactive' ? '#15803d' : '#b91c1c',
-                            }}
-                          >
-                            Enrollment Status:{' '}
-                            {formState.is_active !== false && formState.student_status !== 'Inactive'
-                              ? 'Active (Currently Enrolled)'
-                              : 'Inactive'}
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#64748b' }}>
-                            {formState.is_active !== false && formState.student_status !== 'Inactive'
-                              ? 'Student appears on attendance registers, fee bills, and reports.'
-                              : 'Student is inactive / suspended / left.'}
-                          </div>
-                        </div>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
-                          <input
-                            type="checkbox"
-                            disabled={modalMode === 'view'}
-                            checked={formState.is_active !== false && formState.student_status !== 'Inactive'}
-                            onChange={(e) => {
-                              const active = e.target.checked
-                              updateForm('is_active', active)
-                              updateForm('student_status', active ? 'Active' : 'Inactive')
-                            }}
-                            style={{ width: '18px', height: '18px', accentColor: '#16a34a' }}
-                          />
-                          <span style={{ fontWeight: 600, fontSize: '13px', color: '#0f172a' }}>
-                            {formState.is_active !== false && formState.student_status !== 'Inactive' ? 'Active' : 'Inactive'}
-                          </span>
-                        </label>
-                      </div>
-
-                      <div className="form-row-2">
-                        <label>
-                          <span>
-                            Full Name <b>*</b>
-                          </span>
-                          <input
-                            type="text"
-                            disabled={modalMode === 'view'}
-                            required
-                            placeholder="Student's complete name"
-                            value={formState.full_name || ''}
-                            onChange={(e) => updateForm('full_name', e.target.value)}
-                          />
-                        </label>
-                        <label>
-                          <span>Date of Birth</span>
-                          <input
-                            type="date"
-                            disabled={modalMode === 'view'}
-                            value={formState.date_of_birth || ''}
-                            onChange={(e) => updateForm('date_of_birth', e.target.value)}
-                          />
-                        </label>
-                      </div>
-
-                      <div className="form-row-2">
-                        <label>
-                          <span>Gender</span>
-                          <select
-                            disabled={modalMode === 'view'}
-                            value={formState.gender || 'Male'}
-                            onChange={(e) => updateForm('gender', e.target.value)}
-                          >
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
-                            <option value="Other">Other</option>
-                          </select>
-                        </label>
-                        <label>
-                          <span>Blood Group</span>
-                          <select
-                            disabled={modalMode === 'view'}
-                            value={formState.blood_group || ''}
-                            onChange={(e) => updateForm('blood_group', e.target.value)}
-                          >
-                            <option value="">Select Blood Group</option>
-                            <option value="A+">A+</option>
-                            <option value="A-">A-</option>
-                            <option value="B+">B+</option>
-                            <option value="B-">B-</option>
-                            <option value="AB+">AB+</option>
-                            <option value="AB-">AB-</option>
-                            <option value="O+">O+</option>
-                            <option value="O-">O-</option>
-                          </select>
-                        </label>
-                      </div>
+                  {/* Photo Upload Box matching Employee style */}
+                  <div className="photo-upload-section">
+                    <div className="avatar-preview-box">
+                      {formState.student_photo_url ? (
+                        <img
+                          src={formatImageUrl(formState.student_photo_url)}
+                          alt="Student"
+                          referrerPolicy="no-referrer"
+                          onError={handleImageError}
+                        />
+                      ) : (
+                        <User size={40} opacity={0.35} />
+                      )}
                     </div>
-
-                    {/* Student Photo Card with Google Drive Uploader */}
-                    <div
-                      style={{
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '10px',
-                        padding: '12px',
-                        textAlign: 'center',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                        Student Photo
-                      </div>
-                      <div
-                        style={{
-                          width: '100px',
-                          height: '110px',
-                          borderRadius: '8px',
-                          background: '#ffffff',
-                          border: '2px dashed #cbd5e1',
-                          overflow: 'hidden',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          position: 'relative',
-                          marginBottom: '8px',
-                        }}
-                      >
-                        {formState.student_photo_url ? (
-                          <img
-                            src={formatImageUrl(formState.student_photo_url)}
-                            alt="Student"
-                            onError={handleImageError}
-                            referrerPolicy="no-referrer"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <Camera size={32} color="#94a3b8" />
-                        )}
-                        {uploadingStudentPhoto && (
-                          <div
-                            style={{
-                              position: 'absolute',
-                              inset: 0,
-                              background: 'rgba(0,0,0,0.6)',
-                              color: '#fff',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '11px',
-                            }}
-                          >
-                            <RefreshCw size={18} className="spin" />
-                          </div>
-                        )}
-                      </div>
-
-                      {modalMode !== 'view' && (
-                        <>
+                    {modalMode !== 'view' && (
+                      <div className="photo-actions" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                           <label
+                            className="btn-upload-label"
                             style={{
                               background: '#2563eb',
-                              color: '#fff',
-                              padding: '5px 10px',
-                              borderRadius: '6px',
-                              fontSize: '11px',
-                              fontWeight: 600,
-                              cursor: 'pointer',
+                              color: '#ffffff',
+                              border: 'none',
+                              padding: '7px 14px',
+                              borderRadius: '8px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              cursor: uploadingStudentPhoto ? 'wait' : 'pointer',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '4px',
-                              marginBottom: '6px',
+                              gap: '6px',
                             }}
+                            title="Upload photograph to Google Drive folder 'student_data_photo'"
                           >
-                            <CloudUpload size={13} />
-                            Save to Drive
+                            <CloudUpload size={14} />
+                            {uploadingStudentPhoto ? 'Saving to Drive...' : 'Drive (student_photo)'}
                             <input
                               type="file"
                               accept="image/*"
-                              style={{ display: 'none' }}
                               onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null, 'student')}
+                              disabled={uploadingStudentPhoto}
+                              style={{ display: 'none' }}
                             />
                           </label>
-                          <input
-                            type="text"
-                            placeholder="Drive Photo URL"
-                            value={formState.student_photo_url || ''}
-                            onChange={(e) => updateForm('student_photo_url', e.target.value)}
-                            style={{ fontSize: '10px', padding: '4px 6px', width: '100%' }}
-                          />
-                        </>
-                      )}
-                    </div>
+
+                          <label
+                            className="btn-upload-label"
+                            style={{
+                              background: '#f1f5f9',
+                              color: '#334155',
+                              border: '1px solid #cbd5e1',
+                              padding: '7px 14px',
+                              borderRadius: '8px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              cursor: uploadingStudentPhoto ? 'wait' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                            }}
+                          >
+                            <Upload size={14} />
+                            Cloud Storage
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleCloudPhotoUpload(e.target.files?.[0] || null, 'student')}
+                              disabled={uploadingStudentPhoto}
+                              style={{ display: 'none' }}
+                            />
+                          </label>
+                        </div>
+
+                        <input
+                          type="url"
+                          placeholder="Or paste Google Drive Photo link / Direct image URL..."
+                          value={formState.student_photo_url || ''}
+                          onChange={(e) => updateForm('student_photo_url', e.target.value)}
+                          style={{
+                            padding: '8px 12px',
+                            fontSize: '12px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            width: '100%',
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="form-row-3">
+                    <label>
+                      <span>
+                        Admission Code / No <b>*</b>
+                      </span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        required
+                        placeholder="e.g. ADM-2026-001"
+                        value={formState.admission_no || ''}
+                        onChange={(e) => updateForm('admission_no', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>
+                        Academic Year <b>*</b>
+                      </span>
+                      <select
+                        disabled={modalMode === 'view'}
+                        value={formState.academic_year || getCurrentAcademicYear()}
+                        onChange={(e) => updateForm('academic_year', e.target.value)}
+                      >
+                        {ACADEMIC_YEAR_OPTIONS.map((yr) => (
+                          <option key={yr} value={yr}>
+                            {yr}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Roll Number</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. 15"
+                        value={formState.roll_no || ''}
+                        onChange={(e) => updateForm('roll_no', e.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="form-row-3">
+                    <label>
+                      <span>
+                        First Name <b>*</b>
+                      </span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        required
+                        placeholder="First Name"
+                        value={formState.first_name || ''}
+                        onChange={(e) => handleNameChange('first_name', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Middle Name</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="Middle Name"
+                        value={formState.middle_name || ''}
+                        onChange={(e) => handleNameChange('middle_name', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>
+                        Last Name <b>*</b>
+                      </span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        required
+                        placeholder="Last Name"
+                        value={formState.last_name || ''}
+                        onChange={(e) => handleNameChange('last_name', e.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="form-row-3">
+                    <label>
+                      <span>Date of Birth</span>
+                      <input
+                        type="date"
+                        disabled={modalMode === 'view'}
+                        value={formState.date_of_birth || ''}
+                        onChange={(e) => updateForm('date_of_birth', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Gender</span>
+                      <select
+                        disabled={modalMode === 'view'}
+                        value={formState.gender || 'Male'}
+                        onChange={(e) => updateForm('gender', e.target.value)}
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Blood Group</span>
+                      <select
+                        disabled={modalMode === 'view'}
+                        value={formState.blood_group || 'Unknown'}
+                        onChange={(e) => updateForm('blood_group', e.target.value)}
+                      >
+                        <option value="Unknown">Unknown</option>
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+                      </select>
+                    </label>
                   </div>
                 </div>
               )}
 
-              {/* TAB 2: PARENTS INFORMATION (Beside Father Occupation -> Father Photo, Beside Mother Occupation -> Mother Photo) */}
+              {/* TAB 2: CONTACT & ADDRESS */}
+              {activeTab === 'contact' && (
+                <div className="tab-pane">
+                  <div className="form-row-3">
+                    <label>
+                      <span>
+                        Primary Contact / Mobile <b>*</b>
+                      </span>
+                      <input
+                        type="tel"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. 9876543210"
+                        value={formState.mobile || formState.father_mobile || ''}
+                        onChange={(e) => updateForm('mobile', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>WhatsApp Number</span>
+                      <input
+                        type="tel"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. 9876543210"
+                        value={formState.whatsapp_no || ''}
+                        onChange={(e) => updateForm('whatsapp_no', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Email Address</span>
+                      <input
+                        type="email"
+                        disabled={modalMode === 'view'}
+                        placeholder="student@school.com"
+                        value={formState.email || ''}
+                        onChange={(e) => updateForm('email', e.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  <label style={{ display: 'block' }}>
+                    <span>Residential Address</span>
+                    <textarea
+                      disabled={modalMode === 'view'}
+                      rows={3}
+                      placeholder="Enter complete house / street residential address..."
+                      value={formState.address || ''}
+                      onChange={(e) => updateForm('address', e.target.value)}
+                    />
+                  </label>
+
+                  <div className="form-row-3">
+                    <label>
+                      <span>City / Town</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. City Name"
+                        value={formState.city || ''}
+                        onChange={(e) => updateForm('city', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>District / State</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. State"
+                        value={formState.state || ''}
+                        onChange={(e) => updateForm('state', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Pincode</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. 110001"
+                        value={formState.pincode || ''}
+                        onChange={(e) => updateForm('pincode', e.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="form-row-2">
+                    <label>
+                      <span>Emergency Contact Person</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="Name of relative / guardian"
+                        value={formState.emergency_contact_name || ''}
+                        onChange={(e) => updateForm('emergency_contact_name', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Emergency Phone Number</span>
+                      <input
+                        type="tel"
+                        disabled={modalMode === 'view'}
+                        placeholder="Emergency contact mobile"
+                        value={formState.emergency_phone || ''}
+                        onChange={(e) => updateForm('emergency_phone', e.target.value)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: ACADEMIC & CLASS */}
+              {activeTab === 'academic' && (
+                <div className="tab-pane">
+                  {/* Enrollment Status Banner */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      background: formState.is_active !== false && formState.student_status !== 'Inactive' ? '#f0fdf4' : '#fef2f2',
+                      border: `1px solid ${formState.is_active !== false && formState.student_status !== 'Inactive' ? '#bbf7d0' : '#fecaca'}`,
+                      borderRadius: '10px',
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          fontSize: '13px',
+                          color: formState.is_active !== false && formState.student_status !== 'Inactive' ? '#15803d' : '#b91c1c',
+                        }}
+                      >
+                        Enrollment Status:{' '}
+                        {formState.is_active !== false && formState.student_status !== 'Inactive'
+                          ? 'Active (Currently Enrolled)'
+                          : 'Inactive'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>
+                        {formState.is_active !== false && formState.student_status !== 'Inactive'
+                          ? 'Student appears on active registers, fee billing, and class rosters.'
+                          : 'Student is suspended, left, or inactive.'}
+                      </div>
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
+                      <input
+                        type="checkbox"
+                        disabled={modalMode === 'view'}
+                        checked={formState.is_active !== false && formState.student_status !== 'Inactive'}
+                        onChange={(e) => {
+                          const active = e.target.checked
+                          updateForm('is_active', active)
+                          updateForm('student_status', active ? 'Active' : 'Inactive')
+                        }}
+                        style={{ width: '18px', height: '18px', accentColor: '#16a34a' }}
+                      />
+                      <span style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a' }}>
+                        {formState.is_active !== false && formState.student_status !== 'Inactive' ? 'Active' : 'Inactive'}
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="form-row-3">
+                    <label>
+                      <span>
+                        Class <b>*</b>
+                      </span>
+                      <select
+                        disabled={modalMode === 'view'}
+                        required
+                        value={formState.class_name || ''}
+                        onChange={(e) => updateForm('class_name', e.target.value)}
+                      >
+                        <option value="">Select Class</option>
+                        {classes.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>
+                        Section <b>*</b>
+                      </span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        required
+                        placeholder="e.g. A"
+                        value={formState.section || 'A'}
+                        onChange={(e) => updateForm('section', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Student Status</span>
+                      <select
+                        disabled={modalMode === 'view'}
+                        value={formState.student_status || 'New Admission'}
+                        onChange={(e) => {
+                          const st = e.target.value
+                          updateForm('student_status', st)
+                          updateForm('is_active', st !== 'Inactive' && st !== 'Left')
+                        }}
+                      >
+                        <option value="New Admission">New Admission</option>
+                        <option value="Active">Active</option>
+                        <option value="Promoted">Promoted</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="Left">Left</option>
+                        <option value="Alumni">Alumni</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="form-row-3">
+                    <label>
+                      <span>Enrollment Date</span>
+                      <input
+                        type="date"
+                        disabled={modalMode === 'view'}
+                        value={formState.enrollment_date || new Date().toISOString().split('T')[0]}
+                        onChange={(e) => updateForm('enrollment_date', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Previous School Name</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. Model Public School"
+                        value={formState.previous_school || ''}
+                        onChange={(e) => updateForm('previous_school', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Previous Grade / Marks (%)</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. 85%"
+                        value={formState.previous_marks || ''}
+                        onChange={(e) => updateForm('previous_marks', e.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="form-row-2">
+                    <label>
+                      <span>Transfer Certificate (TC) Number</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="TC-99210"
+                        value={formState.tc_no || ''}
+                        onChange={(e) => updateForm('tc_no', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>House / Activity Group</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. Blue House / Red House"
+                        value={formState.house_group || ''}
+                        onChange={(e) => updateForm('house_group', e.target.value)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: PARENTS & GUARDIAN */}
               {activeTab === 'parents' && (
                 <div className="tab-pane">
                   {/* Father Details Section */}
@@ -1590,13 +1874,91 @@ export default function StudentMasterStudio({
                       border: '1px solid #e2e8f0',
                       borderRadius: '10px',
                       padding: '16px',
-                      marginBottom: '16px',
                     }}
                   >
-                    <div style={{ fontWeight: 700, color: '#1e3a8a', fontSize: '14px', marginBottom: '12px' }}>
-                      Father&apos;s Information
+                    <div className="section-title">Father&apos;s Information</div>
+                    <div className="photo-upload-section" style={{ marginBottom: '14px' }}>
+                      <div className="avatar-preview-box">
+                        {formState.father_photo_url ? (
+                          <img
+                            src={formatImageUrl(formState.father_photo_url)}
+                            alt="Father"
+                            referrerPolicy="no-referrer"
+                            onError={handleImageError}
+                          />
+                        ) : (
+                          <User size={36} opacity={0.35} />
+                        )}
+                      </div>
+                      {modalMode !== 'view' && (
+                        <div className="photo-actions" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <label
+                              className="btn-upload-label"
+                              style={{
+                                background: '#1e40af',
+                                color: '#ffffff',
+                                border: 'none',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: uploadingFatherPhoto ? 'wait' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                              }}
+                            >
+                              <CloudUpload size={13} />
+                              Drive (father_photo)
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null, 'father')}
+                                disabled={uploadingFatherPhoto}
+                                style={{ display: 'none' }}
+                              />
+                            </label>
+
+                            <label
+                              className="btn-upload-label"
+                              style={{
+                                background: '#ffffff',
+                                color: '#334155',
+                                border: '1px solid #cbd5e1',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: uploadingFatherPhoto ? 'wait' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                              }}
+                            >
+                              <Upload size={13} />
+                              Cloud Storage
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleCloudPhotoUpload(e.target.files?.[0] || null, 'father')}
+                                disabled={uploadingFatherPhoto}
+                                style={{ display: 'none' }}
+                              />
+                            </label>
+                          </div>
+                          <input
+                            type="url"
+                            placeholder="Father Drive photo URL / image link..."
+                            value={formState.father_photo_url || ''}
+                            onChange={(e) => updateForm('father_photo_url', e.target.value)}
+                            style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                          />
+                        </div>
+                      )}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 140px', gap: '12px', alignItems: 'flex-start' }}>
+
+                    <div className="form-row-3">
                       <label>
                         <span>Father Name</span>
                         <input
@@ -1627,90 +1989,6 @@ export default function StudentMasterStudio({
                           onChange={(e) => updateForm('father_occupation', e.target.value)}
                         />
                       </label>
-
-                      {/* Father Photo Box (Beside Father Occupation) */}
-                      <div
-                        style={{
-                          background: '#ffffff',
-                          border: '1px solid #cbd5e1',
-                          borderRadius: '8px',
-                          padding: '8px',
-                          textAlign: 'center',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                          Father Photo
-                        </div>
-                        <div
-                          style={{
-                            width: '56px',
-                            height: '56px',
-                            borderRadius: '50%',
-                            overflow: 'hidden',
-                            background: '#f1f5f9',
-                            border: '1px solid #94a3b8',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            position: 'relative',
-                            marginBottom: '4px',
-                          }}
-                        >
-                          {formState.father_photo_url ? (
-                            <img
-                              src={formatImageUrl(formState.father_photo_url)}
-                              alt="Father"
-                              onError={handleImageError}
-                              referrerPolicy="no-referrer"
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                          ) : (
-                            <User size={20} color="#94a3b8" />
-                          )}
-                          {uploadingFatherPhoto && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                inset: 0,
-                                background: 'rgba(0,0,0,0.6)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              <RefreshCw size={14} className="spin" color="#fff" />
-                            </div>
-                          )}
-                        </div>
-
-                        {modalMode !== 'view' && (
-                          <label
-                            style={{
-                              background: '#1e40af',
-                              color: '#fff',
-                              padding: '3px 8px',
-                              borderRadius: '4px',
-                              fontSize: '10px',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '3px',
-                            }}
-                          >
-                            <CloudUpload size={11} /> Drive
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{ display: 'none' }}
-                              onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null, 'father')}
-                            />
-                          </label>
-                        )}
-                      </div>
                     </div>
                   </div>
 
@@ -1723,10 +2001,89 @@ export default function StudentMasterStudio({
                       padding: '16px',
                     }}
                   >
-                    <div style={{ fontWeight: 700, color: '#86198f', fontSize: '14px', marginBottom: '12px' }}>
-                      Mother&apos;s Information
+                    <div className="section-title" style={{ color: '#86198f', borderColor: '#f5d0fe' }}>Mother&apos;s Information</div>
+                    <div className="photo-upload-section" style={{ marginBottom: '14px', background: '#ffffff', borderColor: '#f0abfc' }}>
+                      <div className="avatar-preview-box" style={{ background: '#fdf2f8', borderColor: '#f472b6' }}>
+                        {formState.mother_photo_url ? (
+                          <img
+                            src={formatImageUrl(formState.mother_photo_url)}
+                            alt="Mother"
+                            referrerPolicy="no-referrer"
+                            onError={handleImageError}
+                          />
+                        ) : (
+                          <User size={36} opacity={0.35} color="#db2777" />
+                        )}
+                      </div>
+                      {modalMode !== 'view' && (
+                        <div className="photo-actions" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <label
+                              className="btn-upload-label"
+                              style={{
+                                background: '#a21caf',
+                                color: '#ffffff',
+                                border: 'none',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: uploadingMotherPhoto ? 'wait' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                              }}
+                            >
+                              <CloudUpload size={13} />
+                              Drive (mother_photo)
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null, 'mother')}
+                                disabled={uploadingMotherPhoto}
+                                style={{ display: 'none' }}
+                              />
+                            </label>
+
+                            <label
+                              className="btn-upload-label"
+                              style={{
+                                background: '#ffffff',
+                                color: '#334155',
+                                border: '1px solid #cbd5e1',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: uploadingMotherPhoto ? 'wait' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                              }}
+                            >
+                              <Upload size={13} />
+                              Cloud Storage
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleCloudPhotoUpload(e.target.files?.[0] || null, 'mother')}
+                                disabled={uploadingMotherPhoto}
+                                style={{ display: 'none' }}
+                              />
+                            </label>
+                          </div>
+                          <input
+                            type="url"
+                            placeholder="Mother Drive photo URL / image link..."
+                            value={formState.mother_photo_url || ''}
+                            onChange={(e) => updateForm('mother_photo_url', e.target.value)}
+                            style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                          />
+                        </div>
+                      )}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 140px', gap: '12px', alignItems: 'flex-start' }}>
+
+                    <div className="form-row-3">
                       <label>
                         <span>Mother Name</span>
                         <input
@@ -1757,161 +2114,215 @@ export default function StudentMasterStudio({
                           onChange={(e) => updateForm('mother_occupation', e.target.value)}
                         />
                       </label>
-
-                      {/* Mother Photo Box (Beside Mother Occupation) */}
-                      <div
-                        style={{
-                          background: '#ffffff',
-                          border: '1px solid #f5d0fe',
-                          borderRadius: '8px',
-                          padding: '8px',
-                          textAlign: 'center',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#701a75', marginBottom: '4px' }}>
-                          Mother Photo
-                        </div>
-                        <div
-                          style={{
-                            width: '56px',
-                            height: '56px',
-                            borderRadius: '50%',
-                            overflow: 'hidden',
-                            background: '#fdf2f8',
-                            border: '1px solid #f472b6',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            position: 'relative',
-                            marginBottom: '4px',
-                          }}
-                        >
-                          {formState.mother_photo_url ? (
-                            <img
-                              src={formatImageUrl(formState.mother_photo_url)}
-                              alt="Mother"
-                              onError={handleImageError}
-                              referrerPolicy="no-referrer"
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                          ) : (
-                            <User size={20} color="#f472b6" />
-                          )}
-                          {uploadingMotherPhoto && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                inset: 0,
-                                background: 'rgba(0,0,0,0.6)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              <RefreshCw size={14} className="spin" color="#fff" />
-                            </div>
-                          )}
-                        </div>
-
-                        {modalMode !== 'view' && (
-                          <label
-                            style={{
-                              background: '#a21caf',
-                              color: '#fff',
-                              padding: '3px 8px',
-                              borderRadius: '4px',
-                              fontSize: '10px',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '3px',
-                            }}
-                          >
-                            <CloudUpload size={11} /> Drive
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{ display: 'none' }}
-                              onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null, 'mother')}
-                            />
-                          </label>
-                        )}
-                      </div>
                     </div>
                   </div>
-                </div>
-              )}
 
-              {/* TAB 3: ADDRESS & STATUS */}
-              {activeTab === 'address' && (
-                <div className="tab-pane">
-                  <label style={{ display: 'block', marginBottom: '16px' }}>
-                    <span>Residential Address</span>
-                    <textarea
-                      disabled={modalMode === 'view'}
-                      rows={4}
-                      placeholder="Enter complete residential address, city, district, state & pin code..."
-                      value={formState.address || ''}
-                      onChange={(e) => updateForm('address', e.target.value)}
-                    />
-                  </label>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
-                    <input
-                      type="checkbox"
-                      id="st_active"
-                      disabled={modalMode === 'view'}
-                      checked={formState.is_active !== false}
-                      onChange={(e) => updateForm('is_active', e.target.checked)}
-                      style={{ width: '18px', height: '18px' }}
-                    />
-                    <label htmlFor="st_active" style={{ fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
-                      Active Student in School Roster
+                  {/* Guardian Section */}
+                  <div className="form-row-3" style={{ marginTop: '12px' }}>
+                    <label>
+                      <span>Guardian Name</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="Guardian full name"
+                        value={formState.guardian_name || ''}
+                        onChange={(e) => updateForm('guardian_name', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Guardian Relation</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. Uncle / Grandfather"
+                        value={formState.guardian_relation || ''}
+                        onChange={(e) => updateForm('guardian_relation', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Guardian Mobile</span>
+                      <input
+                        type="tel"
+                        disabled={modalMode === 'view'}
+                        placeholder="Guardian phone number"
+                        value={formState.guardian_mobile || ''}
+                        onChange={(e) => updateForm('guardian_mobile', e.target.value)}
+                      />
                     </label>
                   </div>
                 </div>
               )}
 
-              {/* Modal Footer */}
-              <div className="modal-footer">
+              {/* TAB 5: HEALTH & DOCUMENTS */}
+              {activeTab === 'health' && (
+                <div className="tab-pane">
+                  <div className="form-row-2">
+                    <label>
+                      <span>Aadhaar Card / Student ID Number</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. 1234 5678 9012"
+                        value={formState.aadhaar_no || ''}
+                        onChange={(e) => updateForm('aadhaar_no', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Medical Conditions / Allergies</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. Asthma, Peanut Allergy, None"
+                        value={formState.medical_conditions || ''}
+                        onChange={(e) => updateForm('medical_conditions', e.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="form-row-2">
+                    <label>
+                      <span>Transport Mode</span>
+                      <select
+                        disabled={modalMode === 'view'}
+                        value={formState.transport_mode || 'Private'}
+                        onChange={(e) => updateForm('transport_mode', e.target.value)}
+                      >
+                        <option value="Private">Private / Self</option>
+                        <option value="School Bus">School Bus</option>
+                        <option value="Van">School Van / Cab</option>
+                        <option value="Walking">Walking</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Bus Route / Stop Name</span>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'view'}
+                        placeholder="e.g. Route 4 - Main Gate"
+                        value={formState.bus_route || ''}
+                        onChange={(e) => updateForm('bus_route', e.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  <label style={{ display: 'block' }}>
+                    <span>Document Link / Drive URL (Aadhaar / Birth Cert / TC)</span>
+                    <input
+                      type="url"
+                      disabled={modalMode === 'view'}
+                      placeholder="Paste Drive link or Document URL..."
+                      value={formState.document_url || ''}
+                      onChange={(e) => updateForm('document_url', e.target.value)}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* Modal Action Bar / Footer */}
+              <div
+                style={{
+                  padding: '14px 20px',
+                  background: '#f8fafc',
+                  borderTop: '1px solid #e2e8f0',
+                  borderRadius: '0 0 16px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginTop: '12px',
+                }}
+              >
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {activeTab !== 'student' && (
+                  {activeTab !== 'personal' && (
                     <button
                       type="button"
-                      className="btn-secondary"
-                      onClick={() => setActiveTab(activeTab === 'address' ? 'parents' : 'student')}
+                      onClick={() => {
+                        const tabs = ['personal', 'contact', 'academic', 'parents', 'health']
+                        const idx = tabs.indexOf(activeTab)
+                        if (idx > 0) setActiveTab(tabs[idx - 1] as any)
+                      }}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        color: '#475569',
+                        fontWeight: 600,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
                     >
-                      &larr; Back
+                      &larr; Previous Tab
                     </button>
                   )}
-                  {activeTab !== 'address' && (
+                  {activeTab !== 'health' && (
                     <button
                       type="button"
-                      className="btn-secondary"
-                      onClick={() => setActiveTab(activeTab === 'student' ? 'parents' : 'address')}
+                      onClick={() => {
+                        const tabs = ['personal', 'contact', 'academic', 'parents', 'health']
+                        const idx = tabs.indexOf(activeTab)
+                        if (idx < tabs.length - 1) setActiveTab(tabs[idx + 1] as any)
+                      }}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        color: '#475569',
+                        fontWeight: 600,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
                     >
-                      Next &rarr;
+                      Next Tab &rarr;
                     </button>
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="button" className="btn-secondary" onClick={closeModal}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    style={{
+                      padding: '8px 18px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#475569',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                    }}
+                  >
                     {modalMode === 'view' ? 'Close' : 'Cancel'}
                   </button>
                   {modalMode !== 'view' && (
-                    <button type="submit" className="btn-primary" disabled={submitting}>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      style={{
+                        padding: '8px 22px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                        color: '#ffffff',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: submitting ? 'wait' : 'pointer',
+                        boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
                       {submitting ? (
                         <>
-                          <RefreshCw size={16} className="spin" /> Saving & Syncing...
+                          <RefreshCw size={15} className="spin" />
+                          Saving Student...
                         </>
                       ) : (
                         <>
-                          <Check size={16} /> Save & Sync to Google Sheet
+                          <Check size={16} />
+                          {modalMode === 'create' ? 'Add Student' : 'Save Student Record'}
                         </>
                       )}
                     </button>
