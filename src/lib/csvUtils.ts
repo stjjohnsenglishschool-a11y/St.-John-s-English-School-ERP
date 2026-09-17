@@ -38,6 +38,10 @@ const COMMON_ALIASES: Record<string, string[]> = {
   is_active: ['active', 'status_active', 'is_enabled'],
   student_status: ['status', 'enrollment_status'],
   employment_status: ['status', 'staff_status'],
+  father_photo_url: ['father_photo', 'father_photo_url', 'father_image', 'fatherphoto'],
+  mother_photo_url: ['mother_photo', 'mother_photo_url', 'mother_image', 'motherphoto'],
+  father_occupation: ['father_job', 'father_profession', 'father_occ', 'foccupation'],
+  mother_occupation: ['mother_job', 'mother_profession', 'mother_occ', 'moccupation'],
 }
 
 /**
@@ -430,7 +434,16 @@ export function generateSampleCsv(mod: Module): string {
     if (k === 'section') return rowIndex === 0 ? 'A' : 'B'
     if (k === 'father_name') return rowIndex === 0 ? 'Rajesh Sharma' : 'Subhash Sen'
     if (k === 'father_mobile') return rowIndex === 0 ? '9876543210' : '9876543211'
+    if (k === 'father_occupation') return rowIndex === 0 ? 'Business' : 'Private Service'
+    if (k === 'father_photo_url' || k === 'father_photo') return rowIndex === 0 ? 'https://lh3.googleusercontent.com/d/1example_father_id' : ''
     if (k === 'mother_name') return rowIndex === 0 ? 'Sunita Sharma' : 'Priti Sen'
+    if (k === 'mother_mobile') return rowIndex === 0 ? '9876543220' : '9876543221'
+    if (k === 'mother_occupation') return rowIndex === 0 ? 'Homemaker' : 'Teacher'
+    if (k === 'mother_photo_url' || k === 'mother_photo') return rowIndex === 0 ? 'https://lh3.googleusercontent.com/d/1example_mother_id' : ''
+    if (k === 'student_photo_url' || k === 'student_photo') return rowIndex === 0 ? 'https://lh3.googleusercontent.com/d/1example_student_id' : ''
+    if (k === 'student_status') return rowIndex === 0 ? 'Active' : 'New Admission'
+    if (k === 'blood_group') return rowIndex === 0 ? 'A+' : 'B+'
+    if (k === 'is_active') return 'true'
     if (k === 'emp_code' || k === 'employee_code') return rowIndex === 0 ? 'EMP-001' : 'EMP-002'
     if (k === 'designation') return rowIndex === 0 ? 'Senior Teacher' : 'Assistant Teacher'
     if (k === 'employee_category') return rowIndex === 0 ? 'Teaching Staff' : 'Administrative Office'

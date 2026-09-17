@@ -1,12 +1,11 @@
 {
-  "projectId": "instant-science-qv8b6",
-  "appId": "1:990418712218:web:3aa5e7c283156cc1199123",
-  "apiKey": "AIzaSyBVTkOq8P0XJ0EvStUM0BYrk8snePjy58s",
-  "authDomain": "instant-science-qv8b6.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-stjohnsenglishsc-531e7bb4-0068-4bb0-86fa-a4752b74bc31",
-  "storageBucket": "instant-science-qv8b6.firebasestorage.app",
-  "messagingSenderId": "990418712218",
+  "projectId": "gen-lang-client-0668756810",
+  "appId": "1:783529733673:web:78bcad7835dd54a40b3638",
+  "apiKey": "AIzaSyBXda4Y20mY-o_QqxIR0rM49UmOFxTlnNM",
+  "authDomain": "gen-lang-client-0668756810.firebaseapp.com",
+  "storageBucket": "gen-lang-client-0668756810.firebasestorage.app",
+  "messagingSenderId": "783529733673",
   "measurementId": "",
-  "oAuthClientId": "990418712218-d0ft4njoptrosj41lu07tbhu11u9g5f0.apps.googleusercontent.com",
+  "oAuthClientId": "783529733673-r8cgsaq3e7htt9u46n2dfoafuqnped8a.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

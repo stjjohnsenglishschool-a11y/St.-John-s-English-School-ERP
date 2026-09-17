@@ -37,6 +37,7 @@ import {
   Search,
   Shield,
   ShieldCheck,
+  Sparkles,
   Trash2,
   Upload,
   UserRoundCheck,
@@ -270,7 +271,86 @@ function App() {
 
   useEffect(() => {
     setAuthReady(true);
+    // Purge any legacy dummy student/fees records from browser cache
+    try {
+      const studentCache = localStorage.getItem("sjes_table_student_master");
+      if (studentCache && (studentCache.includes("Aarav") || studentCache.includes("Banerjee") || studentCache.includes("ADM-2026-001"))) {
+        localStorage.removeItem("sjes_table_student_master");
+      }
+      const feesCache = localStorage.getItem("sjes_table_fees_collection");
+      if (feesCache && (feesCache.includes("RCPT-2026-101") || feesCache.includes("Aarav"))) {
+        localStorage.removeItem("sjes_table_fees_collection");
+      }
+    } catch {
+      // ignore
+    }
   }, []);
+
+  // Auto-initialize annual leave balances for all active school staff
+  const handleAutoInitLeaveBalances = async () => {
+    try {
+      setLoading(true);
+      const employees = await fetchCollectionData("employee_master");
+      if (!employees || employees.length === 0) {
+        setToast("No employees found in Employee Master. Please register staff records first.");
+        setLoading(false);
+        return;
+      }
+      const existing = await fetchCollectionData("leave_balance");
+      const currentYear = getCurrentAcademicYear();
+      const existingMap = new Set(
+        (existing || []).map((e: any) => `${e.emp_id || e.emp_code}_${e.leave_type}_${e.academic_year || currentYear}`)
+      );
+
+      let created = 0;
+      const standardLeaves = [
+        { type: "Casual Leave (CL)", entitled: 12 },
+        { type: "Medical / Sick Leave (ML)", entitled: 10 },
+        { type: "Privilege / Earned Leave (PL/EL)", entitled: 15 },
+      ];
+
+      for (const emp of employees) {
+        const empId = emp.emp_id || emp.emp_code || emp.id;
+        const empName =
+          emp.full_name ||
+          `${emp.first_name || ""} ${emp.last_name || ""}`.trim() ||
+          emp.name ||
+          "Staff";
+
+        for (const leave of standardLeaves) {
+          const key = `${empId}_${leave.type}_${currentYear}`;
+          if (!existingMap.has(key)) {
+            const balId = `BAL_${empId}_${leave.type.slice(0, 2)}_${currentYear.replace(/[^a-zA-Z0-9]/g, "_")}`;
+            await saveDocument("leave_balance", "balance_id", {
+              balance_id: balId,
+              emp_id: empId,
+              employee_name: empName,
+              academic_year: currentYear,
+              leave_type: leave.type,
+              total_entitled: leave.entitled,
+              total_taken: 0,
+              total_pending: 0,
+              balance_remaining: leave.entitled,
+              created_at: new Date().toISOString(),
+            });
+            created++;
+          }
+        }
+      }
+
+      setToast(
+        created > 0
+          ? `Successfully initialized ${created} leave balance records across ${employees.length} employees!`
+          : "Leave balances for all active employees are already initialized and up to date."
+      );
+      await refresh();
+    } catch (err: any) {
+      console.error("Error initializing leave balances:", err);
+      setToast(err.message || "Failed to initialize leave balances");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const refresh = useCallback(async (forceSeed = false) => {
     if (!mod) {
@@ -1057,6 +1137,57 @@ function App() {
               </div>
             )}
 
+            {mod.table === "leave_balance" && (
+              <div
+                style={{
+                  background: "#eff6ff",
+                  border: "1px solid #bfdbfe",
+                  borderRadius: "10px",
+                  padding: "12px 18px",
+                  marginBottom: "14px",
+                  fontSize: "13px",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "10px",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 800, color: "#1e40af", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <ShieldCheck size={18} color="#2563eb" />
+                    <span>Annual Employee Leave Balances ({getCurrentAcademicYear()})</span>
+                  </div>
+                  <div style={{ color: "#3b82f6", fontSize: "12px", marginTop: "3px" }}>
+                    • Casual Leave (CL: 12d) • Sick Leave (ML: 10d) • Privilege / Earned Leave (PL/EL: 15d) • Remaining = Entitled − Taken
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={handleAutoInitLeaveBalances}
+                    title="Automatically create annual leave balances for all active staff in Employee Master"
+                    style={{
+                      background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
+                      color: "#fff",
+                      border: "none",
+                      padding: "7px 14px",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      boxShadow: "0 2px 4px rgba(37,99,235,0.2)",
+                    }}
+                  >
+                    <Sparkles size={14} />
+                    Initialize All Staff Balances
+                  </button>
+                </div>
+              </div>
+            )}
+
             <PageHeader
               mod={mod}
               total={filtered.length}
@@ -1729,30 +1860,79 @@ function RecordModal({
         }
       }
 
+      // Leave Balance auto calculation: Balance = Entitled - Taken
+      if (mod.table === "leave_balance") {
+        const entitled = Number(key === "total_entitled" ? v : next.total_entitled) || 0;
+        const taken = Number(key === "total_taken" ? v : next.total_taken) || 0;
+        next.balance_remaining = Math.max(0, entitled - taken);
+      }
+
       return next;
     });
   };
 
   const onSelectRelationDetails = (record: Record<string, unknown>) => {
-    // When student is selected in fees or attendance
-    if (mod.table === "fees_collection" || mod.table === "student_attendance") {
+    const empFullName =
+      (record.full_name as string) ||
+      `${(record.first_name as string) || ""} ${(record.last_name as string) || ""}`.trim() ||
+      (record.name as string) ||
+      "";
+
+    // When student is selected in fees, attendance, or student idcards
+    if (
+      mod.table === "fees_collection" ||
+      mod.table === "student_attendance" ||
+      mod.table === "student_idcard" ||
+      mod.table === "escort_card"
+    ) {
       setValues((prev) => ({
         ...prev,
-        student_name: record.full_name || record.student_name || prev.student_name,
-        admission_no: record.admission_no || prev.admission_no,
-        class_name: record.class_name || prev.class_name,
+        student_name: (record.full_name as string) || (record.student_name as string) || prev.student_name,
+        admission_no: (record.admission_no as string) || prev.admission_no,
+        class_name: (record.class_name as string) || prev.class_name,
+        section: (record.section as string) || prev.section,
+        roll_no: (record.roll_no as string) || prev.roll_no,
+        father_name: (record.father_name as string) || prev.father_name,
+        guardian_name: (record.guardian_name as string) || (record.father_name as string) || prev.guardian_name,
+        guardian_mobile: (record.guardian_mobile as string) || (record.father_mobile as string) || prev.guardian_mobile,
       }));
     }
-    // When employee is selected in salary slip or leave
-    if (mod.table === "salary_slip" || mod.table === "leave_application") {
-      setValues((prev) => ({
-        ...prev,
-        employee_name:
-          record.full_name ||
-          `${record.first_name || ""} ${record.last_name || ""}`.trim() ||
-          prev.employee_name,
-        basic_salary: record.basic_salary || prev.basic_salary,
-      }));
+
+    // When employee is selected in HR / Employee modules
+    if (
+      mod.table === "leave_balance" ||
+      mod.table === "leave_application" ||
+      mod.table === "salary_slip" ||
+      mod.table === "warning_letter" ||
+      mod.table === "offer_letter" ||
+      mod.table === "employee_document" ||
+      mod.table === "teacher_idcard"
+    ) {
+      setValues((prev) => {
+        const updated: Row = {
+          ...prev,
+          employee_name: empFullName || prev.employee_name,
+          emp_code: (record.emp_code as string) || prev.emp_code,
+          department: (record.department as string) || prev.department,
+          designation: (record.designation as string) || prev.designation,
+          basic_salary: (record.basic_salary as number) || prev.basic_salary,
+        };
+
+        // For leave balance: initialize smart defaults
+        if (mod.table === "leave_balance" && mode === "create") {
+          const entitled = Number(prev.total_entitled) || 12;
+          const taken = Number(prev.total_taken) || 0;
+          updated.total_entitled = entitled;
+          updated.total_taken = taken;
+          updated.total_pending = Number(prev.total_pending) || 0;
+          updated.balance_remaining = Math.max(0, entitled - taken);
+          if (!prev.leave_type) {
+            updated.leave_type = "Casual Leave (CL)";
+          }
+        }
+
+        return updated;
+      });
     }
   };
 

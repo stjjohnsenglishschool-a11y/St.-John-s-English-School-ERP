@@ -61,7 +61,11 @@ export default function LeaveApprovalModal({
         const empId = employee.emp_id || employee.emp_code || leaveApp.emp_id || leaveApp.emp_code;
         const balanceDoc = {
           emp_id: empId,
-          employee_name: summary.employmentStatus,
+          employee_name:
+            (employee.first_name ? `${employee.first_name} ${employee.last_name || ""}`.trim() : null) ||
+            leaveApp.employee_name ||
+            employee.full_name ||
+            "Employee",
           leave_type: "PL",
           academic_year: summary.sessionName,
           total_entitled: summary.plOpeningBalance + summary.plCreditedThisSession,

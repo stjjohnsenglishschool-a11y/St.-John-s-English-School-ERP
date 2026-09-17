@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Search,
   Plus,
@@ -21,60 +21,66 @@ import {
   ChevronRight,
   Printer,
   Sparkles,
+  CloudUpload,
+  FolderGit2,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
+  Link2,
+  ExternalLink,
+  Camera,
+  Image as ImageIcon,
+  Copy,
+  Info,
 } from 'lucide-react'
-import { supabase, uploadToSupabaseStorage, logActivity, deleteDocument } from '../lib/firebase'
+import { supabase, logActivity, deleteDocument, saveDocument, fetchCollectionData } from '../lib/firebase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
 import { downloadSampleCsv } from '../lib/csvUtils'
 import { formatImageUrl, handleImageError } from '../lib/imageUtils'
 import CsvImportModal from './CsvImportModal'
+import {
+  GOOGLE_DRIVE_FOLDER_ID,
+  GOOGLE_DRIVE_FOLDER_NAME,
+  GOOGLE_SHEET_ID,
+  GOOGLE_SHEET_TAB_NAME,
+  STUDENT_SHEET_HEADERS,
+  connectGoogleWorkspace,
+  disconnectGoogle,
+  isGoogleConnected,
+  getGoogleUser,
+  subscribeGoogleAuth,
+  uploadPhotoToGoogleDrive,
+  syncAllStudentsToGoogleSheet,
+  fetchStudentsFromGoogleSheet,
+} from '../lib/googleDriveSheets'
 
-type Student = {
+export type Student = {
   student_id?: string
   admission_no?: string
-  admission_date?: string
-  gr_number?: string
   roll_no?: string
   academic_year?: string
   class_name?: string
   section?: string
-  house_name?: string
   student_status?: string
   full_name?: string
-  first_name?: string
-  middle_name?: string
-  last_name?: string
   date_of_birth?: string
   gender?: string
   blood_group?: string
-  nationality?: string
-  religion?: string
-  category?: string
-  mother_tongue?: string
   student_photo_url?: string
   mobile_primary?: string
-  student_email?: string
   father_name?: string
   father_mobile?: string
-  father_whatsapp?: string
-  father_email?: string
   father_occupation?: string
+  father_photo_url?: string
   mother_name?: string
   mother_mobile?: string
-  mother_whatsapp?: string
-  mother_email?: string
   mother_occupation?: string
-  guardian_name?: string
-  guardian_relation?: string
-  guardian_mobile?: string
-  emergency_contact_name?: string
-  emergency_contact_phone?: string
+  mother_photo_url?: string
   address?: string
-  permanent_address?: string
-  birth_certificate_no?: string
-  document_url?: string
   is_active?: boolean
   created_at?: string
+  _docId?: string
   [key: string]: unknown
 }
 
@@ -100,68 +106,71 @@ export default function StudentMasterStudio({
   const [page, setPage] = useState(1)
   const pageSize = 15
 
+  // Google Workspace state
+  const [googleUser, setGoogleUser] = useState<any>(null)
+  const [googleConnected, setGoogleConnected] = useState(false)
+  const [syncingSheet, setSyncingSheet] = useState(false)
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
+  const [showScriptModal, setShowScriptModal] = useState(false)
+
   // Form / Profile Modal State
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view' | null>(null)
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
-  const [activeTab, setActiveTab] = useState<
-    'admission' | 'personal' | 'contact' | 'parents' | 'address' | 'docs'
-  >('admission')
+  const [activeTab, setActiveTab] = useState<'student' | 'parents' | 'address'>('student')
   const [formState, setFormState] = useState<Student>({})
-  const [uploadingPhoto, setUploadingPhoto] = useState(false)
-  const [uploadingDoc, setUploadingDoc] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showCsvModal, setShowCsvModal] = useState(false)
 
-  // Fetch classes from class_master
+  // Photo upload states
+  const [uploadingStudentPhoto, setUploadingStudentPhoto] = useState(false)
+  const [uploadingFatherPhoto, setUploadingFatherPhoto] = useState(false)
+  const [uploadingMotherPhoto, setUploadingMotherPhoto] = useState(false)
+
+  // Subscribe to Google Auth state
   useEffect(() => {
-    if (!supabase) return
-    supabase
-      .from('class_master')
-      .select('class_name')
-      .eq('is_active', true)
-      .order('class_name')
-      .then(({ data }) => {
-        if (data) {
-          const names = data.map((c) => c.class_name).filter(Boolean)
-          setClasses(
-            names.length > 0
-              ? names
-              : [
-                  'PG',
-                  'NURSERY',
-                  'LKG',
-                  'UKG',
-                  'CLASS I',
-                  'CLASS II',
-                  'CLASS III',
-                  'CLASS IV',
-                  'CLASS V',
-                  'CLASS VI',
-                  'CLASS VII',
-                  'CLASS VIII',
-                ]
-          )
-        }
-      })
+    const unsub = subscribeGoogleAuth((user, token) => {
+      setGoogleUser(user)
+      setGoogleConnected(Boolean(token))
+    })
+    return () => unsub()
   }, [])
 
-  // Load students
+  // Fetch classes from class_master
+  useEffect(() => {
+    fetchCollectionData('class_master').then((data) => {
+      if (data && data.length > 0) {
+        const names = data.map((c: any) => c.class_name).filter(Boolean)
+        setClasses(
+          names.length > 0
+            ? names
+            : [
+                'PG',
+                'NURSERY',
+                'LKG',
+                'UKG',
+                'CLASS I',
+                'CLASS II',
+                'CLASS III',
+                'CLASS IV',
+                'CLASS V',
+                'CLASS VI',
+                'CLASS VII',
+                'CLASS VIII',
+              ]
+        )
+      }
+    })
+  }, [])
+
+  // Load students from database
   const loadStudents = async () => {
-    if (!supabase) {
-      setLoading(false)
-      return
-    }
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('student_master')
-        .select('*')
-        .order('created_at', { ascending: false })
-      if (error) throw error
+      const data = await fetchCollectionData('student_master')
       setStudents(data || [])
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Error loading students:', err)
-      setToast(err instanceof Error ? err.message : 'Failed to load students')
+      setToast(err?.message || 'Failed to load students')
     } finally {
       setLoading(false)
     }
@@ -169,23 +178,78 @@ export default function StudentMasterStudio({
 
   useEffect(() => {
     loadStudents()
-
-    if (!supabase) return
-    const channel = supabase
-      .channel('rt-student-master')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'student_master' },
-        () => {
-          loadStudents()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
   }, [])
+
+  // Auto-sync helper to write to Google Sheet
+  const handleSyncToGoogleSheet = async (studentsList?: Student[]) => {
+    const listToSync = studentsList || students
+    if (listToSync.length === 0) {
+      setToast('No student records to sync')
+      return
+    }
+    setSyncingSheet(true)
+    try {
+      const res = await syncAllStudentsToGoogleSheet(listToSync)
+      if (res.success) {
+        const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })
+        setLastSyncTime(timeStr)
+        setToast(`Google Sheet synchronized (${res.count} records) on tab '${GOOGLE_SHEET_TAB_NAME}'!`)
+      } else {
+        setToast(`Google Sheet Sync: ${res.error || 'Authentication required'}`)
+      }
+    } catch (err: any) {
+      setToast(`Sheet Sync Failed: ${err.message || 'Unknown error'}`)
+    } finally {
+      setSyncingSheet(false)
+    }
+  }
+
+  // Pull records from Google Sheet
+  const handlePullFromGoogleSheet = async () => {
+    setSyncingSheet(true)
+    try {
+      const res = await fetchStudentsFromGoogleSheet()
+      if (!res.success || !res.data) {
+        throw new Error(res.error || 'Failed to fetch Google Sheet data')
+      }
+      if (res.data.length === 0) {
+        setToast('No student rows found in Google Sheet.')
+        setSyncingSheet(false)
+        return
+      }
+
+      let saved = 0
+      for (const st of res.data) {
+        const pk = st.admission_no || `ADM-${Date.now().toString().slice(-4)}`
+        await saveDocument('student_master', 'admission_no', {
+          ...st,
+          _docId: pk,
+        })
+        saved++
+      }
+
+      setToast(`Successfully imported & synced ${saved} students from Google Sheet!`)
+      await loadStudents()
+    } catch (err: any) {
+      setToast(`Pull Error: ${err.message || 'Failed to read Google Sheet'}`)
+    } finally {
+      setSyncingSheet(false)
+    }
+  }
+
+  // Connect Google Workspace
+  const handleGoogleConnect = async () => {
+    try {
+      const res = await connectGoogleWorkspace()
+      if (res.success) {
+        setToast(`Connected to Google Account: ${res.user?.email || 'Authorized'}`)
+      } else {
+        setToast(res.error || 'Google connection failed')
+      }
+    } catch (err: any) {
+      setToast(err.message || 'Connection error')
+    }
+  }
 
   // Filtering
   const filteredStudents = useMemo(() => {
@@ -198,7 +262,8 @@ export default function StudentMasterStudio({
         (s.roll_no && s.roll_no.toLowerCase().includes(q)) ||
         (s.mobile_primary && s.mobile_primary.includes(q)) ||
         (s.father_name && s.father_name.toLowerCase().includes(q)) ||
-        (s.father_mobile && s.father_mobile.includes(q))
+        (s.father_mobile && s.father_mobile.includes(q)) ||
+        (s.mother_name && s.mother_name.toLowerCase().includes(q))
 
       const matchClass = !filterClass || s.class_name === filterClass
       const matchSection = !filterSection || s.section === filterSection
@@ -222,18 +287,18 @@ export default function StudentMasterStudio({
   const openModal = (mode: 'create' | 'edit' | 'view', student?: Student) => {
     setModalMode(mode)
     setSelectedStudent(student || null)
-    setActiveTab('admission')
+    setActiveTab('student')
     if (mode === 'create') {
       const year = getCurrentAcademicYear()
       setFormState({
         admission_no: `ADM-${Date.now().toString().slice(-4)}`,
-        admission_date: new Date().toISOString().slice(0, 10),
         academic_year: year,
         class_name: classes[0] || 'CLASS I',
         section: 'A',
         student_status: 'Active',
+        gender: 'Male',
+        blood_group: 'A+',
         is_active: true,
-        nationality: 'Indian',
       })
     } else if (student) {
       setFormState({ ...student })
@@ -248,77 +313,48 @@ export default function StudentMasterStudio({
 
   // Update Field helper
   const updateForm = (key: keyof Student, value: unknown) => {
-    setFormState((prev) => {
-      const next = { ...prev, [key]: value }
+    setFormState((prev) => ({
+      ...prev,
+      [key]: value,
+    }))
+  }
 
-      // Auto update full_name if first/middle/last change
-      if (key === 'first_name' || key === 'middle_name' || key === 'last_name') {
-        const parts = [
-          key === 'first_name' ? value : next.first_name,
-          key === 'middle_name' ? value : next.middle_name,
-          key === 'last_name' ? value : next.last_name,
-        ]
-          .filter(Boolean)
-          .map(String)
-        next.full_name = parts.join(' ').trim()
+  // Google Drive Photo Upload Handler
+  const handlePhotoUpload = async (
+    file: File | null,
+    photoType: 'student' | 'father' | 'mother'
+  ) => {
+    if (!file) return
+    const setLoader =
+      photoType === 'student'
+        ? setUploadingStudentPhoto
+        : photoType === 'father'
+        ? setUploadingFatherPhoto
+        : setUploadingMotherPhoto
+
+    setLoader(true)
+    try {
+      const studentIdentifier = formState.full_name || formState.admission_no || 'Student'
+      const res = await uploadPhotoToGoogleDrive(file, photoType, studentIdentifier)
+
+      if (res.success && res.url) {
+        if (photoType === 'student') updateForm('student_photo_url', res.url)
+        if (photoType === 'father') updateForm('father_photo_url', res.url)
+        if (photoType === 'mother') updateForm('mother_photo_url', res.url)
+        setToast(`${photoType === 'student' ? 'Student' : photoType === 'father' ? "Father's" : "Mother's"} photo saved to Google Drive folder 'student_data_photo'!`)
+      } else {
+        setToast(res.error || 'Google Drive photo upload failed')
       }
-
-      return next
-    })
-  }
-
-  // Copy current address to permanent
-  const copyAddress = () => {
-    if (formState.address) {
-      updateForm('permanent_address', formState.address)
-      setToast('Permanent address set identical to current address')
-    }
-  }
-
-  // Photo Upload Handler
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploadingPhoto(true)
-    try {
-      const url = await uploadToSupabaseStorage(
-        file,
-        'school-documents',
-        `students/${formState.admission_no || 'profile'}/photos`
-      )
-      updateForm('student_photo_url', url)
-      setToast('Student photo uploaded successfully')
-    } catch {
-      setToast('Photo upload failed')
+    } catch (err: any) {
+      setToast(err.message || 'Photo upload error')
     } finally {
-      setUploadingPhoto(false)
-    }
-  }
-
-  // Document Upload Handler
-  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploadingDoc(true)
-    try {
-      const url = await uploadToSupabaseStorage(
-        file,
-        'school-documents',
-        `students/${formState.admission_no || 'profile'}/documents`
-      )
-      updateForm('document_url', url)
-      setToast('Student document uploaded')
-    } catch {
-      setToast('Document upload failed')
-    } finally {
-      setUploadingDoc(false)
+      setLoader(false)
     }
   }
 
   // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!supabase) return
 
     if (!formState.admission_no || !formState.full_name || !formState.class_name) {
       setToast('Please fill in Admission No, Full Name, and Class.')
@@ -327,46 +363,44 @@ export default function StudentMasterStudio({
 
     setSubmitting(true)
     try {
-      // Sanitize payload to avoid postgres type errors on empty strings
-      const payload: Record<string, unknown> = {}
-      for (const [k, v] of Object.entries(formState)) {
-        if (k === 'student_id' && modalMode === 'create') continue
-        if (v === '' || v === undefined) {
-          if (modalMode === 'edit') {
-            payload[k] = null
-          }
-        } else if (k === 'roll_no') {
-          payload[k] = String(v).trim()
-        } else {
-          payload[k] = v
-        }
+      const payload: Record<string, unknown> = {
+        ...formState,
+        roll_no: formState.roll_no ? String(formState.roll_no).trim() : '',
+        academic_year: formState.academic_year || getCurrentAcademicYear(),
+        student_status: formState.student_status || 'Active',
+        is_active: formState.is_active !== false,
       }
 
-      if (modalMode === 'create') {
-        const { error } = await supabase.from('student_master').insert([payload])
-        if (error) throw error
-        await logActivity({
-          action: `Admitted new student: ${formState.full_name} (${formState.admission_no})`,
-          module: 'student_master',
-        })
-        setToast(`Student ${formState.full_name} registered successfully`)
-      } else if (modalMode === 'edit' && selectedStudent?.student_id) {
-        const { error } = await supabase
-          .from('student_master')
-          .update(payload)
-          .eq('student_id', selectedStudent.student_id)
-        if (error) throw error
-        await logActivity({
-          action: `Updated student record: ${formState.full_name} (${formState.admission_no})`,
-          module: 'student_master',
-        })
-        setToast('Student profile updated')
-      }
+      const docId = String(payload.admission_no || payload.student_id || `ADM-${Date.now().toString().slice(-4)}`)
+      payload.student_id = docId
+      payload._docId = docId
+
+      // 1. Save to Firebase / local DB
+      await saveDocument('student_master', 'admission_no', payload)
+
+      await logActivity({
+        action: `${modalMode === 'create' ? 'Admitted' : 'Updated'} student: ${formState.full_name} (${formState.admission_no})`,
+        module: 'student_master',
+      })
+
+      // 2. Realtime Sync with Google Sheet
+      const updatedList = modalMode === 'create'
+        ? [payload as Student, ...students.filter((s) => s.admission_no !== payload.admission_no)]
+        : students.map((s) => (s.admission_no === payload.admission_no ? (payload as Student) : s))
+
+      setStudents(updatedList)
       closeModal()
-      loadStudents()
-    } catch (err) {
+      setToast(`Student ${formState.full_name} saved successfully! Syncing Google Sheet...`)
+
+      // Background Google Sheet Sync
+      syncAllStudentsToGoogleSheet(updatedList).then((res) => {
+        if (res.success) {
+          setLastSyncTime(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }))
+        }
+      })
+    } catch (err: any) {
       console.warn('Save error:', err)
-      setToast(err instanceof Error ? err.message : 'Operation failed')
+      setToast(err?.message || 'Operation failed')
     } finally {
       setSubmitting(false)
     }
@@ -384,59 +418,246 @@ export default function StudentMasterStudio({
         action: `Deleted student: ${student.full_name} (${student.admission_no})`,
         module: 'student_master',
       })
-      setToast('Student record deleted')
-      loadStudents()
-    } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Delete failed')
+
+      const remaining = students.filter((s) => s.admission_no !== student.admission_no)
+      setStudents(remaining)
+      setToast('Student record deleted. Syncing Google Sheet...')
+
+      // Sync remaining to Google Sheet
+      syncAllStudentsToGoogleSheet(remaining).then((res) => {
+        if (res.success) {
+          setLastSyncTime(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }))
+        }
+      })
+    } catch (err: any) {
+      setToast(err?.message || 'Delete failed')
     }
   }
 
-  // Export CSV
+  // Export CSV (Clean matching headers)
   const handleExportCsv = () => {
-    const headers = [
-      'Admission No',
-      'Roll No',
-      'Full Name',
-      'Class',
-      'Section',
-      'Academic Year',
-      'Gender',
-      'DOB',
-      'Father Name',
-      'Father Mobile',
-      'Mother Name',
-      'Address',
-      'Blood Group',
-      'Status',
-    ]
     const rows = filteredStudents.map((s) => [
-      s.admission_no || '',
-      s.roll_no || '',
-      s.full_name || '',
-      s.class_name || '',
-      s.section || '',
-      s.academic_year || '',
-      s.gender || '',
-      s.date_of_birth || '',
-      s.father_name || '',
-      s.father_mobile || '',
-      s.mother_name || '',
-      `"${(s.address || '').replace(/"/g, '""')}"`,
-      s.blood_group || '',
-      s.student_status || (s.is_active ? 'Active' : 'Inactive'),
+      `"${String(s.admission_no || '').replace(/"/g, '""')}"`,
+      `"${String(s.roll_no || '').replace(/"/g, '""')}"`,
+      `"${String(s.academic_year || '2026-27').replace(/"/g, '""')}"`,
+      `"${String(s.class_name || '').replace(/"/g, '""')}"`,
+      `"${String(s.section || 'A').replace(/"/g, '""')}"`,
+      `"${String(s.student_status || 'Active').replace(/"/g, '""')}"`,
+      `"${String(s.full_name || '').replace(/"/g, '""')}"`,
+      `"${String(s.date_of_birth || '').replace(/"/g, '""')}"`,
+      `"${String(s.gender || 'Male').replace(/"/g, '""')}"`,
+      `"${String(s.blood_group || '').replace(/"/g, '""')}"`,
+      `"${String(s.mobile_primary || '').replace(/"/g, '""')}"`,
+      `"${String(s.student_photo_url || '').replace(/"/g, '""')}"`,
+      `"${String(s.father_name || '').replace(/"/g, '""')}"`,
+      `"${String(s.father_mobile || '').replace(/"/g, '""')}"`,
+      `"${String(s.father_occupation || '').replace(/"/g, '""')}"`,
+      `"${String(s.father_photo_url || '').replace(/"/g, '""')}"`,
+      `"${String(s.mother_name || '').replace(/"/g, '""')}"`,
+      `"${String(s.mother_mobile || '').replace(/"/g, '""')}"`,
+      `"${String(s.mother_occupation || '').replace(/"/g, '""')}"`,
+      `"${String(s.mother_photo_url || '').replace(/"/g, '""')}"`,
+      `"${String(s.address || '').replace(/"/g, '""')}"`,
     ])
 
-    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+    const csv = [STUDENT_SHEET_HEADERS.slice(0, 21).join(','), ...rows.map((r) => r.join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = `Student_Master_${new Date().toISOString().slice(0, 10)}.csv`
+    link.download = `Student_Data_Roster_${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
-    setToast('Student roster exported to CSV')
+    setToast('Student roster exported to clean CSV')
+  }
+
+  // Clean Sample CSV Download
+  const handleDownloadCleanSample = () => {
+    const headers = STUDENT_SHEET_HEADERS.slice(0, 21)
+    const sampleRow1 = [
+      'ADM-2026-001',
+      '1',
+      '2026-27',
+      'CLASS I',
+      'A',
+      'Active',
+      'Aarav Sharma',
+      '2016-05-15',
+      'Male',
+      'A+',
+      '9830112233',
+      'https://lh3.googleusercontent.com/d/1sample_student_id',
+      'Rajesh Sharma',
+      '9876543210',
+      'Business',
+      'https://lh3.googleusercontent.com/d/1sample_father_id',
+      'Sunita Sharma',
+      '9876543220',
+      'Homemaker',
+      'https://lh3.googleusercontent.com/d/1sample_mother_id',
+      'Station Road, Dankuni, Hooghly, WB',
+    ]
+
+    const csvContent = [headers.join(','), sampleRow1.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `Student_Data_Sample_Template.csv`
+    link.click()
+    setToast('Downloaded clean Student Data CSV template')
   }
 
   return (
     <div className="module-view">
+      {/* Google Drive & Sheet Live Sync Header Banner */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)',
+          color: '#ffffff',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          marginBottom: '16px',
+          boxShadow: '0 4px 12px rgba(30, 58, 138, 0.15)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
+            style={{
+              background: 'rgba(255, 255, 255, 0.15)',
+              padding: '10px',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <FileSpreadsheet size={24} color="#60a5fa" />
+          </div>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>Google Drive & Sheets Realtime Integration</span>
+              <span
+                style={{
+                  background: googleConnected ? '#16a34a' : '#d97706',
+                  color: '#fff',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                }}
+              >
+                {googleConnected ? 'Connected & Active' : 'OAuth Ready'}
+              </span>
+            </div>
+            <div style={{ fontSize: '12px', color: '#bfdbfe', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+              <span>
+                📁 <b>Drive Folder:</b> <code style={{ background: 'rgba(0,0,0,0.2)', padding: '1px 5px', borderRadius: '4px' }}>student_data_photo</code> ({GOOGLE_DRIVE_FOLDER_ID.slice(0, 8)}...)
+              </span>
+              <span>
+                📊 <b>Google Sheet:</b> <code style={{ background: 'rgba(0,0,0,0.2)', padding: '1px 5px', borderRadius: '4px' }}>student_data</code> ({GOOGLE_SHEET_ID.slice(0, 8)}...)
+              </span>
+              {lastSyncTime && (
+                <span style={{ color: '#86efac' }}>
+                  ✓ Last synced at {lastSyncTime}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          {!googleConnected ? (
+            <button
+              onClick={handleGoogleConnect}
+              style={{
+                background: '#ffffff',
+                color: '#1e3a8a',
+                border: 'none',
+                padding: '8px 14px',
+                borderRadius: '8px',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <Sparkles size={14} color="#2563eb" />
+              Connect Google Account
+            </button>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                onClick={() => handleSyncToGoogleSheet()}
+                disabled={syncingSheet}
+                title="Force push all student data to Google Sheet"
+                style={{
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <RefreshCw size={14} className={syncingSheet ? 'spin' : ''} />
+                {syncingSheet ? 'Syncing...' : 'Sync with Google Sheet'}
+              </button>
+              <button
+                onClick={handlePullFromGoogleSheet}
+                disabled={syncingSheet}
+                title="Pull latest student rows from Google Sheet into Firebase"
+                style={{
+                  background: 'rgba(255,255,255,0.15)',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Download size={14} />
+                Pull Sheet Data
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => setShowScriptModal(true)}
+            title="View Google Apps Script Code (code.gs)"
+            style={{
+              background: 'rgba(255, 255, 255, 0.12)',
+              color: '#ffffff',
+              border: '1px solid rgba(255, 255, 255, 0.25)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontWeight: 600,
+              fontSize: '12px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <FileText size={14} />
+            Apps Script Code
+          </button>
+        </div>
+      </div>
+
       {/* Studio Header */}
       <div className="module-hero">
         <div className="hero-left">
@@ -444,13 +665,13 @@ export default function StudentMasterStudio({
             <h1>Student Master Studio</h1>
             <span className="count-badge">{filteredStudents.length} Students</span>
           </div>
-          <p>Comprehensive admission, academic, parent contact, medical, and document directory</p>
+          <p>Streamlined student registry with Google Drive photos & Google Sheet realtime sync</p>
         </div>
         <div className="hero-actions">
           <button
             className="btn-secondary"
-            onClick={() => downloadSampleCsv(modules.student_master)}
-            title="Download pre-filled sample CSV template for bulk student upload"
+            onClick={handleDownloadCleanSample}
+            title="Download clean sample CSV template without unneeded fields"
           >
             <Download size={16} /> Sample CSV
           </button>
@@ -460,6 +681,13 @@ export default function StudentMasterStudio({
             title="Import student roster from CSV"
           >
             <Upload size={16} /> Import CSV
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={handleExportCsv}
+            title="Export full filtered roster to CSV"
+          >
+            <Download size={16} /> Export
           </button>
           <button className="btn-secondary" onClick={loadStudents} title="Reload records">
             <RefreshCw size={16} className={loading ? 'spin' : ''} />
@@ -476,7 +704,7 @@ export default function StudentMasterStudio({
           <Search size={18} />
           <input
             type="text"
-            placeholder="Search by name, admission no, roll no, mobile, father name..."
+            placeholder="Search by name, admission no, roll no, mobile, father or mother name..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value)
@@ -517,6 +745,7 @@ export default function StudentMasterStudio({
             <option value="A">Section A</option>
             <option value="B">Section B</option>
             <option value="C">Section C</option>
+            <option value="D">Section D</option>
           </select>
 
           <select
@@ -591,8 +820,8 @@ export default function StudentMasterStudio({
               <th>Student Name</th>
               <th>Class & Sec</th>
               <th>Roll</th>
-              <th>Father Name</th>
-              <th>Contact Phone</th>
+              <th>Father Details & Photo</th>
+              <th>Mother Details & Photo</th>
               <th>Status</th>
               <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
@@ -600,150 +829,251 @@ export default function StudentMasterStudio({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={9} className="table-loading">
-                  <div className="loader-spinner" /> Loading student records from database...
+                <td colSpan={9} style={{ textAlign: 'center', padding: '40px' }}>
+                  <RefreshCw size={24} className="spin" style={{ margin: '0 auto 8px' }} />
+                  <div>Loading student directory...</div>
                 </td>
               </tr>
             ) : paginatedStudents.length === 0 ? (
               <tr>
-                <td colSpan={9} className="table-empty">
-                  <User size={36} opacity={0.4} />
-                  <p>No students found matching current filters.</p>
-                  <button className="btn-primary-sm" onClick={() => openModal('create')}>
-                    <Plus size={14} /> Register New Student
-                  </button>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                  <User size={36} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
+                  <div style={{ fontWeight: 600 }}>No students found matching current filters.</div>
+                  <div style={{ fontSize: '13px', marginTop: '4px' }}>
+                    Click &ldquo;New Admission&rdquo; or &ldquo;Import CSV&rdquo; to add student records.
+                  </div>
                 </td>
               </tr>
             ) : (
-              paginatedStudents.map((student) => (
-                <tr key={student.student_id || student.admission_no}>
-                  <td>
-                    <div className="table-avatar">
-                      {student.student_photo_url ? (
-                        <img
-                          src={formatImageUrl(student.student_photo_url)}
-                          alt={student.full_name}
-                          referrerPolicy="no-referrer"
-                          onError={handleImageError}
-                        />
-                      ) : (
-                        <span>{student.full_name?.slice(0, 2).toUpperCase() || 'ST'}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td>
-                    <span className="code-pill">{student.admission_no}</span>
-                  </td>
-                  <td>
-                    <div className="name-cell">
-                      <b>{student.full_name}</b>
-                      <small>{student.academic_year || '2025-2026'}</small>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="badge badge-light">
-                      {student.class_name || 'N/A'}{' '}
-                      {student.section ? `- ${student.section}` : ''}
-                    </span>
-                  </td>
-                  <td>{student.roll_no || '—'}</td>
-                  <td>{student.father_name || '—'}</td>
-                  <td>
-                    <a
-                      href={`tel:${student.father_mobile || student.mobile_primary}`}
-                      className="contact-link"
-                    >
-                      {student.father_mobile || student.mobile_primary || '—'}
-                    </a>
-                  </td>
-                  <td>
-                    <span
-                      className={`status-pill ${
-                        student.student_status === 'Active' || student.is_active
-                          ? 'status-active'
-                          : 'status-inactive'
-                      }`}
-                    >
-                      {student.student_status || (student.is_active ? 'Active' : 'Inactive')}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
-                      <button
-                        title="View Full Profile"
-                        onClick={() => openModal('view', student)}
+              paginatedStudents.map((student) => {
+                const studentImg = formatImageUrl(student.student_photo_url)
+                const fatherImg = formatImageUrl(student.father_photo_url)
+                const motherImg = formatImageUrl(student.mother_photo_url)
+
+                return (
+                  <tr key={student.admission_no || student.student_id}>
+                    <td>
+                      <div
+                        style={{
+                          width: '38px',
+                          height: '38px',
+                          borderRadius: '50%',
+                          overflow: 'hidden',
+                          background: '#f1f5f9',
+                          border: '1px solid #e2e8f0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
                       >
-                        <Eye size={16} />
-                      </button>
-                      <button title="Edit Student" onClick={() => openModal('edit', student)}>
-                        <Edit3 size={16} />
-                      </button>
-                      {onNavigateToIdCard && (
-                        <button
-                          title="Generate ID Card"
-                          onClick={() => onNavigateToIdCard(student.student_id || '')}
-                          style={{ color: '#2563eb' }}
+                        {studentImg ? (
+                          <img
+                            src={studentImg}
+                            alt={student.full_name}
+                            onError={handleImageError}
+                            referrerPolicy="no-referrer"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <User size={18} color="#94a3b8" />
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <b style={{ color: '#1e40af' }}>{student.admission_no}</b>
+                      {student.academic_year && (
+                        <div style={{ fontSize: '11px', color: '#64748b' }}>{student.academic_year}</div>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600, color: '#0f172a' }}>{student.full_name}</div>
+                      {student.mobile_primary && (
+                        <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Phone size={11} /> {student.mobile_primary}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          background: '#e0f2fe',
+                          color: '#0369a1',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontWeight: 700,
+                          fontSize: '12px',
+                        }}
+                      >
+                        {student.class_name} - {student.section || 'A'}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ fontWeight: 600 }}>{student.roll_no || '-'}</span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div
+                          style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            background: '#f8fafc',
+                            border: '1px solid #cbd5e1',
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
                         >
-                          <CreditCard size={16} />
-                        </button>
-                      )}
-                      <button
-                        title="Delete Record"
-                        className="danger"
-                        onClick={() => handleDelete(student)}
+                          {fatherImg ? (
+                            <img
+                              src={fatherImg}
+                              alt="Father"
+                              onError={handleImageError}
+                              referrerPolicy="no-referrer"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <User size={14} color="#94a3b8" />
+                          )}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 600 }}>{student.father_name || '-'}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>
+                            {student.father_occupation ? `${student.father_occupation} • ` : ''}
+                            {student.father_mobile || ''}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div
+                          style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            background: '#f8fafc',
+                            border: '1px solid #cbd5e1',
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {motherImg ? (
+                            <img
+                              src={motherImg}
+                              alt="Mother"
+                              onError={handleImageError}
+                              referrerPolicy="no-referrer"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <User size={14} color="#94a3b8" />
+                          )}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 600 }}>{student.mother_name || '-'}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>
+                            {student.mother_occupation ? `${student.mother_occupation} • ` : ''}
+                            {student.mother_mobile || ''}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          background: student.student_status === 'Active' ? '#dcfce7' : '#fef3c7',
+                          color: student.student_status === 'Active' ? '#15803d' : '#b45309',
+                          padding: '3px 8px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                        }}
                       >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                        {student.student_status || (student.is_active ? 'Active' : 'Inactive')}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: '4px' }}>
+                        <button
+                          className="action-btn"
+                          title="View Profile"
+                          onClick={() => openModal('view', student)}
+                        >
+                          <Eye size={15} />
+                        </button>
+                        <button
+                          className="action-btn"
+                          title="Edit Student"
+                          onClick={() => openModal('edit', student)}
+                        >
+                          <Edit3 size={15} />
+                        </button>
+                        {onNavigateToIdCard && (
+                          <button
+                            className="action-btn"
+                            title="Generate Student ID Card"
+                            onClick={() => onNavigateToIdCard(student.admission_no || '')}
+                          >
+                            <CreditCard size={15} color="#2563eb" />
+                          </button>
+                        )}
+                        <button
+                          className="action-btn delete-btn"
+                          title="Delete Record"
+                          onClick={() => handleDelete(student)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Pagination Footer */}
-      <div className="table-pagination">
-        <span>
-          Showing {(page - 1) * pageSize + 1} to{' '}
-          {Math.min(page * pageSize, filteredStudents.length)} of {filteredStudents.length} students
-        </span>
-        <div className="page-buttons">
-          <button
-            disabled={page === 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="page-btn"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="page-indicator">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="page-btn"
-          >
-            <ChevronRight size={16} />
-          </button>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="pagination-bar">
+          <div className="page-info">
+            Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, filteredStudents.length)} of{' '}
+            {filteredStudents.length} students
+          </div>
+          <div className="page-controls">
+            <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+              <ChevronLeft size={16} /> Prev
+            </button>
+            <span className="current-page">
+              {page} / {totalPages}
+            </span>
+            <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+              Next <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Multi-Section Admission & Profile Modal */}
+      {/* CREATE / EDIT / VIEW STUDENT MODAL */}
       {modalMode && (
-        <div className="modal-bg">
-          <div className="multi-section-modal">
-            {/* Modal Header */}
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: '850px', width: '95%' }}>
             <div className="modal-header">
-              <div className="header-info">
+              <div>
                 <span className="modal-tag">STUDENT MASTER</span>
                 <h2>
                   {modalMode === 'create'
-                    ? 'New Student Registration'
+                    ? 'New Student Admission'
                     : modalMode === 'edit'
-                    ? `Edit Student: ${formState.full_name}`
-                    : `Student Profile: ${selectedStudent?.full_name}`}
+                    ? `Edit Student: ${formState.full_name || formState.admission_no}`
+                    : `Student Profile: ${selectedStudent?.full_name || selectedStudent?.admission_no}`}
                 </h2>
               </div>
               <button className="close-btn" onClick={closeModal}>
@@ -751,671 +1081,786 @@ export default function StudentMasterStudio({
               </button>
             </div>
 
-            {/* Modal Navigation Tabs */}
+            {/* Modal Navigation Tabs (Streamlined: Student Info, Parents Info, Address) */}
             <div className="modal-tab-bar">
               <button
-                className={`tab-btn ${activeTab === 'admission' ? 'active' : ''}`}
-                onClick={() => setActiveTab('admission')}
+                className={`tab-btn ${activeTab === 'student' ? 'active' : ''}`}
+                onClick={() => setActiveTab('student')}
               >
-                1. Admission
-              </button>
-              <button
-                className={`tab-btn ${activeTab === 'personal' ? 'active' : ''}`}
-                onClick={() => setActiveTab('personal')}
-              >
-                2. Personal
+                1. Student & Academic Info
               </button>
               <button
                 className={`tab-btn ${activeTab === 'parents' ? 'active' : ''}`}
                 onClick={() => setActiveTab('parents')}
               >
-                3. Parents & Guardian
-              </button>
-              <button
-                className={`tab-btn ${activeTab === 'contact' ? 'active' : ''}`}
-                onClick={() => setActiveTab('contact')}
-              >
-                4. Student Contact
+                2. Parents Information
               </button>
               <button
                 className={`tab-btn ${activeTab === 'address' ? 'active' : ''}`}
                 onClick={() => setActiveTab('address')}
               >
-                5. Address
-              </button>
-              <button
-                className={`tab-btn ${activeTab === 'docs' ? 'active' : ''}`}
-                onClick={() => setActiveTab('docs')}
-              >
-                6. Documents
+                3. Address & Status
               </button>
             </div>
 
             {/* Modal Body / Tab Content */}
             <form onSubmit={handleSubmit} className="modal-body-form">
-              {/* TAB 1: ADMISSION */}
-              {activeTab === 'admission' && (
+              {/* TAB 1: STUDENT & ACADEMIC INFO */}
+              {activeTab === 'student' && (
                 <div className="tab-pane">
-                  <div className="form-row-3">
-                    <label>
-                      <span>
-                        Admission No <b>*</b>
-                      </span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        required
-                        value={formState.admission_no || ''}
-                        onChange={(e) => updateForm('admission_no', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Admission Date</span>
-                      <input
-                        type="date"
-                        disabled={modalMode === 'view'}
-                        value={formState.admission_date || ''}
-                        onChange={(e) => updateForm('admission_date', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>GR Number</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.gr_number || ''}
-                        onChange={(e) => updateForm('gr_number', e.target.value)}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="form-row-3">
-                    <label>
-                      <span>
-                        Class <b>*</b>
-                      </span>
-                      <select
-                        disabled={modalMode === 'view'}
-                        required
-                        value={formState.class_name || ''}
-                        onChange={(e) => updateForm('class_name', e.target.value)}
-                      >
-                        <option value="">Select Class</option>
-                        {classes.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Section</span>
-                      <select
-                        disabled={modalMode === 'view'}
-                        value={formState.section || 'A'}
-                        onChange={(e) => updateForm('section', e.target.value)}
-                      >
-                        <option value="A">Section A</option>
-                        <option value="B">Section B</option>
-                        <option value="C">Section C</option>
-                        <option value="D">Section D</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>Roll Number</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.roll_no || ''}
-                        onChange={(e) => updateForm('roll_no', e.target.value)}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="form-row-3">
-                    <label>
-                      <span>Academic Year</span>
-                      <select
-                        disabled={modalMode === 'view'}
-                        value={formState.academic_year || CURRENT_ACADEMIC_YEAR}
-                        onChange={(e) => updateForm('academic_year', e.target.value)}
-                      >
-                        {ACADEMIC_YEAR_OPTIONS.map((yr) => (
-                          <option key={yr} value={yr}>
-                            {yr} {yr === CURRENT_ACADEMIC_YEAR ? '(Current Session)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>House Name</span>
-                      <select
-                        disabled={modalMode === 'view'}
-                        value={formState.house_name || ''}
-                        onChange={(e) => updateForm('house_name', e.target.value)}
-                      >
-                        <option value="">None</option>
-                        <option value="Red House (Ruby)">Red House (Ruby)</option>
-                        <option value="Blue House (Sapphire)">Blue House (Sapphire)</option>
-                        <option value="Green House (Emerald)">Green House (Emerald)</option>
-                        <option value="Yellow House (Topaz)">Yellow House (Topaz)</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>Student Status</span>
-                      <select
-                        disabled={modalMode === 'view'}
-                        value={formState.student_status || 'Active'}
-                        onChange={(e) => updateForm('student_status', e.target.value)}
-                      >
-                        <option value="Active">Active</option>
-                        <option value="New Admission">New Admission</option>
-                        <option value="Promoted">Promoted</option>
-                        <option value="Left">Left</option>
-                        <option value="Alumni">Alumni</option>
-                      </select>
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 2: PERSONAL */}
-              {activeTab === 'personal' && (
-                <div className="tab-pane">
-                  <div className="photo-upload-section">
-                    <div className="avatar-preview-box">
-                      {formState.student_photo_url ? (
-                        <img
-                          src={formatImageUrl(formState.student_photo_url)}
-                          alt="Student"
-                          referrerPolicy="no-referrer"
-                          onError={handleImageError}
-                        />
-                      ) : (
-                        <User size={48} opacity={0.3} />
-                      )}
-                    </div>
-                    {modalMode !== 'view' && (
-                      <div className="photo-actions" style={{ flex: 1 }}>
-                        <label className="btn-upload-label">
-                          <Upload size={14} />{' '}
-                          {uploadingPhoto ? 'Uploading...' : 'Upload Student Photo'}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: '16px' }}>
+                    <div>
+                      <div className="form-row-3">
+                        <label>
+                          <span>
+                            Admission No <b>*</b>
+                          </span>
                           <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handlePhotoUpload}
-                            disabled={uploadingPhoto}
-                            style={{ display: 'none' }}
+                            type="text"
+                            disabled={modalMode === 'view'}
+                            required
+                            value={formState.admission_no || ''}
+                            onChange={(e) => updateForm('admission_no', e.target.value)}
                           />
                         </label>
-                        <small style={{ display: 'block', marginBottom: '6px' }}>Max 2MB · PNG, JPG, JPEG</small>
-                        <div style={{ marginTop: '4px' }}>
+                        <label>
+                          <span>Roll Number</span>
                           <input
-                            type="url"
-                            placeholder="Or paste Google Drive / Photo URL..."
+                            type="text"
+                            disabled={modalMode === 'view'}
+                            value={formState.roll_no || ''}
+                            onChange={(e) => updateForm('roll_no', e.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span>Academic Year</span>
+                          <select
+                            disabled={modalMode === 'view'}
+                            value={formState.academic_year || getCurrentAcademicYear()}
+                            onChange={(e) => updateForm('academic_year', e.target.value)}
+                          >
+                            {ACADEMIC_YEAR_OPTIONS.map((yr) => (
+                              <option key={yr} value={yr}>
+                                {yr}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="form-row-3">
+                        <label>
+                          <span>
+                            Class <b>*</b>
+                          </span>
+                          <select
+                            disabled={modalMode === 'view'}
+                            required
+                            value={formState.class_name || ''}
+                            onChange={(e) => updateForm('class_name', e.target.value)}
+                          >
+                            <option value="">Select Class</option>
+                            {classes.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Section</span>
+                          <input
+                            type="text"
+                            disabled={modalMode === 'view'}
+                            value={formState.section || 'A'}
+                            onChange={(e) => updateForm('section', e.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span>Student Status</span>
+                          <select
+                            disabled={modalMode === 'view'}
+                            value={formState.student_status || 'Active'}
+                            onChange={(e) => updateForm('student_status', e.target.value)}
+                          >
+                            <option value="Active">Active</option>
+                            <option value="New Admission">New Admission</option>
+                            <option value="Promoted">Promoted</option>
+                            <option value="Left">Left</option>
+                            <option value="Alumni">Alumni</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="form-row-2">
+                        <label>
+                          <span>
+                            Full Name <b>*</b>
+                          </span>
+                          <input
+                            type="text"
+                            disabled={modalMode === 'view'}
+                            required
+                            placeholder="Student's complete name"
+                            value={formState.full_name || ''}
+                            onChange={(e) => updateForm('full_name', e.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span>Date of Birth</span>
+                          <input
+                            type="date"
+                            disabled={modalMode === 'view'}
+                            value={formState.date_of_birth || ''}
+                            onChange={(e) => updateForm('date_of_birth', e.target.value)}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="form-row-3">
+                        <label>
+                          <span>Gender</span>
+                          <select
+                            disabled={modalMode === 'view'}
+                            value={formState.gender || 'Male'}
+                            onChange={(e) => updateForm('gender', e.target.value)}
+                          >
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>Blood Group</span>
+                          <select
+                            disabled={modalMode === 'view'}
+                            value={formState.blood_group || ''}
+                            onChange={(e) => updateForm('blood_group', e.target.value)}
+                          >
+                            <option value="">Select Blood Group</option>
+                            <option value="A+">A+</option>
+                            <option value="A-">A-</option>
+                            <option value="B+">B+</option>
+                            <option value="B-">B-</option>
+                            <option value="AB+">AB+</option>
+                            <option value="AB-">AB-</option>
+                            <option value="O+">O+</option>
+                            <option value="O-">O-</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>Student Mobile</span>
+                          <input
+                            type="tel"
+                            disabled={modalMode === 'view'}
+                            placeholder="Primary mobile"
+                            value={formState.mobile_primary || ''}
+                            onChange={(e) => updateForm('mobile_primary', e.target.value)}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Student Photo Card with Google Drive Uploader */}
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '10px',
+                        padding: '12px',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
+                        Student Photo
+                      </div>
+                      <div
+                        style={{
+                          width: '100px',
+                          height: '110px',
+                          borderRadius: '8px',
+                          background: '#ffffff',
+                          border: '2px dashed #cbd5e1',
+                          overflow: 'hidden',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          position: 'relative',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        {formState.student_photo_url ? (
+                          <img
+                            src={formatImageUrl(formState.student_photo_url)}
+                            alt="Student"
+                            onError={handleImageError}
+                            referrerPolicy="no-referrer"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <Camera size={32} color="#94a3b8" />
+                        )}
+                        {uploadingStudentPhoto && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              inset: 0,
+                              background: 'rgba(0,0,0,0.6)',
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '11px',
+                            }}
+                          >
+                            <RefreshCw size={18} className="spin" />
+                          </div>
+                        )}
+                      </div>
+
+                      {modalMode !== 'view' && (
+                        <>
+                          <label
+                            style={{
+                              background: '#2563eb',
+                              color: '#fff',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              marginBottom: '6px',
+                            }}
+                          >
+                            <CloudUpload size={13} />
+                            Save to Drive
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null, 'student')}
+                            />
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Drive Photo URL"
                             value={formState.student_photo_url || ''}
                             onChange={(e) => updateForm('student_photo_url', e.target.value)}
-                            style={{
-                              padding: '6px 10px',
-                              fontSize: '12px',
-                              borderRadius: '6px',
-                              border: '1px solid #cbd5e1',
-                              width: '100%',
-                            }}
+                            style={{ fontSize: '10px', padding: '4px 6px', width: '100%' }}
                           />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="form-row-3">
-                    <label>
-                      <span>
-                        First Name <b>*</b>
-                      </span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        required
-                        value={formState.first_name || ''}
-                        onChange={(e) => updateForm('first_name', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Middle Name</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.middle_name || ''}
-                        onChange={(e) => updateForm('middle_name', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>
-                        Last Name <b>*</b>
-                      </span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        required
-                        value={formState.last_name || ''}
-                        onChange={(e) => updateForm('last_name', e.target.value)}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="form-row-3">
-                    <label>
-                      <span>
-                        Full Name <b>*</b>
-                      </span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        required
-                        value={formState.full_name || ''}
-                        onChange={(e) => updateForm('full_name', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Date of Birth</span>
-                      <input
-                        type="date"
-                        disabled={modalMode === 'view'}
-                        value={formState.date_of_birth || ''}
-                        onChange={(e) => updateForm('date_of_birth', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Gender</span>
-                      <select
-                        disabled={modalMode === 'view'}
-                        value={formState.gender || 'Male'}
-                        onChange={(e) => updateForm('gender', e.target.value)}
-                      >
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="form-row-4">
-                    <label>
-                      <span>Blood Group</span>
-                      <select
-                        disabled={modalMode === 'view'}
-                        value={formState.blood_group || ''}
-                        onChange={(e) => updateForm('blood_group', e.target.value)}
-                      >
-                        <option value="">Unknown</option>
-                        <option value="A+">A+</option>
-                        <option value="A-">A-</option>
-                        <option value="B+">B+</option>
-                        <option value="B-">B-</option>
-                        <option value="AB+">AB+</option>
-                        <option value="AB-">AB-</option>
-                        <option value="O+">O+</option>
-                        <option value="O-">O-</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>Nationality</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.nationality || 'Indian'}
-                        onChange={(e) => updateForm('nationality', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Religion</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.religion || ''}
-                        placeholder="e.g. Christian, Hindu, Muslim"
-                        onChange={(e) => updateForm('religion', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Category</span>
-                      <select
-                        disabled={modalMode === 'view'}
-                        value={formState.category || 'General'}
-                        onChange={(e) => updateForm('category', e.target.value)}
-                      >
-                        <option value="General">General</option>
-                        <option value="OBC">OBC</option>
-                        <option value="SC">SC</option>
-                        <option value="ST">ST</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </label>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* TAB 3: PARENTS & GUARDIAN */}
+              {/* TAB 2: PARENTS INFORMATION (Beside Father Occupation -> Father Photo, Beside Mother Occupation -> Mother Photo) */}
               {activeTab === 'parents' && (
                 <div className="tab-pane">
-                  <h4 className="section-title">Father Details</h4>
-                  <div className="form-row-3">
-                    <label>
-                      <span>Father Name</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.father_name || ''}
-                        onChange={(e) => updateForm('father_name', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Father Mobile</span>
-                      <input
-                        type="tel"
-                        disabled={modalMode === 'view'}
-                        value={formState.father_mobile || ''}
-                        onChange={(e) => updateForm('father_mobile', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Father WhatsApp</span>
-                      <input
-                        type="tel"
-                        disabled={modalMode === 'view'}
-                        value={formState.father_whatsapp || ''}
-                        onChange={(e) => updateForm('father_whatsapp', e.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <div className="form-row-2">
-                    <label>
-                      <span>Father Email</span>
-                      <input
-                        type="email"
-                        disabled={modalMode === 'view'}
-                        value={formState.father_email || ''}
-                        onChange={(e) => updateForm('father_email', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Father Occupation</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.father_occupation || ''}
-                        onChange={(e) => updateForm('father_occupation', e.target.value)}
-                      />
-                    </label>
+                  {/* Father Details Section */}
+                  <div
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '10px',
+                      padding: '16px',
+                      marginBottom: '16px',
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: '#1e3a8a', fontSize: '14px', marginBottom: '12px' }}>
+                      Father&apos;s Information
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 140px', gap: '12px', alignItems: 'flex-start' }}>
+                      <label>
+                        <span>Father Name</span>
+                        <input
+                          type="text"
+                          disabled={modalMode === 'view'}
+                          placeholder="Father's full name"
+                          value={formState.father_name || ''}
+                          onChange={(e) => updateForm('father_name', e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Father Mobile</span>
+                        <input
+                          type="tel"
+                          disabled={modalMode === 'view'}
+                          placeholder="Father's phone"
+                          value={formState.father_mobile || ''}
+                          onChange={(e) => updateForm('father_mobile', e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Father Occupation</span>
+                        <input
+                          type="text"
+                          disabled={modalMode === 'view'}
+                          placeholder="e.g. Business / Engineer"
+                          value={formState.father_occupation || ''}
+                          onChange={(e) => updateForm('father_occupation', e.target.value)}
+                        />
+                      </label>
+
+                      {/* Father Photo Box (Beside Father Occupation) */}
+                      <div
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '8px',
+                          padding: '8px',
+                          textAlign: 'center',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                          Father Photo
+                        </div>
+                        <div
+                          style={{
+                            width: '56px',
+                            height: '56px',
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            background: '#f1f5f9',
+                            border: '1px solid #94a3b8',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            position: 'relative',
+                            marginBottom: '4px',
+                          }}
+                        >
+                          {formState.father_photo_url ? (
+                            <img
+                              src={formatImageUrl(formState.father_photo_url)}
+                              alt="Father"
+                              onError={handleImageError}
+                              referrerPolicy="no-referrer"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <User size={20} color="#94a3b8" />
+                          )}
+                          {uploadingFatherPhoto && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                background: 'rgba(0,0,0,0.6)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <RefreshCw size={14} className="spin" color="#fff" />
+                            </div>
+                          )}
+                        </div>
+
+                        {modalMode !== 'view' && (
+                          <label
+                            style={{
+                              background: '#1e40af',
+                              color: '#fff',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                            }}
+                          >
+                            <CloudUpload size={11} /> Drive
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null, 'father')}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <h4 className="section-title" style={{ marginTop: '1.5rem' }}>
-                    Mother Details
-                  </h4>
-                  <div className="form-row-3">
-                    <label>
-                      <span>Mother Name</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.mother_name || ''}
-                        onChange={(e) => updateForm('mother_name', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Mother Mobile</span>
-                      <input
-                        type="tel"
-                        disabled={modalMode === 'view'}
-                        value={formState.mother_mobile || ''}
-                        onChange={(e) => updateForm('mother_mobile', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Mother WhatsApp</span>
-                      <input
-                        type="tel"
-                        disabled={modalMode === 'view'}
-                        value={formState.mother_whatsapp || ''}
-                        onChange={(e) => updateForm('mother_whatsapp', e.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <div className="form-row-2">
-                    <label>
-                      <span>Mother Email</span>
-                      <input
-                        type="email"
-                        disabled={modalMode === 'view'}
-                        value={formState.mother_email || ''}
-                        onChange={(e) => updateForm('mother_email', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Mother Occupation</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.mother_occupation || ''}
-                        onChange={(e) => updateForm('mother_occupation', e.target.value)}
-                      />
-                    </label>
-                  </div>
+                  {/* Mother Details Section */}
+                  <div
+                    style={{
+                      background: '#fdf4ff',
+                      border: '1px solid #f0abfc',
+                      borderRadius: '10px',
+                      padding: '16px',
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: '#86198f', fontSize: '14px', marginBottom: '12px' }}>
+                      Mother&apos;s Information
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 140px', gap: '12px', alignItems: 'flex-start' }}>
+                      <label>
+                        <span>Mother Name</span>
+                        <input
+                          type="text"
+                          disabled={modalMode === 'view'}
+                          placeholder="Mother's full name"
+                          value={formState.mother_name || ''}
+                          onChange={(e) => updateForm('mother_name', e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Mother Mobile</span>
+                        <input
+                          type="tel"
+                          disabled={modalMode === 'view'}
+                          placeholder="Mother's phone"
+                          value={formState.mother_mobile || ''}
+                          onChange={(e) => updateForm('mother_mobile', e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Mother Occupation</span>
+                        <input
+                          type="text"
+                          disabled={modalMode === 'view'}
+                          placeholder="e.g. Homemaker / Teacher"
+                          value={formState.mother_occupation || ''}
+                          onChange={(e) => updateForm('mother_occupation', e.target.value)}
+                        />
+                      </label>
 
-                  <h4 className="section-title" style={{ marginTop: '1.5rem' }}>
-                    Guardian & Emergency Contact
-                  </h4>
-                  <div className="form-row-3">
-                    <label>
-                      <span>Guardian Name</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.guardian_name || ''}
-                        onChange={(e) => updateForm('guardian_name', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Relationship</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        placeholder="e.g. Uncle, Grandfather"
-                        value={formState.guardian_relation || ''}
-                        onChange={(e) => updateForm('guardian_relation', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Guardian Mobile</span>
-                      <input
-                        type="tel"
-                        disabled={modalMode === 'view'}
-                        value={formState.guardian_mobile || ''}
-                        onChange={(e) => updateForm('guardian_mobile', e.target.value)}
-                      />
-                    </label>
+                      {/* Mother Photo Box (Beside Mother Occupation) */}
+                      <div
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #f5d0fe',
+                          borderRadius: '8px',
+                          padding: '8px',
+                          textAlign: 'center',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#701a75', marginBottom: '4px' }}>
+                          Mother Photo
+                        </div>
+                        <div
+                          style={{
+                            width: '56px',
+                            height: '56px',
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            background: '#fdf2f8',
+                            border: '1px solid #f472b6',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            position: 'relative',
+                            marginBottom: '4px',
+                          }}
+                        >
+                          {formState.mother_photo_url ? (
+                            <img
+                              src={formatImageUrl(formState.mother_photo_url)}
+                              alt="Mother"
+                              onError={handleImageError}
+                              referrerPolicy="no-referrer"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <User size={20} color="#f472b6" />
+                          )}
+                          {uploadingMotherPhoto && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                background: 'rgba(0,0,0,0.6)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <RefreshCw size={14} className="spin" color="#fff" />
+                            </div>
+                          )}
+                        </div>
+
+                        {modalMode !== 'view' && (
+                          <label
+                            style={{
+                              background: '#a21caf',
+                              color: '#fff',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                            }}
+                          >
+                            <CloudUpload size={11} /> Drive
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null, 'mother')}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* TAB 4: STUDENT CONTACT */}
-              {activeTab === 'contact' && (
-                <div className="tab-pane">
-                  <div className="form-row-2">
-                    <label>
-                      <span>Primary Mobile Phone</span>
-                      <input
-                        type="tel"
-                        disabled={modalMode === 'view'}
-                        value={formState.mobile_primary || ''}
-                        placeholder="e.g. +91 9876543210"
-                        onChange={(e) => updateForm('mobile_primary', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Student Email Address</span>
-                      <input
-                        type="email"
-                        disabled={modalMode === 'view'}
-                        value={formState.student_email || ''}
-                        placeholder="student@school.edu"
-                        onChange={(e) => updateForm('student_email', e.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <div className="form-row-2">
-                    <label>
-                      <span>Emergency Contact Person</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.emergency_contact_name || ''}
-                        onChange={(e) => updateForm('emergency_contact_name', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Emergency Contact Phone</span>
-                      <input
-                        type="tel"
-                        disabled={modalMode === 'view'}
-                        value={formState.emergency_contact_phone || ''}
-                        onChange={(e) => updateForm('emergency_contact_phone', e.target.value)}
-                      />
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 5: ADDRESS */}
+              {/* TAB 3: ADDRESS & STATUS */}
               {activeTab === 'address' && (
                 <div className="tab-pane">
-                  <label className="full">
-                    <span>Current Residential Address</span>
+                  <label style={{ display: 'block', marginBottom: '16px' }}>
+                    <span>Residential Address</span>
                     <textarea
-                      rows={3}
                       disabled={modalMode === 'view'}
+                      rows={4}
+                      placeholder="Enter complete residential address, city, district, state & pin code..."
                       value={formState.address || ''}
-                      placeholder="Street, locality, area, city, pincode"
                       onChange={(e) => updateForm('address', e.target.value)}
                     />
                   </label>
 
-                  {modalMode !== 'view' && (
-                    <div style={{ margin: '0.75rem 0' }}>
-                      <button type="button" className="btn-secondary-sm" onClick={copyAddress}>
-                        Same as Current Address
-                      </button>
-                    </div>
-                  )}
-
-                  <label className="full">
-                    <span>Permanent Address</span>
-                    <textarea
-                      rows={3}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
+                    <input
+                      type="checkbox"
+                      id="st_active"
                       disabled={modalMode === 'view'}
-                      value={formState.permanent_address || ''}
-                      placeholder="Permanent address if different from current"
-                      onChange={(e) => updateForm('permanent_address', e.target.value)}
+                      checked={formState.is_active !== false}
+                      onChange={(e) => updateForm('is_active', e.target.checked)}
+                      style={{ width: '18px', height: '18px' }}
                     />
-                  </label>
-                </div>
-              )}
-
-              {/* TAB 6: DOCUMENTS */}
-              {activeTab === 'docs' && (
-                <div className="tab-pane">
-                  <div className="form-row-2">
-                    <label>
-                      <span>Birth Certificate / Aadhaar Number</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.birth_certificate_no || ''}
-                        onChange={(e) => updateForm('birth_certificate_no', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Document URL</span>
-                      <input
-                        type="text"
-                        disabled={modalMode === 'view'}
-                        value={formState.document_url || ''}
-                        placeholder="https://..."
-                        onChange={(e) => updateForm('document_url', e.target.value)}
-                      />
+                    <label htmlFor="st_active" style={{ fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                      Active Student in School Roster
                     </label>
                   </div>
-
-                  {modalMode !== 'view' && (
-                    <div style={{ marginTop: '1rem' }}>
-                      <label className="btn-upload-label">
-                        <Upload size={14} />{' '}
-                        {uploadingDoc ? 'Uploading document...' : 'Upload Document to Cloud Storage'}
-                        <input
-                          type="file"
-                          accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                          onChange={handleDocUpload}
-                          disabled={uploadingDoc}
-                          style={{ display: 'none' }}
-                        />
-                      </label>
-                    </div>
-                  )}
-
-                  {formState.document_url && (
-                    <div style={{ marginTop: '1rem' }}>
-                      <a
-                        href={formState.document_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="contact-link"
-                      >
-                        <FileText size={16} /> View Attached Document Link
-                      </a>
-                    </div>
-                  )}
                 </div>
               )}
 
-              {/* Modal Footer Controls */}
+              {/* Modal Footer */}
               <div className="modal-footer">
-                <button type="button" className="btn-secondary" onClick={closeModal}>
-                  {modalMode === 'view' ? 'Close' : 'Cancel'}
-                </button>
-                {modalMode !== 'view' && (
-                  <button type="submit" className="btn-primary" disabled={submitting}>
-                    {submitting ? 'Saving...' : modalMode === 'edit' ? 'Save Changes' : 'Register Student'}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {activeTab !== 'student' && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setActiveTab(activeTab === 'address' ? 'parents' : 'student')}
+                    >
+                      &larr; Back
+                    </button>
+                  )}
+                  {activeTab !== 'address' && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setActiveTab(activeTab === 'student' ? 'parents' : 'address')}
+                    >
+                      Next &rarr;
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="button" className="btn-secondary" onClick={closeModal}>
+                    {modalMode === 'view' ? 'Close' : 'Cancel'}
                   </button>
-                )}
+                  {modalMode !== 'view' && (
+                    <button type="submit" className="btn-primary" disabled={submitting}>
+                      {submitting ? (
+                        <>
+                          <RefreshCw size={16} className="spin" /> Saving & Syncing...
+                        </>
+                      ) : (
+                        <>
+                          <Check size={16} /> Save & Sync to Google Sheet
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </form>
           </div>
         </div>
       )}
-      {showCsvModal && modules['student_master'] && (
+
+      {/* GOOGLE APPS SCRIPT CODE MODAL */}
+      {showScriptModal && (
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: '750px', width: '90%' }}>
+            <div className="modal-header">
+              <div>
+                <span className="modal-tag">GOOGLE WORKSPACE INTEGRATION</span>
+                <h2>Google Apps Script Sync Code (code.gs)</h2>
+              </div>
+              <button className="close-btn" onClick={() => setShowScriptModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ padding: '20px', maxHeight: '70vh', overflowY: 'auto' }}>
+              <p style={{ fontSize: '13px', color: '#475569', marginBottom: '14px' }}>
+                Copy this code into your Google Sheet (<b>Extensions &rarr; Apps Script</b>) to manage automatic sheet initialization, header formatting, and backup sync:
+              </p>
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => {
+                    const code = `/**
+ * Google Apps Script for St. John's English School - Student Data Realtime Sync
+ * Target Spreadsheet: 1OGD09mG-m54rSKBJl2nmOc-pFraYZRnMcCTyoAEWGto
+ * Target Tab: student_data
+ * Target Photo Drive Folder: 19EmUMwDpNxuufOr995XPsg_XoG-BqZWO (student_data_photo)
+ */
+const SPREADSHEET_ID = '${GOOGLE_SHEET_ID}';
+const SHEET_TAB_NAME = '${GOOGLE_SHEET_TAB_NAME}';
+const HEADERS = ${JSON.stringify(STUDENT_SHEET_HEADERS, null, 2)};
+
+function initializeStudentSheet() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_TAB_NAME);
+  if (!sheet) sheet = ss.insertSheet(SHEET_TAB_NAME);
+  sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+  const headerRange = sheet.getRange(1, 1, 1, HEADERS.length);
+  headerRange.setBackground('#1e3a8a');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  for (let i = 1; i <= HEADERS.length; i++) sheet.autoResizeColumn(i);
+}`
+                    navigator.clipboard.writeText(code)
+                    setToast('Apps Script code copied to clipboard!')
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: '10px',
+                    right: '10px',
+                    background: '#2563eb',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    zIndex: 10,
+                  }}
+                >
+                  <Copy size={13} /> Copy Code
+                </button>
+                <pre
+                  style={{
+                    background: '#0f172a',
+                    color: '#e2e8f0',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontFamily: 'monospace',
+                    overflowX: 'auto',
+                    lineHeight: '1.5',
+                  }}
+                >
+{`/**
+ * Google Apps Script for St. John's English School - Student Data Realtime Sync
+ * Target Spreadsheet: ${GOOGLE_SHEET_ID}
+ * Target Tab: ${GOOGLE_SHEET_TAB_NAME}
+ * Target Photo Drive Folder: ${GOOGLE_DRIVE_FOLDER_ID} (student_data_photo)
+ */
+const SPREADSHEET_ID = '${GOOGLE_SHEET_ID}';
+const SHEET_TAB_NAME = '${GOOGLE_SHEET_TAB_NAME}';
+const HEADERS = [
+  'Admission No',
+  'Roll No',
+  'Academic Year',
+  'Class Name',
+  'Section',
+  'Student Status',
+  'Full Name',
+  'Date of Birth',
+  'Gender',
+  'Blood Group',
+  'Student Mobile',
+  'Student Photo URL',
+  'Father Name',
+  'Father Mobile',
+  'Father Occupation',
+  'Father Photo URL',
+  'Mother Name',
+  'Mother Mobile',
+  'Mother Occupation',
+  'Mother Photo URL',
+  'Address',
+  'Last Updated'
+];
+
+function initializeStudentSheet() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_TAB_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_TAB_NAME);
+  }
+  sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+  const headerRange = sheet.getRange(1, 1, 1, HEADERS.length);
+  headerRange.setBackground('#1e3a8a');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  for (let i = 1; i <= HEADERS.length; i++) {
+    sheet.autoResizeColumn(i);
+  }
+}`}
+                </pre>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-primary" onClick={() => setShowScriptModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Import Modal */}
+      {showCsvModal && (
         <CsvImportModal
-          mod={modules['student_master']}
+          mod={modules.student_master}
           onClose={() => setShowCsvModal(false)}
-          onSuccess={(count, insertedItems) => {
-            setToast(`✓ Successfully imported ${count} students!`)
-            if (insertedItems && insertedItems.length > 0) {
-              setStudents((prev) => {
-                const combined = [...(insertedItems as unknown as Student[]), ...prev]
-                const seen = new Set<string>()
-                const deduped: Student[] = []
-                for (const s of combined) {
-                  const sid = String(s.student_id || s.admission_no || (s as any)._docId || JSON.stringify(s))
-                  if (!seen.has(sid)) {
-                    seen.add(sid)
-                    deduped.push(s)
-                  }
+          onSuccess={async (count) => {
+            setShowCsvModal(false)
+            setToast(`Imported ${count} student records! Synchronizing Google Sheet...`)
+            await loadStudents()
+            // Auto sync to Google sheet
+            const data = await fetchCollectionData('student_master')
+            if (data) {
+              syncAllStudentsToGoogleSheet(data).then((res) => {
+                if (res.success) {
+                  setLastSyncTime(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }))
                 }
-                localStorage.setItem('sjes_table_student_master', JSON.stringify(deduped))
-                return deduped
               })
             }
-            loadStudents()
           }}
         />
       )}
