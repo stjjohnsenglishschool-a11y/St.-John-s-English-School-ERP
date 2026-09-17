@@ -23,7 +23,6 @@ import {
   Eye,
   EyeOff,
   FileBarChart,
-  FileSpreadsheet,
   GraduationCap,
   IndianRupee,
   LayoutDashboard,
@@ -75,7 +74,6 @@ import StudentMasterStudio from "./components/StudentMasterStudio";
 import EmployeeMasterStudio from "./components/EmployeeMasterStudio";
 import CsvImportModal from "./components/CsvImportModal";
 import DigitalVerificationModal, { VerificationData } from "./components/DigitalVerificationModal";
-import GoogleSheetsSyncModal from "./components/GoogleSheetsSyncModal";
 import { downloadSampleCsv, sanitizeRecordForTable } from "./lib/csvUtils";
 import { formatImageUrl, handleImageError } from "./lib/imageUtils";
 import { getLeaveSession } from "./lib/leaveSalaryRules";
@@ -240,7 +238,6 @@ function App() {
   const [toast, setToast] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [csvModalOpen, setCsvModalOpen] = useState(false);
-  const [googleSheetsModalOpen, setGoogleSheetsModalOpen] = useState(false);
   const [urlVerificationData, setUrlVerificationData] = useState<VerificationData | null>(null);
 
   // Auto-detect ?verify= query param from scanned QR codes
@@ -926,27 +923,6 @@ function App() {
           <kbd>Ctrl K</kbd>
         </div>
         <div className="head-actions">
-          <button
-            onClick={() => setGoogleSheetsModalOpen(true)}
-            title="Open Google Sheets & Firebase Sync Center"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              backgroundColor: "#059669",
-              color: "#ffffff",
-              padding: "6px 12px",
-              borderRadius: "8px",
-              border: "none",
-              cursor: "pointer",
-              fontWeight: 600,
-              fontSize: "12px",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.1)"
-            }}
-          >
-            <FileSpreadsheet size={15} />
-            <span>Google Sheets Sync</span>
-          </button>
           <a
             href="https://wa.me/919674368297"
             target="_blank"
@@ -1515,12 +1491,6 @@ function App() {
           onClose={() => setUrlVerificationData(null)}
         />
       )}
-
-      <GoogleSheetsSyncModal
-        isOpen={googleSheetsModalOpen}
-        onClose={() => setGoogleSheetsModalOpen(false)}
-        onNotify={(msg) => setToast(msg)}
-      />
 
       {toast && (
         <div className="toast">

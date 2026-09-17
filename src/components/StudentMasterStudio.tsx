@@ -238,21 +238,6 @@ export default function StudentMasterStudio({
     return () => unsub()
   }, [])
 
-  // Automated background sync with Google Sheet Web App
-  useEffect(() => {
-    if (students.length === 0) return
-    const timer = setTimeout(() => {
-      syncAllStudentsToGoogleSheet(students)
-        .then((res) => {
-          if (res.success) {
-            setLastSyncTime(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }))
-          }
-        })
-        .catch(() => {})
-    }, 1500)
-    return () => clearTimeout(timer)
-  }, [students.length])
-
   // Push all students to Google Sheet via Web App URL (no Google auth)
   const handleSyncToGoogleSheet = async (studentsList?: Student[]) => {
     const listToSync = studentsList || students
