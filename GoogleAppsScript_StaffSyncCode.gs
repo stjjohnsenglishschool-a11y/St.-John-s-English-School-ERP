@@ -1,65 +1,67 @@
 /**
  * ==============================================================================
- * ST. JOHN'S ENGLISH SCHOOL - STUDENT DATA AUTO-SYNC WITH FIREBASE (code.gs)
+ * ST. JOHN'S ENGLISH SCHOOL - STAFF DATA AUTO-SYNC WITH FIREBASE (code.gs)
  * ==============================================================================
  * Target Spreadsheet:      1OGD09mG-m54rSKBJl2nmOc-pFraYZRnMcCTyoAEWGto
- * Target Tab:              student_data
- * Drive Photo Folder ID:   19EmUMwDpNxuufOr995XPsg_XoG-BqZWO (student_data_photo)
+ * Target Tab:              staff_data
+ * Drive Photo Folder ID:   1zcVv1vwxdMNAKPP52THA4SE8TzUGOOLa (staff_photo)
  * Firebase Database:       ai-studio-stjohnsenglishsc-531e7bb4-0068-4bb0-86fa-a4752b74bc31
  * ==============================================================================
  * 
  * FEATURES:
  * 1. ZERO POPUPS - Runs silently in the background with clean toast notifications.
- * 2. AUTOMATIC PULL - Pulls all student records from Firebase Firestore directly into Google Sheets.
- * 3. AUTO DRIVE PHOTO LINK - Auto-detects and links student photos from Google Drive folder.
+ * 2. AUTOMATIC PULL - Pulls all staff records from Firebase Firestore directly into Google Sheets.
+ * 3. AUTO DRIVE PHOTO LINK - Auto-detects and links staff photos from Google Drive folder.
  * 4. REAL-TIME PUSH ON EDIT - Any edit in Google Sheets is automatically saved to Firebase Firestore.
  * ==============================================================================
  */
 
 var SPREADSHEET_ID = "1OGD09mG-m54rSKBJl2nmOc-pFraYZRnMcCTyoAEWGto";
-var STUDENT_TAB_NAME = "student_data";
-var STUDENT_PHOTO_FOLDER_ID = "19EmUMwDpNxuufOr995XPsg_XoG-BqZWO";
+var STAFF_TAB_NAME = "staff_data";
+var STAFF_PHOTO_FOLDER_ID = "1zcVv1vwxdMNAKPP52THA4SE8TzUGOOLa";
 
 var FIREBASE_PROJECT_ID = "gen-lang-client-0668756810";
 var FIREBASE_DB_ID = "ai-studio-stjohnsenglishsc-531e7bb4-0068-4bb0-86fa-a4752b74bc31";
 var FIREBASE_API_KEY = "AIzaSyBXda4Y20mY-o_QqxIR0rM49UmOFxTlnNM";
 
 var HEADERS = [
-  "Admission No",
-  "Roll No",
-  "Academic Year",
-  "Class Name",
-  "Section",
-  "Student Status",
-  "Full Name",
+  "Emp Code",
+  "First Name",
+  "Last Name",
+  "Employee Category",
+  "Department",
+  "Designation",
+  "Employment Type",
+  "Employment Status",
+  "Date of Joining",
   "Date of Birth",
   "Gender",
   "Blood Group",
-  "Student Mobile",
-  "Student Photo URL",
-  "Father Name",
-  "Father Mobile",
-  "Father Occupation",
-  "Father Photo URL",
-  "Mother Name",
-  "Mother Mobile",
-  "Mother Occupation",
-  "Mother Photo URL",
-  "Address",
+  "Mobile Primary",
+  "WhatsApp Number",
+  "Official Email",
+  "Personal Email",
+  "Basic Salary",
+  "Classes Assigned",
+  "Subjects Specialisation",
+  "Photo URL",
+  "Document URL",
+  "Current Address",
+  "Academic Year",
   "Last Updated"
 ];
 
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
-  ui.createMenu("🏫 SJES Student Master")
+  ui.createMenu("🏫 SJES Staff Master")
     .addItem("🔄 1. Refresh Data from Firebase", "pullFromFirebase")
     .addItem("💾 2. Push All Rows to Firebase", "pushAllToFirebase")
-    .addItem("📸 3. Auto-Link Photos from Google Drive", "syncStudentPhotosFromDrive")
-    .addItem("🛠️ 4. Setup Sheet & Headers", "setupStudentSheet")
+    .addItem("📸 3. Auto-Link Photos from Google Drive", "syncStaffPhotosFromDrive")
+    .addItem("🛠️ 4. Setup Sheet & Headers", "setupStaffSheet")
     .addToUi();
 
   try {
-    setupStudentSheet();
+    setupStaffSheet();
     pullFromFirebase();
   } catch (err) {
     Logger.log("Auto-open sync error: " + err.toString());
@@ -68,18 +70,18 @@ function onOpen() {
 
 function notify(msg, title) {
   try {
-    SpreadsheetApp.getActiveSpreadsheet().toast(msg, title || "Firebase Student Sync", 4);
+    SpreadsheetApp.getActiveSpreadsheet().toast(msg, title || "Firebase Staff Sync", 4);
   } catch (e) {
     Logger.log(msg);
   }
 }
 
-function setupStudentSheet() {
+function setupStaffSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
-  var sheet = ss.getSheetByName(STUDENT_TAB_NAME);
+  var sheet = ss.getSheetByName(STAFF_TAB_NAME);
   
   if (!sheet) {
-    sheet = ss.insertSheet(STUDENT_TAB_NAME);
+    sheet = ss.insertSheet(STAFF_TAB_NAME);
   }
   
   var headerRange = sheet.getRange(1, 1, 1, HEADERS.length);
@@ -217,22 +219,22 @@ function saveFirestoreDocument(collectionName, docId, obj) {
 
 function pullFromFirebase() {
   try {
-    notify("Fetching student records from Firebase...", "Firebase Sync");
+    notify("Fetching latest staff records from Firebase...", "Firebase Sync");
     var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
-    var sheet = ss.getSheetByName(STUDENT_TAB_NAME);
+    var sheet = ss.getSheetByName(STAFF_TAB_NAME);
     if (!sheet) {
-      sheet = setupStudentSheet();
+      sheet = setupStaffSheet();
     }
 
-    var docs = fetchFirestoreCollection("student_master");
+    var docs = fetchFirestoreCollection("employee_master");
     
     if (docs === null) {
-      notify("Firebase connection verified. Ensure student data exists in ERP.", "Status");
+      notify("Firebase connection verified. Ensure data exists in ERP.", "Status");
       return;
     }
 
     if (docs.length === 0) {
-      notify("No student records found in Firebase yet.", "Firebase Ready");
+      notify("No staff records found in Firebase yet.", "Firebase Ready");
       return;
     }
 
@@ -242,51 +244,55 @@ function pullFromFirebase() {
       var docName = docs[i].name || "";
       var docId = docName.split("/").pop();
 
-      var admNo = parseFirestoreField(f.admission_no || f.adm_no || f.id) || docId;
-      var rollNo = parseFirestoreField(f.roll_no);
-      var academicYear = parseFirestoreField(f.academic_year) || "2026-27";
-      var className = parseFirestoreField(f.class_name || f.standard || f.class);
-      var section = parseFirestoreField(f.section || f.sec) || "A";
-      var status = parseFirestoreField(f.student_status || f.status) || "Active";
-      var fullName = parseFirestoreField(f.full_name || f.name);
+      var empCode = parseFirestoreField(f.emp_code || f.employee_code || f.code) || docId;
+      var firstName = parseFirestoreField(f.first_name || f.name);
+      var lastName = parseFirestoreField(f.last_name);
+      var category = parseFirestoreField(f.employee_category || f.category) || "Teaching Staff";
+      var dept = parseFirestoreField(f.department || f.dept) || "Academics";
+      var desig = parseFirestoreField(f.designation || f.role) || "Teacher";
+      var empType = parseFirestoreField(f.employment_type || f.type) || "Permanent";
+      var status = parseFirestoreField(f.employment_status || f.status) || "Active";
+      var doj = parseFirestoreField(f.date_of_joining || f.joining_date);
       var dob = parseFirestoreField(f.date_of_birth || f.dob);
       var gender = parseFirestoreField(f.gender) || "Male";
       var blood = parseFirestoreField(f.blood_group);
-      var mobile = parseFirestoreField(f.student_mobile || f.mobile || f.phone);
-      var photoUrl = parseFirestoreField(f.student_photo_url || f.photo_url || f.photo);
-      var fatherName = parseFirestoreField(f.father_name);
-      var fatherMobile = parseFirestoreField(f.father_mobile);
-      var fatherOcc = parseFirestoreField(f.father_occupation);
-      var fatherPhoto = parseFirestoreField(f.father_photo_url);
-      var motherName = parseFirestoreField(f.mother_name);
-      var motherMobile = parseFirestoreField(f.mother_mobile);
-      var motherOcc = parseFirestoreField(f.mother_occupation);
-      var motherPhoto = parseFirestoreField(f.mother_photo_url);
-      var address = parseFirestoreField(f.address || f.current_address);
+      var mobile = parseFirestoreField(f.mobile_primary || f.mobile || f.phone);
+      var whatsapp = parseFirestoreField(f.whatsapp_number || f.whatsapp);
+      var offEmail = parseFirestoreField(f.official_email || f.email);
+      var persEmail = parseFirestoreField(f.personal_email);
+      var salary = parseFirestoreField(f.basic_salary || f.salary);
+      var classes = parseFirestoreField(f.classes_assigned || f.classes);
+      var subjects = parseFirestoreField(f.subjects_specialisation || f.subject_specialisation || f.subject);
+      var photoUrl = parseFirestoreField(f.employee_photo_url || f.photo_url || f.photo);
+      var docUrl = parseFirestoreField(f.document_url || f.resume_url);
+      var address = parseFirestoreField(f.current_address || f.address);
+      var academicYear = parseFirestoreField(f.academic_year) || "2026-27";
       var lastUpdated = parseFirestoreField(f.updated_at || f.created_at) || new Date().toLocaleString("en-IN");
 
       rows.push([
-        admNo,
-        rollNo,
-        academicYear,
-        className,
-        section,
+        empCode,
+        firstName,
+        lastName,
+        category,
+        dept,
+        desig,
+        empType,
         status,
-        fullName,
+        doj,
         dob,
         gender,
         blood,
         mobile,
+        whatsapp,
+        offEmail,
+        persEmail,
+        salary,
+        classes,
+        subjects,
         photoUrl,
-        fatherName,
-        fatherMobile,
-        fatherOcc,
-        fatherPhoto,
-        motherName,
-        motherMobile,
-        motherOcc,
-        motherPhoto,
+        docUrl,
         address,
+        academicYear,
         lastUpdated
       ]);
     }
@@ -298,24 +304,24 @@ function pullFromFirebase() {
       }
 
       sheet.getRange(2, 1, rows.length, HEADERS.length).setValues(rows);
-      syncStudentPhotosFromDrive();
-      notify("✓ Loaded " + rows.length + " students from Firebase!", "Sync Complete");
+      syncStaffPhotosFromDrive();
+      notify("✓ Loaded " + rows.length + " staff records from Firebase!", "Sync Complete");
     }
   } catch (err) {
     Logger.log("pullFromFirebase error: " + err.toString());
-    notify("Error syncing students: " + err.message, "Error");
+    notify("Error syncing from Firebase: " + err.message, "Sync Error");
   }
 }
 
-function syncStudentPhotosFromDrive() {
+function syncStaffPhotosFromDrive() {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
-    var sheet = ss.getSheetByName(STUDENT_TAB_NAME) || ss.getActiveSheet();
+    var sheet = ss.getSheetByName(STAFF_TAB_NAME) || ss.getActiveSheet();
     var lastRow = sheet.getLastRow();
     
     if (lastRow <= 1) return;
     
-    var folder = DriveApp.getFolderById(STUDENT_PHOTO_FOLDER_ID);
+    var folder = DriveApp.getFolderById(STAFF_PHOTO_FOLDER_ID);
     var files = folder.getFiles();
     var fileMap = {};
     
@@ -336,15 +342,15 @@ function syncStudentPhotosFromDrive() {
     
     for (var i = 0; i < data.length; i++) {
       var row = data[i];
-      var admNo = String(row[0] || "").trim().toLowerCase();
-      var name = String(row[6] || "").trim().toLowerCase();
-      var currentPhoto = String(row[11] || "").trim();
+      var empCode = String(row[0] || "").trim().toLowerCase();
+      var firstName = String(row[1] || "").trim().toLowerCase();
+      var currentPhoto = String(row[19] || "").trim();
       
-      if (!currentPhoto && admNo) {
+      if (!currentPhoto && empCode) {
         for (var key in fileMap) {
-          if (key.indexOf(admNo) !== -1 || (name && key.indexOf(name) !== -1)) {
-            sheet.getRange(i + 2, 12).setValue(fileMap[key]);
-            sheet.getRange(i + 2, 22).setValue(new Date().toLocaleString("en-IN"));
+          if (key.indexOf(empCode) !== -1 || (firstName && key.indexOf(firstName) !== -1)) {
+            sheet.getRange(i + 2, 20).setValue(fileMap[key]);
+            sheet.getRange(i + 2, 24).setValue(new Date().toLocaleString("en-IN"));
             updatedCount++;
             break;
           }
@@ -353,10 +359,10 @@ function syncStudentPhotosFromDrive() {
     }
     
     if (updatedCount > 0) {
-      notify("📸 Linked " + updatedCount + " student photos from Drive", "Drive Photo Sync");
+      notify("📸 Linked " + updatedCount + " photos from Google Drive", "Drive Photo Sync");
     }
   } catch (err) {
-    Logger.log("syncStudentPhotosFromDrive error: " + err.toString());
+    Logger.log("syncStaffPhotosFromDrive error: " + err.toString());
   }
 }
 
@@ -364,103 +370,110 @@ function onEdit(e) {
   try {
     if (!e || !e.source) return;
     var sheet = e.source.getActiveSheet();
-    if (sheet.getName() !== STUDENT_TAB_NAME) return;
+    if (sheet.getName() !== STAFF_TAB_NAME) return;
     
     var row = e.range.getRow();
     if (row <= 1) return;
     
     var rowData = sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0];
-    var admNo = String(rowData[0] || "").trim();
-    if (!admNo && !rowData[6]) return;
+    var empCode = String(rowData[0] || "").trim();
+    if (!empCode && !rowData[1]) return;
     
-    var docId = admNo.replace(/[^a-zA-Z0-9_-]/g, "_") || ("STU_" + row);
+    var docId = empCode.replace(/[^a-zA-Z0-9_-]/g, "_") || ("EMP_" + row);
     var nowStr = new Date().toLocaleString("en-IN");
     
-    var stuObj = {
+    var staffObj = {
       id: docId,
-      admission_no: admNo,
-      roll_no: String(rowData[1] || ""),
-      academic_year: String(rowData[2] || "2026-27"),
-      class_name: String(rowData[3] || "CLASS I"),
-      section: String(rowData[4] || "A"),
-      student_status: String(rowData[5] || "Active"),
-      full_name: String(rowData[6] || ""),
-      date_of_birth: String(rowData[7] || ""),
-      gender: String(rowData[8] || "Male"),
-      blood_group: String(rowData[9] || ""),
-      student_mobile: String(rowData[10] || ""),
-      student_photo_url: String(rowData[11] || ""),
-      father_name: String(rowData[12] || ""),
-      father_mobile: String(rowData[13] || ""),
-      father_occupation: String(rowData[14] || ""),
-      father_photo_url: String(rowData[15] || ""),
-      mother_name: String(rowData[16] || ""),
-      mother_mobile: String(rowData[17] || ""),
-      mother_occupation: String(rowData[18] || ""),
-      mother_photo_url: String(rowData[19] || ""),
-      address: String(rowData[20] || ""),
+      emp_code: empCode,
+      first_name: String(rowData[1] || ""),
+      last_name: String(rowData[2] || ""),
+      employee_category: String(rowData[3] || "Teaching Staff"),
+      department: String(rowData[4] || "Academics"),
+      designation: String(rowData[5] || "Teacher"),
+      employment_type: String(rowData[6] || "Permanent"),
+      employment_status: String(rowData[7] || "Active"),
+      date_of_joining: String(rowData[8] || ""),
+      date_of_birth: String(rowData[9] || ""),
+      gender: String(rowData[10] || "Male"),
+      blood_group: String(rowData[11] || ""),
+      mobile_primary: String(rowData[12] || ""),
+      whatsapp_number: String(rowData[13] || ""),
+      official_email: String(rowData[14] || ""),
+      personal_email: String(rowData[15] || ""),
+      basic_salary: Number(rowData[16]) || 25000,
+      classes_assigned: String(rowData[17] || ""),
+      subjects_specialisation: String(rowData[18] || ""),
+      employee_photo_url: String(rowData[19] || ""),
+      document_url: String(rowData[20] || ""),
+      current_address: String(rowData[21] || ""),
+      academic_year: String(rowData[22] || "2026-27"),
       updated_at: new Date().toISOString()
     };
     
-    sheet.getRange(row, 22).setValue(nowStr);
+    sheet.getRange(row, 24).setValue(nowStr);
     
-    saveFirestoreDocument("student_master", docId, stuObj);
-    notify("Saved " + admNo + " to Firebase Firestore", "Realtime Save");
+    saveFirestoreDocument("employee_master", docId, staffObj);
+    notify("Saved " + empCode + " to Firebase Firestore", "Realtime Save");
   } catch (err) {
-    Logger.log("onEdit error: " + err.toString());
+    Logger.log("onEdit sync error: " + err.toString());
   }
 }
 
 function pushAllToFirebase() {
   try {
-    notify("Saving all students to Firebase...", "Firebase Sync");
+    notify("Saving all staff rows to Firebase...", "Firebase Sync");
     var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
-    var sheet = ss.getSheetByName(STUDENT_TAB_NAME);
+    var sheet = ss.getSheetByName(STAFF_TAB_NAME);
     if (!sheet) return;
     
     var lastRow = sheet.getLastRow();
-    if (lastRow <= 1) return;
+    if (lastRow <= 1) {
+      notify("No data rows found to push.", "Empty");
+      return;
+    }
     
     var data = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
     var count = 0;
     
     for (var i = 0; i < data.length; i++) {
       var row = data[i];
-      var admNo = String(row[0] || "").trim();
-      if (!admNo && !row[6]) continue;
+      var empCode = String(row[0] || "").trim();
+      if (!empCode && !row[1]) continue;
       
-      var docId = admNo.replace(/[^a-zA-Z0-9_-]/g, "_") || ("STU_" + (i + 2));
-      var stuObj = {
+      var docId = empCode.replace(/[^a-zA-Z0-9_-]/g, "_") || ("EMP_" + (i + 2));
+      var staffObj = {
         id: docId,
-        admission_no: admNo,
-        roll_no: String(row[1] || ""),
-        academic_year: String(row[2] || "2026-27"),
-        class_name: String(row[3] || "CLASS I"),
-        section: String(row[4] || "A"),
-        student_status: String(row[5] || "Active"),
-        full_name: String(row[6] || ""),
-        date_of_birth: String(row[7] || ""),
-        gender: String(row[8] || "Male"),
-        blood_group: String(row[9] || ""),
-        student_mobile: String(row[10] || ""),
-        student_photo_url: String(row[11] || ""),
-        father_name: String(row[12] || ""),
-        father_mobile: String(row[13] || ""),
-        father_occupation: String(row[14] || ""),
-        father_photo_url: String(row[15] || ""),
-        mother_name: String(row[16] || ""),
-        mother_mobile: String(row[17] || ""),
-        mother_occupation: String(row[18] || ""),
-        mother_photo_url: String(row[19] || ""),
-        address: String(row[20] || ""),
+        emp_code: empCode,
+        first_name: String(row[1] || ""),
+        last_name: String(row[2] || ""),
+        employee_category: String(row[3] || "Teaching Staff"),
+        department: String(row[4] || "Academics"),
+        designation: String(row[5] || "Teacher"),
+        employment_type: String(row[6] || "Permanent"),
+        employment_status: String(row[7] || "Active"),
+        date_of_joining: String(row[8] || ""),
+        date_of_birth: String(row[9] || ""),
+        gender: String(row[10] || "Male"),
+        blood_group: String(row[11] || ""),
+        mobile_primary: String(row[12] || ""),
+        whatsapp_number: String(row[13] || ""),
+        official_email: String(row[14] || ""),
+        personal_email: String(row[15] || ""),
+        basic_salary: Number(row[16]) || 25000,
+        classes_assigned: String(row[17] || ""),
+        subjects_specialisation: String(row[18] || ""),
+        employee_photo_url: String(row[19] || ""),
+        document_url: String(row[20] || ""),
+        current_address: String(row[21] || ""),
+        academic_year: String(row[22] || "2026-27"),
         updated_at: new Date().toISOString()
       };
       
-      saveFirestoreDocument("student_master", docId, stuObj);
+      saveFirestoreDocument("employee_master", docId, staffObj);
       count++;
     }
     
-    notify("✓ Saved " + count + " students to Firebase Firestore!", "Save Complete");
+    notify("✓ Saved " + count + " staff records to Firebase Firestore!", "Save Complete");
   } catch (err) {
     Logger.log("pushAllToFirebase error: " + err.toString());
     notify("Push error: " + err.message, "Error");

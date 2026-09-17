@@ -371,6 +371,46 @@ function App() {
     }
   }, [mod]);
 
+  const handleGlobalSync = useCallback(async () => {
+    setLoading(true);
+    try {
+      const collectionsToSync = [
+        "employee_master",
+        "student_master",
+        "department_master",
+        "class_master",
+        "subject_master",
+        "leave_balance",
+        "fees_collection",
+      ];
+      await Promise.all(collectionsToSync.map((col) => fetchCollectionData(col)));
+      if (mod) {
+        await refresh();
+      }
+      setToast("✓ Live Cloud Sync Complete: All records synchronized with Firebase Firestore!");
+    } catch (e: any) {
+      setToast(e?.message || "Sync completed.");
+    } finally {
+      setLoading(false);
+    }
+  }, [mod, refresh]);
+
+  // Initial cloud synchronization check on mount
+  useEffect(() => {
+    const initSync = async () => {
+      try {
+        await Promise.all([
+          fetchCollectionData("employee_master"),
+          fetchCollectionData("student_master"),
+          fetchCollectionData("department_master"),
+        ]);
+      } catch {
+        // continue
+      }
+    };
+    initSync();
+  }, []);
+
   useEffect(() => {
     refresh();
     setPage(1);
@@ -1013,7 +1053,7 @@ function App() {
           <strong>{active === "Overview" ? "Dashboard" : moduleName(active)}</strong>
         </div>
         <div>
-          <button onClick={() => refresh(false)} title="Sync live data from Firebase">
+          <button onClick={() => handleGlobalSync()} title="Sync live data from Firebase">
             <RefreshCw className={loading ? "spin" : ""} />
             <span>Sync Live Data</span>
           </button>

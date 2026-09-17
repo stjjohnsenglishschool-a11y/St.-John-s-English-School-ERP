@@ -159,7 +159,7 @@ export async function uploadToFirebaseStorage(
 }
 
 /**
- * Fetch all documents from a Firestore collection with robust local fallback & merge
+ * Fetch all documents from a Firestore collection with robust local fallback & auto-cloud sync
  */
 export async function fetchCollectionData<T = any>(collectionName: string): Promise<T[]> {
   // 1. Gather all cached local records first across primary and alias keys
@@ -171,6 +171,7 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
         collectionName === 'employee_master' ? 'sjes_table_employees' : null,
         collectionName === 'employee_master' ? 'sjes_table_staff' : null,
         collectionName === 'student_master' ? 'sjes_table_students' : null,
+        collectionName === 'department_master' ? 'sjes_department_master' : null,
       ].filter(Boolean) as string[]
 
       for (const k of keysToCheck) {
@@ -188,15 +189,30 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
     }
   }
 
-  // 2. Fetch remote documents from Firestore with a 3.5s timeout
+  // 2. Fetch remote documents from Firestore with fallback and auto-sync
   try {
     const fetchPromise = getDocs(collection(db, collectionName))
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500))
-    const querySnapshot = await Promise.race([fetchPromise, timeoutPromise])
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000))
+    let querySnapshot: any = await Promise.race([fetchPromise, timeoutPromise])
 
-    if (querySnapshot && typeof (querySnapshot as any).forEach === 'function') {
+    // If custom database returned 0 docs or timed out, try default database as fallback
+    if ((!querySnapshot || querySnapshot.empty) && configAny.firestoreDatabaseId && configAny.firestoreDatabaseId !== '(default)') {
+      try {
+        const defaultDb = getFirestore(app)
+        const defaultFetch = getDocs(collection(defaultDb, collectionName))
+        const defaultTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500))
+        const defaultSnap: any = await Promise.race([defaultFetch, defaultTimeout])
+        if (defaultSnap && !defaultSnap.empty) {
+          querySnapshot = defaultSnap
+        }
+      } catch {
+        // continue
+      }
+    }
+
+    if (querySnapshot && typeof querySnapshot.forEach === 'function') {
       const remoteResults: T[] = []
-      querySnapshot.forEach((docSnap) => {
+      querySnapshot.forEach((docSnap: any) => {
         const d = docSnap.data() || {}
         remoteResults.push({
           _docId: docSnap.id,
@@ -213,6 +229,7 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
             String(r._docId || r.id || r.emp_code || r.emp_id || r.admission_no || r.student_id)
           )
         )
+        const missingFromRemote: any[] = []
         for (const localItem of cachedResults) {
           const id = String(
             (localItem as any)._docId ||
@@ -225,19 +242,38 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
           if (id && !seen.has(id)) {
             seen.add(id)
             combined.push(localItem)
+            missingFromRemote.push(localItem)
           }
         }
 
         if (typeof window !== 'undefined' && window.localStorage) {
           try {
             localStorage.setItem(`sjes_table_${collectionName}`, JSON.stringify(combined))
+            if (collectionName === 'employee_master') {
+              localStorage.setItem('sjes_table_employees', JSON.stringify(combined))
+              localStorage.setItem('sjes_table_staff', JSON.stringify(combined))
+            } else if (collectionName === 'student_master') {
+              localStorage.setItem('sjes_table_students', JSON.stringify(combined))
+            }
           } catch {
             // ignore localStorage quota
           }
         }
+
+        // Background push missing local items to Firestore so other devices/incognito get them
+        if (missingFromRemote.length > 0) {
+          const pk = collectionName === 'employee_master' ? 'emp_id' : collectionName === 'student_master' ? 'student_id' : 'id'
+          saveBatchDocuments(collectionName, pk, missingFromRemote).catch(() => {})
+        }
+
         return combined
       } else if (cachedResults.length > 0) {
-        // Firestore returned 0 docs, but we have locally uploaded items: preserve local items!
+        // Remote has 0 docs but we have locally cached/uploaded items:
+        // Automatically sync all local items up to Firestore in the background!
+        const pk = collectionName === 'employee_master' ? 'emp_id' : collectionName === 'student_master' ? 'student_id' : 'id'
+        saveBatchDocuments(collectionName, pk, cachedResults as any[]).catch((e) => {
+          console.warn('Auto cloud sync notice:', e)
+        })
         return cachedResults
       }
 

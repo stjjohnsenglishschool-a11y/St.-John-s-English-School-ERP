@@ -847,6 +847,34 @@ export default function EmployeeMasterStudio({
           </button>
           <button
             className="btn-secondary"
+            onClick={() => setShowAppsScriptModal(true)}
+            title="View Google Apps Script (code.gs) for real-time two-way synchronization"
+            style={{
+              background: '#f8fafc',
+              color: '#0f172a',
+              borderColor: '#cbd5e1',
+              fontWeight: 600,
+            }}
+          >
+            <Code2 size={16} color="#2563eb" /> Apps Script Code (code.gs)
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={() => handleSyncToGoogleSheet()}
+            disabled={syncingSheet}
+            title="Sync all current staff records directly into linked Google Sheet (staff_data)"
+            style={{
+              background: '#f0fdf4',
+              color: '#15803d',
+              borderColor: '#bbf7d0',
+              fontWeight: 600,
+            }}
+          >
+            <RefreshCw size={16} className={syncingSheet ? 'spin' : ''} />
+            {syncingSheet ? 'Syncing...' : 'Sync with Google Sheet'}
+          </button>
+          <button
+            className="btn-secondary"
             onClick={handlePullFromGoogleSheet}
             disabled={syncingSheet}
             title="Import or update staff records directly from linked Google Sheet"
@@ -2191,6 +2219,438 @@ export default function EmployeeMasterStudio({
             }
           }}
         />
+      )}
+
+      {/* Google Apps Script Modal (code.gs) */}
+      {showAppsScriptModal && (
+        <div className="modal-backdrop" onClick={() => setShowAppsScriptModal(false)}>
+          <div
+            className="modal-card"
+            style={{ maxWidth: '840px', width: '95%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    background: '#eff6ff',
+                    color: '#2563eb',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                  }}
+                >
+                  <Code2 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+                    Google Apps Script for Staff Master (code.gs)
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+                    Auto-configure tab <b>'staff_data'</b> with all 24 headers and real-time two-way synchronization
+                  </p>
+                </div>
+              </div>
+              <button
+                className="btn-icon"
+                onClick={() => setShowAppsScriptModal(false)}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '14px 18px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>
+                  📋 3-Step Setup Guide for Google Sheets:
+                </div>
+                <ol style={{ fontSize: '13px', color: '#475569', margin: 0, paddingLeft: '20px', lineHeight: 1.6 }}>
+                  <li>
+                    Open your Google Spreadsheet: <b>staff_data</b> (
+                    <a
+                      href={`https://docs.google.com/spreadsheets/d/${STAFF_GOOGLE_SHEET_ID}/edit`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: '#2563eb', textDecoration: 'underline' }}
+                    >
+                      Click to Open Sheet
+                    </a>
+                    )
+                  </li>
+                  <li>
+                    Go to <b>Extensions &rarr; Apps Script</b> in the top menu of your Google Sheet.
+                  </li>
+                  <li>
+                    Delete any default code in <b>Code.gs</b>, paste the script below, and click <b>💾 Save</b>.
+                  </li>
+                  <li>
+                    Refresh your Google Sheet. You will see a new menu: <b>🏫 SJES Staff Master &rarr; 🛠️ 1. Setup Staff Sheet & Headers</b>. Click it to automatically create all 24 headers!
+                  </li>
+                </ol>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
+                  Google Apps Script (code.gs):
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const script = generateStaffAppsScriptCode(typeof window !== 'undefined' ? window.location.origin : '')
+                    navigator.clipboard.writeText(script)
+                    setCopiedScript(true)
+                    setTimeout(() => setCopiedScript(false), 2500)
+                  }}
+                  style={{
+                    background: copiedScript ? '#16a34a' : '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {copiedScript ? <Check size={14} /> : <Copy size={14} />}
+                  {copiedScript ? 'Copied to Clipboard!' : 'Copy code.gs'}
+                </button>
+              </div>
+
+              <pre
+                style={{
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  padding: '16px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                  overflowX: 'auto',
+                  maxHeight: '340px',
+                  lineHeight: '1.5',
+                  border: '1px solid #1e293b',
+                }}
+              >
+                <code>{generateStaffAppsScriptCode(typeof window !== 'undefined' ? window.location.origin : '')}</code>
+              </pre>
+
+              <div
+                style={{
+                  marginTop: '16px',
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  fontSize: '12px',
+                  color: '#1e40af',
+                }}
+              >
+                <b>📊 24 Standard Column Headers Generated:</b>
+                <div style={{ marginTop: '6px', color: '#1e3a8a', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {[
+                    '1. Emp Code',
+                    '2. First Name',
+                    '3. Last Name',
+                    '4. Category',
+                    '5. Department',
+                    '6. Designation',
+                    '7. Employment Type',
+                    '8. Employment Status',
+                    '9. Date of Joining',
+                    '10. Date of Birth',
+                    '11. Gender',
+                    '12. Blood Group',
+                    '13. Mobile Primary',
+                    '14. WhatsApp',
+                    '15. Official Email',
+                    '16. Personal Email',
+                    '17. Basic Salary',
+                    '18. Classes Assigned',
+                    '19. Specialisation',
+                    '20. Photo URL',
+                    '21. Document URL',
+                    '22. Address',
+                    '23. Academic Year',
+                    '24. Last Updated',
+                  ].map((h) => (
+                    <span
+                      key={h}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontWeight: 600,
+                        fontSize: '11px',
+                      }}
+                    >
+                      {h}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <a
+                href={`https://docs.google.com/spreadsheets/d/${STAFF_GOOGLE_SHEET_ID}/edit`}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  color: '#0f172a',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  textDecoration: 'none',
+                }}
+              >
+                <ExternalLink size={14} /> Open Staff Google Sheet
+              </a>
+              <button
+                className="btn-primary"
+                onClick={() => setShowAppsScriptModal(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Domain Authorization Modal */}
+      {showDomainModal && (
+        <div className="modal-backdrop" onClick={() => setShowDomainModal(false)}>
+          <div
+            className="modal-card"
+            style={{ maxWidth: '600px', width: '90%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    background: '#fef3c7',
+                    color: '#b45309',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                  }}
+                >
+                  <AlertCircle size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+                    Authorize Firebase Domain
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+                    One-time 60-second setup to enable Google OAuth & Sheets sync
+                  </p>
+                </div>
+              </div>
+              <button
+                className="btn-icon"
+                onClick={() => setShowDomainModal(false)}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body" style={{ fontSize: '13px', lineHeight: '1.6' }}>
+              <p style={{ color: '#475569', margin: '0 0 12px 0' }}>
+                Google Workspace sign-in requires this app domain to be added to your Firebase Authorized Domains list.
+              </p>
+
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>
+                    Your App Domain to Add:
+                  </span>
+                  <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '13px', wordBreak: 'break-all' }}>
+                    {typeof window !== 'undefined' ? window.location.hostname : ''}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      navigator.clipboard.writeText(window.location.hostname)
+                      setCopiedDomain(true)
+                      setTimeout(() => setCopiedDomain(false), 2000)
+                    }
+                  }}
+                  style={{
+                    background: copiedDomain ? '#16a34a' : '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {copiedDomain ? <Check size={13} /> : <Copy size={13} />}
+                  {copiedDomain ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: '#1e3a8a',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    1
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#334155' }}>
+                    Open your <b>Firebase Console</b> at{' '}
+                    <a
+                      href="https://console.firebase.google.com/"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: '#2563eb', textDecoration: 'underline', fontWeight: 600 }}
+                    >
+                      console.firebase.google.com
+                    </a>{' '}
+                    and select your project.
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: '#1e3a8a',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    2
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#334155' }}>
+                    In the left navigation menu, click on <b>Authentication</b> &rarr; click the <b>Settings</b> tab (top bar).
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: '#1e3a8a',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    3
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#334155' }}>
+                    Scroll down to the <b>Authorized domains</b> section and click <b>Add domain</b>.
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: '#1e3a8a',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    4
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#334155' }}>
+                    Paste your domain (copied above) and click <b>Save</b>. Then return here and click <b>Connect Google Account</b>.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                className="btn-secondary"
+                onClick={() => setShowDomainModal(false)}
+              >
+                Close
+              </button>
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  setShowDomainModal(false)
+                  handleGoogleConnect()
+                }}
+              >
+                <Sparkles size={14} /> Try Connecting Again
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
