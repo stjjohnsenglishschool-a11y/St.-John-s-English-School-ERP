@@ -289,6 +289,21 @@ export default function EmployeeMasterStudio({
     }
   }, [])
 
+  // Automated background sync with Google Sheet Web App
+  useEffect(() => {
+    if (employees.length === 0) return
+    const timer = setTimeout(() => {
+      syncAllEmployeesToGoogleSheet(employees)
+        .then((res) => {
+          if (res.success) {
+            setLastSyncTime(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }))
+          }
+        })
+        .catch(() => {})
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [employees.length])
+
   // Quick toggle employee Active / Inactive status
   const handleToggleEmployeeActive = async (emp: Employee, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()

@@ -1307,8 +1307,8 @@ export async function pushStaffToWebApp(
     const rows = employees.map(employeeToSheetRow)
     const payload = {
       action: 'push',
-      sheet: 'staff_data',
-      tab: 'staff_data',
+      sheet: 'Staff_data',
+      tab: 'Staff_data',
       data: employees,
       rows: [STAFF_SHEET_HEADERS, ...rows],
       headers: STAFF_SHEET_HEADERS,
@@ -1361,7 +1361,7 @@ export async function syncAllEmployeesToGoogleSheet(
 }
 
 /**
- * Sync / upsert a single employee record to the 'staff_data' Google Sheet tab via Web App URL
+ * Sync / upsert a single employee record to the 'Staff_data' Google Sheet tab via Web App URL
  */
 export async function syncSingleEmployeeToGoogleSheet(
   employee: any
@@ -1387,29 +1387,30 @@ export async function fetchEmployeesFromGoogleSheet(): Promise<{
 }
 
 /**
- * Generates Google Apps Script code for real-time two-way synchronization of staff_data
+ * Generates Google Apps Script code for real-time two-way synchronization of Staff_data
  */
 export function generateStaffAppsScriptCode(webAppUrl: string): string {
   return `/**
  * ==============================================================================
- * ST. JOHN'S ENGLISH SCHOOL - STAFF DATA AUTO-SYNC WITH FIREBASE (code.gs)
+ * ST. JOHN'S ENGLISH SCHOOL - STAFF DATA AUTO-SYNC WEB APP & FIREBASE (code.gs)
  * ==============================================================================
- * Target Spreadsheet:      1OGD09mG-m54rSKBJl2nmOc-pFraYZRnMcCTyoAEWGto
- * Target Tab:              staff_data
+ * Target Spreadsheet:      1JUZXNNcIZeMGFyzmFbdfxADLY8Jwb_r3e03rJK5rWgc
+ * Target Tab:              Staff_data
  * Drive Photo Folder ID:   1zcVv1vwxdMNAKPP52THA4SE8TzUGOOLa (staff_photo)
  * Firebase Database:       ai-studio-stjohnsenglishsc-531e7bb4-0068-4bb0-86fa-a4752b74bc31
  * ==============================================================================
  * 
  * FEATURES:
- * 1. ZERO POPUPS - Runs silently in the background with clean toast notifications.
- * 2. AUTOMATIC PULL - Pulls all staff records from Firebase Firestore directly into Google Sheets.
- * 3. AUTO DRIVE PHOTO LINK - Auto-detects and links staff photos from Google Drive folder.
- * 4. REAL-TIME PUSH ON EDIT - Any edit in Google Sheets is automatically saved to Firebase Firestore.
+ * 1. ZERO POPUPS & AUTO-SYNC - Runs silently in background with toast alerts.
+ * 2. WEB APP POST (doPost) - Receives automated sync data from the ERP Web App and immediately writes rows.
+ * 3. WEB APP GET (doGet) - Returns clean JSON of all staff rows for the ERP Web App.
+ * 4. AUTO DRIVE PHOTO LINK - Auto-detects photos from Drive folder and inserts thumbnail URLs.
+ * 5. REAL-TIME PUSH ON EDIT - Any manual edit in the Google Sheet is auto-saved to Firebase Firestore.
  * ==============================================================================
  */
 
-var SPREADSHEET_ID = "1OGD09mG-m54rSKBJl2nmOc-pFraYZRnMcCTyoAEWGto";
-var STAFF_TAB_NAME = "staff_data";
+var SPREADSHEET_ID = "1JUZXNNcIZeMGFyzmFbdfxADLY8Jwb_r3e03rJK5rWgc";
+var STAFF_TAB_NAME = "Staff_data";
 var STAFF_PHOTO_FOLDER_ID = "1zcVv1vwxdMNAKPP52THA4SE8TzUGOOLa";
 
 var FIREBASE_PROJECT_ID = "gen-lang-client-0668756810";
@@ -1443,10 +1444,223 @@ var HEADERS = [
   "Last Updated"
 ];
 
+// Helper to find the Staff sheet tab case-insensitively
+function getStaffSheet(ss) {
+  if (!ss) {
+    ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
+  }
+  var sheet = ss.getSheetByName(STAFF_TAB_NAME) || 
+              ss.getSheetByName("staff_data") || 
+              ss.getSheetByName("Staff_Data") || 
+              ss.getSheetByName("Staff Data") || 
+              ss.getSheetByName("Sheet1") || 
+              ss.getActiveSheet();
+  if (!sheet) {
+    sheet = ss.insertSheet(STAFF_TAB_NAME);
+  }
+  return sheet;
+}
+
+/**
+ * WEB APP POST HANDLER - Receives push/sync data directly from ERP Web App
+ */
+function doPost(e) {
+  try {
+    var raw = "";
+    if (e && e.postData && e.postData.contents) {
+      raw = e.postData.contents;
+    } else if (e && e.parameter && e.parameter.data) {
+      raw = e.parameter.data;
+    }
+    
+    if (!raw) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: "No payload received in request body"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var payload = {};
+    try {
+      payload = JSON.parse(raw);
+    } catch(parseErr) {
+      payload = { action: "raw", data: raw };
+    }
+    
+    var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = getStaffSheet(ss);
+    
+    // Extract rows or items
+    var rowsToWrite = [];
+    
+    if (payload.rows && Array.isArray(payload.rows) && payload.rows.length > 0) {
+      if (Array.isArray(payload.rows[0]) && String(payload.rows[0][0]).toLowerCase().indexOf("emp") !== -1) {
+        rowsToWrite = payload.rows.slice(1);
+      } else {
+        rowsToWrite = payload.rows;
+      }
+    } else if (payload.data && Array.isArray(payload.data)) {
+      for (var i = 0; i < payload.data.length; i++) {
+        var emp = payload.data[i];
+        if (Array.isArray(emp)) {
+          rowsToWrite.push(emp);
+        } else {
+          rowsToWrite.push(employeeObjToRow(emp));
+        }
+      }
+    } else if (Array.isArray(payload)) {
+      for (var j = 0; j < payload.length; j++) {
+        var item = payload[j];
+        if (Array.isArray(item)) {
+          rowsToWrite.push(item);
+        } else {
+          rowsToWrite.push(employeeObjToRow(item));
+        }
+      }
+    }
+    
+    // Ensure header row is formatted
+    setupStaffSheetHeaders(sheet);
+    
+    if (rowsToWrite.length > 0) {
+      // Clear existing data rows (from row 2 downwards)
+      var maxRows = sheet.getMaxRows();
+      var lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
+      }
+      
+      // Expand sheet if needed
+      if (rowsToWrite.length + 1 > maxRows) {
+        sheet.insertRowsAfter(maxRows, (rowsToWrite.length + 1) - maxRows + 20);
+      }
+      
+      // Write all rows
+      sheet.getRange(2, 1, rowsToWrite.length, HEADERS.length).setValues(rowsToWrite);
+      
+      // Auto-link photos from Drive
+      try {
+        syncStaffPhotosFromDrive();
+      } catch(photoErr) {}
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      count: rowsToWrite.length,
+      message: "Successfully synchronized " + rowsToWrite.length + " staff records into Staff_data sheet!"
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (err) {
+    Logger.log("doPost Error: " + err.toString());
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * WEB APP GET HANDLER - Returns JSON of all staff rows
+ */
+function doGet(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = getStaffSheet(ss);
+    var lastRow = sheet.getLastRow();
+    
+    if (lastRow <= 1) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        data: [],
+        count: 0,
+        message: "No staff rows found in sheet"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var values = sheet.getRange(1, 1, lastRow, HEADERS.length).getValues();
+    var list = [];
+    
+    for (var i = 1; i < values.length; i++) {
+      var r = values[i];
+      if (!r[0] && !r[1]) continue;
+      list.push({
+        emp_code: String(r[0] || ""),
+        first_name: String(r[1] || ""),
+        last_name: String(r[2] || ""),
+        employee_category: String(r[3] || "Teaching Staff"),
+        department: String(r[4] || "Academics"),
+        designation: String(r[5] || "Teacher"),
+        employment_type: String(r[6] || "Permanent"),
+        employment_status: String(r[7] || "Active"),
+        date_of_joining: String(r[8] || ""),
+        date_of_birth: String(r[9] || ""),
+        gender: String(r[10] || "Male"),
+        blood_group: String(r[11] || ""),
+        mobile_primary: String(r[12] || ""),
+        whatsapp_number: String(r[13] || ""),
+        official_email: String(r[14] || ""),
+        personal_email: String(r[15] || ""),
+        basic_salary: Number(r[16]) || 25000,
+        classes_assigned: String(r[17] || ""),
+        subject_specialisation: String(r[18] || ""),
+        employee_photo_url: String(r[19] || ""),
+        document_url: String(r[20] || ""),
+        current_address: String(r[21] || ""),
+        academic_year: String(r[22] || "2026-27"),
+        updated_at: String(r[23] || "")
+      });
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      data: list,
+      count: list.length
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function employeeObjToRow(e) {
+  var classes = Array.isArray(e.classes_assigned) ? e.classes_assigned.join(", ") : String(e.classes_assigned || "");
+  var subs = Array.isArray(e.subject_specialisation) ? e.subject_specialisation.join(", ") : String(e.subject_specialisation || "");
+  var nowStr = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  return [
+    String(e.emp_code || e.emp_id || e._docId || ""),
+    String(e.first_name || (e.name ? String(e.name).split(" ")[0] : "") || ""),
+    String(e.last_name || (e.name ? String(e.name).split(" ").slice(1).join(" ") : "") || ""),
+    String(e.employee_category || "Teaching Staff"),
+    String(e.department || "Academics"),
+    String(e.designation || "Teacher"),
+    String(e.employment_type || "Permanent"),
+    String(e.employment_status || (e.is_active !== false ? "Active" : "Inactive")),
+    String(e.date_of_joining || ""),
+    String(e.date_of_birth || ""),
+    String(e.gender || "Male"),
+    String(e.blood_group || ""),
+    String(e.mobile_primary || e.mobile || e.phone || ""),
+    String(e.whatsapp_number || e.whatsapp || ""),
+    String(e.official_email || e.email || ""),
+    String(e.personal_email || ""),
+    Number(e.basic_salary) || 25000,
+    classes,
+    subs,
+    String(e.employee_photo_url || e.photo_url || ""),
+    String(e.document_url || ""),
+    String(e.current_address || e.address || ""),
+    String(e.academic_year || "2026-27"),
+    nowStr
+  ];
+}
+
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu("🏫 SJES Staff Master")
-    .addItem("🔄 1. Refresh Data from Firebase", "pullFromFirebase")
+    .addItem("🔄 1. Refresh Data from Firebase / ERP", "pullFromFirebase")
     .addItem("💾 2. Push All Rows to Firebase", "pushAllToFirebase")
     .addItem("📸 3. Auto-Link Photos from Google Drive", "syncStaffPhotosFromDrive")
     .addItem("🛠️ 4. Setup Sheet & Headers", "setupStaffSheet")
@@ -1468,17 +1682,10 @@ function notify(msg, title) {
   }
 }
 
-function setupStaffSheet() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
-  var sheet = ss.getSheetByName(STAFF_TAB_NAME);
-  
-  if (!sheet) {
-    sheet = ss.insertSheet(STAFF_TAB_NAME);
-  }
-  
+function setupStaffSheetHeaders(sheet) {
+  if (!sheet) return;
   var headerRange = sheet.getRange(1, 1, 1, HEADERS.length);
   headerRange.setValues([HEADERS]);
-  
   headerRange.setBackground("#1e3a8a")
     .setFontColor("#ffffff")
     .setFontWeight("bold")
@@ -1487,9 +1694,14 @@ function setupStaffSheet() {
     .setHorizontalAlignment("center")
     .setVerticalAlignment("middle")
     .setWrap(true);
-    
   sheet.setRowHeight(1, 38);
   sheet.setFrozenRows(1);
+}
+
+function setupStaffSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = getStaffSheet(ss);
+  setupStaffSheetHeaders(sheet);
   
   for (var col = 1; col <= HEADERS.length; col++) {
     sheet.autoResizeColumn(col);
@@ -1534,20 +1746,7 @@ function toFirestoreFields(obj) {
   return fields;
 }
 
-/**
- * Helper to fetch Firestore collection documents with OAuth token & API key support
- */
 function fetchFirestoreCollection(collectionName) {
-  var token = "";
-  try {
-    token = ScriptApp.getOAuthToken();
-  } catch (e) {}
-
-  var headers = {};
-  if (token) {
-    headers["Authorization"] = "Bearer " + token;
-  }
-
   var dbEndpoints = [FIREBASE_DB_ID, "(default)"];
 
   for (var i = 0; i < dbEndpoints.length; i++) {
@@ -1557,7 +1756,6 @@ function fetchFirestoreCollection(collectionName) {
 
     try {
       var response = UrlFetchApp.fetch(url, {
-        headers: headers,
         muteHttpExceptions: true
       });
       var code = response.getResponseCode();
@@ -1574,19 +1772,8 @@ function fetchFirestoreCollection(collectionName) {
   return null;
 }
 
-/**
- * Helper to save a single document into Firestore
- */
 function saveFirestoreDocument(collectionName, docId, obj) {
-  var token = "";
-  try {
-    token = ScriptApp.getOAuthToken();
-  } catch (e) {}
-
   var headers = { "Content-Type": "application/json" };
-  if (token) {
-    headers["Authorization"] = "Bearer " + token;
-  }
 
   var dbEndpoints = [FIREBASE_DB_ID, "(default)"];
   for (var i = 0; i < dbEndpoints.length; i++) {
@@ -1611,21 +1798,14 @@ function saveFirestoreDocument(collectionName, docId, obj) {
 
 function pullFromFirebase() {
   try {
-    notify("Fetching latest staff records from Firebase...", "Firebase Sync");
+    notify("Fetching latest staff records...", "Syncing Staff");
     var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
-    var sheet = ss.getSheetByName(STAFF_TAB_NAME);
-    if (!sheet) {
-      sheet = setupStaffSheet();
-    }
+    var sheet = getStaffSheet(ss);
+    setupStaffSheetHeaders(sheet);
 
     var docs = fetchFirestoreCollection("employee_master");
     
-    if (docs === null) {
-      notify("Firebase connection verified. Ensure data exists in ERP.", "Status");
-      return;
-    }
-
-    if (docs.length === 0) {
+    if (docs === null || docs.length === 0) {
       notify("No staff records found in Firebase yet.", "Firebase Ready");
       return;
     }
@@ -1697,18 +1877,18 @@ function pullFromFirebase() {
 
       sheet.getRange(2, 1, rows.length, HEADERS.length).setValues(rows);
       syncStaffPhotosFromDrive();
-      notify("✓ Loaded " + rows.length + " staff records from Firebase!", "Sync Complete");
+      notify("✓ Loaded " + rows.length + " staff records into Google Sheet!", "Sync Complete");
     }
   } catch (err) {
     Logger.log("pullFromFirebase error: " + err.toString());
-    notify("Error syncing from Firebase: " + err.message, "Sync Error");
+    notify("Error syncing: " + err.message, "Sync Error");
   }
 }
 
 function syncStaffPhotosFromDrive() {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
-    var sheet = ss.getSheetByName(STAFF_TAB_NAME) || ss.getActiveSheet();
+    var sheet = getStaffSheet(ss);
     var lastRow = sheet.getLastRow();
     
     if (lastRow <= 1) return;
@@ -1762,7 +1942,8 @@ function onEdit(e) {
   try {
     if (!e || !e.source) return;
     var sheet = e.source.getActiveSheet();
-    if (sheet.getName() !== STAFF_TAB_NAME) return;
+    var sheetName = sheet.getName().toLowerCase();
+    if (sheetName !== "staff_data") return;
     
     var row = e.range.getRow();
     if (row <= 1) return;
@@ -1815,7 +1996,7 @@ function pushAllToFirebase() {
   try {
     notify("Saving all staff rows to Firebase...", "Firebase Sync");
     var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SPREADSHEET_ID);
-    var sheet = ss.getSheetByName(STAFF_TAB_NAME);
+    var sheet = getStaffSheet(ss);
     if (!sheet) return;
     
     var lastRow = sheet.getLastRow();
