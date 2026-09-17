@@ -111,6 +111,8 @@ export default function StudentMasterStudio({
   const [syncingSheet, setSyncingSheet] = useState(false)
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
   const [showScriptModal, setShowScriptModal] = useState(false)
+  const [showDomainModal, setShowDomainModal] = useState(false)
+  const [domainCopied, setDomainCopied] = useState(false)
 
   // Form / Profile Modal State
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view' | null>(null)
@@ -261,9 +263,15 @@ export default function StudentMasterStudio({
       if (res.success) {
         setToast(`Connected to Google Account: ${res.user?.email || 'Authorized'}`)
       } else {
+        if (res.isUnauthorizedDomain) {
+          setShowDomainModal(true)
+        }
         setToast(res.error || 'Google connection failed')
       }
     } catch (err: any) {
+      if (String(err?.message || err).includes('unauthorized-domain')) {
+        setShowDomainModal(true)
+      }
       setToast(err.message || 'Connection error')
     }
   }
@@ -287,7 +295,11 @@ export default function StudentMasterStudio({
       const matchGender = !filterGender || s.gender === filterGender
       const matchStatus =
         !filterStatus ||
-        (filterStatus === 'active' ? s.is_active !== false : s.student_status === filterStatus)
+        (filterStatus.toLowerCase() === 'active'
+          ? s.is_active !== false && s.student_status !== 'Inactive'
+          : filterStatus.toLowerCase() === 'inactive'
+          ? s.is_active === false || s.student_status === 'Inactive'
+          : s.student_status?.toLowerCase() === filterStatus.toLowerCase())
       const matchYear = !filterYear || s.academic_year === filterYear
 
       return matchSearch && matchClass && matchSection && matchGender && matchStatus && matchYear
@@ -586,25 +598,47 @@ export default function StudentMasterStudio({
 
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
           {!googleConnected ? (
-            <button
-              onClick={handleGoogleConnect}
-              style={{
-                background: '#ffffff',
-                color: '#1e3a8a',
-                border: 'none',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                fontWeight: 700,
-                fontSize: '12px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <Sparkles size={14} color="#2563eb" />
-              Connect Google Account
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                onClick={handleGoogleConnect}
+                style={{
+                  background: '#ffffff',
+                  color: '#1e3a8a',
+                  border: 'none',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Sparkles size={14} color="#2563eb" />
+                Connect Google Account
+              </button>
+              <button
+                onClick={() => setShowDomainModal(true)}
+                title="Firebase Domain Authorization Setup Guide"
+                style={{
+                  background: 'rgba(255,255,255,0.15)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <ExternalLink size={13} />
+                Domain Setup Help
+              </button>
+            </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <button
@@ -785,7 +819,8 @@ export default function StudentMasterStudio({
             }}
           >
             <option value="">All Statuses</option>
-            <option value="Active">Active</option>
+            <option value="Active">Active (Enrolled)</option>
+            <option value="Inactive">Inactive</option>
             <option value="New Admission">New Admission</option>
             <option value="Promoted">Promoted</option>
             <option value="Left">Left</option>
@@ -998,15 +1033,29 @@ export default function StudentMasterStudio({
                     <td>
                       <span
                         style={{
-                          background: student.student_status === 'Active' ? '#dcfce7' : '#fef3c7',
-                          color: student.student_status === 'Active' ? '#15803d' : '#b45309',
+                          background:
+                            student.student_status === 'Active' || (student.is_active !== false && student.student_status !== 'Inactive')
+                              ? '#dcfce7'
+                              : student.student_status === 'New Admission'
+                              ? '#dbeafe'
+                              : student.student_status === 'Left' || student.student_status === 'Inactive'
+                              ? '#fee2e2'
+                              : '#fef3c7',
+                          color:
+                            student.student_status === 'Active' || (student.is_active !== false && student.student_status !== 'Inactive')
+                              ? '#15803d'
+                              : student.student_status === 'New Admission'
+                              ? '#1d4ed8'
+                              : student.student_status === 'Left' || student.student_status === 'Inactive'
+                              ? '#b91c1c'
+                              : '#b45309',
                           padding: '3px 8px',
                           borderRadius: '12px',
                           fontSize: '11px',
                           fontWeight: 700,
                         }}
                       >
-                        {student.student_status || (student.is_active ? 'Active' : 'Inactive')}
+                        {student.student_status || (student.is_active !== false ? 'Active' : 'Inactive')}
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -1192,14 +1241,69 @@ export default function StudentMasterStudio({
                           <select
                             disabled={modalMode === 'view'}
                             value={formState.student_status || 'Active'}
-                            onChange={(e) => updateForm('student_status', e.target.value)}
+                            onChange={(e) => {
+                              const st = e.target.value
+                              updateForm('student_status', st)
+                              updateForm('is_active', st !== 'Inactive' && st !== 'Left')
+                            }}
                           >
                             <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
                             <option value="New Admission">New Admission</option>
                             <option value="Promoted">Promoted</option>
                             <option value="Left">Left</option>
                             <option value="Alumni">Alumni</option>
                           </select>
+                        </label>
+                      </div>
+
+                      {/* Active Status Toggle Banner */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          background: formState.is_active !== false && formState.student_status !== 'Inactive' ? '#f0fdf4' : '#fef2f2',
+                          border: `1px solid ${formState.is_active !== false && formState.student_status !== 'Inactive' ? '#bbf7d0' : '#fecaca'}`,
+                          borderRadius: '8px',
+                          marginBottom: '16px',
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              fontWeight: 700,
+                              fontSize: '13px',
+                              color: formState.is_active !== false && formState.student_status !== 'Inactive' ? '#15803d' : '#b91c1c',
+                            }}
+                          >
+                            Enrollment Status:{' '}
+                            {formState.is_active !== false && formState.student_status !== 'Inactive'
+                              ? 'Active (Currently Enrolled)'
+                              : 'Inactive'}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>
+                            {formState.is_active !== false && formState.student_status !== 'Inactive'
+                              ? 'Student appears on attendance registers, fee bills, and reports.'
+                              : 'Student is inactive / suspended / left.'}
+                          </div>
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
+                          <input
+                            type="checkbox"
+                            disabled={modalMode === 'view'}
+                            checked={formState.is_active !== false && formState.student_status !== 'Inactive'}
+                            onChange={(e) => {
+                              const active = e.target.checked
+                              updateForm('is_active', active)
+                              updateForm('student_status', active ? 'Active' : 'Inactive')
+                            }}
+                            style={{ width: '18px', height: '18px', accentColor: '#16a34a' }}
+                          />
+                          <span style={{ fontWeight: 600, fontSize: '13px', color: '#0f172a' }}>
+                            {formState.is_active !== false && formState.student_status !== 'Inactive' ? 'Active' : 'Inactive'}
+                          </span>
                         </label>
                       </div>
 
@@ -1863,6 +1967,215 @@ function initializeStudentSheet() {
             }
           }}
         />
+      )}
+
+      {/* Firebase Domain Authorization Guide Modal */}
+      {showDomainModal && (
+        <div className="modal-overlay" onClick={() => setShowDomainModal(false)}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '640px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header" style={{ background: '#1e3a8a', color: '#ffffff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={20} color="#93c5fd" />
+                <h3 style={{ margin: 0, color: '#ffffff' }}>Authorize Domain for Google Sign-In</h3>
+              </div>
+              <button
+                className="close-btn"
+                style={{ color: '#ffffff' }}
+                onClick={() => setShowDomainModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body" style={{ padding: '20px' }}>
+              <p style={{ fontSize: '14px', color: '#334155', lineHeight: 1.6, margin: '0 0 16px' }}>
+                Firebase requires web applications to whitelist their domain in the Firebase Console before Google Sign-In popups can complete.
+              </p>
+
+              {/* Current Domain Box */}
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '10px',
+                  padding: '14px',
+                  marginBottom: '20px',
+                }}
+              >
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  Your Current Domain to Authorize:
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: '#ffffff',
+                    border: '1px solid #94a3b8',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    gap: '8px',
+                  }}
+                >
+                  <code style={{ fontSize: '13px', color: '#0f172a', fontWeight: 600, wordBreak: 'break-all' }}>
+                    {typeof window !== 'undefined' ? window.location.hostname : 'Current App Domain'}
+                  </code>
+                  <button
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        navigator.clipboard.writeText(window.location.hostname)
+                        setDomainCopied(true)
+                        setTimeout(() => setDomainCopied(false), 3000)
+                      }
+                    }}
+                    style={{
+                      background: domainCopied ? '#16a34a' : '#1e40af',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {domainCopied ? <Check size={14} /> : <Copy size={14} />}
+                    {domainCopied ? 'Copied!' : 'Copy Domain'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Step-by-Step Guide */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: '#1e3a8a',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    1
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#334155' }}>
+                    Open your <b>Firebase Console</b> at{' '}
+                    <a
+                      href="https://console.firebase.google.com/"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: '#2563eb', textDecoration: 'underline', fontWeight: 600 }}
+                    >
+                      console.firebase.google.com
+                    </a>{' '}
+                    and select your project.
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: '#1e3a8a',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    2
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#334155' }}>
+                    In the left navigation menu, click on <b>Authentication</b> &rarr; click the <b>Settings</b> tab (top bar).
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: '#1e3a8a',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    3
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#334155' }}>
+                    Scroll down to the <b>Authorized domains</b> section and click <b>Add domain</b>.
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: '#1e3a8a',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    4
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#334155' }}>
+                    Paste your domain (copied above) and click <b>Save</b>. Then return here and click <b>Connect Google Account</b>.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                className="btn-secondary"
+                onClick={() => setShowDomainModal(false)}
+              >
+                Close
+              </button>
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  setShowDomainModal(false)
+                  handleGoogleConnect()
+                }}
+              >
+                <Sparkles size={14} /> Try Connecting Again
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

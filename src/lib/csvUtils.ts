@@ -12,18 +12,18 @@ const COMMON_ALIASES: Record<string, string[]> = {
   capacity: ['intake', 'total_seats', 'seats', 'strength'],
   subject_name: ['subject', 'course', 'sub_name'],
   subject_type: ['type', 'category'],
-  full_name: ['student_name', 'name', 'candidate_name', 'applicant_name'],
+  full_name: ['student_name', 'employee_name', 'staff_name', 'emp_name', 'teacher_name', 'name', 'candidate_name', 'applicant_name', 'faculty_name'],
   admission_no: ['admission_number', 'adm_no', 'adm_number', 'reg_no', 'registration_no'],
   roll_no: ['roll_number', 'roll', 'class_roll'],
   date_of_birth: ['dob', 'birth_date', 'birthdate'],
   mobile_primary: ['mobile', 'phone', 'contact', 'mobile_no', 'phone_no', 'primary_mobile', 'contact_no'],
-  official_email: ['email', 'email_id', 'work_email', 'school_email'],
+  official_email: ['email', 'email_id', 'work_email', 'school_email', 'official_email_id'],
   personal_email: ['personal_email_id', 'alternate_email'],
   gender: ['sex'],
   blood_group: ['blood_grp', 'blood'],
-  first_name: ['fname', 'given_name'],
-  last_name: ['lname', 'surname', 'family_name'],
-  emp_code: ['employee_code', 'emp_no', 'staff_id', 'employee_id', 'code'],
+  first_name: ['fname', 'given_name', 'first', 'first_name'],
+  last_name: ['lname', 'surname', 'family_name', 'last', 'last_name'],
+  emp_code: ['employee_code', 'emp_no', 'staff_id', 'employee_id', 'emp_id', 'code'],
   employee_category: ['staff_category', 'category', 'type'],
   designation: ['post', 'role', 'job_title'],
   department: ['dept', 'department_name'],
@@ -295,11 +295,25 @@ export function sanitizeRecordForTable(
     if (!payload.emp_id || String(payload.emp_id).trim() === '') {
       payload.emp_id = String(payload.emp_code)
     }
+    if (!payload.first_name && (payload.full_name || payload.name || payload.employee_name || payload.staff_name || payload.teacher_name)) {
+      const combined = String(payload.full_name || payload.name || payload.employee_name || payload.staff_name || payload.teacher_name).trim()
+      const parts = combined.split(/\s+/)
+      payload.first_name = parts[0] || 'Staff'
+      payload.last_name = parts.slice(1).join(' ') || ''
+    }
+    if (!payload.first_name) {
+      payload.first_name = `Staff`
+    }
+    if (payload.last_name === undefined) {
+      payload.last_name = ''
+    }
     if (!payload.academic_year) {
       payload.academic_year = getCurrentAcademicYear()
     }
     if (payload.is_active === undefined) payload.is_active = true
     if (!payload.employment_status) payload.employment_status = 'Active'
+    if (!payload.employee_category) payload.employee_category = 'Teaching Staff'
+    if (!payload.department) payload.department = 'Academics'
   }
 
   if (mod.table === 'user_master') {
