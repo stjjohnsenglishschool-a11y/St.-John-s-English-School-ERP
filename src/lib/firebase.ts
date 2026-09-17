@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app'
+import { supabase as realSupabaseClient, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase'
 import {
   getFirestore,
   collection,
@@ -189,7 +190,22 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
     }
   }
 
-  // 2. Fetch remote documents from Firestore with fallback and auto-sync
+  // 2. Fetch remote documents from Supabase REST API first
+  try {
+    const { data: supaData, error: supaErr } = await realSupabaseClient.from(collectionName).select('*')
+    if (!supaErr && Array.isArray(supaData) && supaData.length > 0) {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          localStorage.setItem(`sjes_table_${collectionName}`, JSON.stringify(supaData))
+        } catch {}
+      }
+      return supaData as T[]
+    }
+  } catch (err) {
+    console.warn(`Supabase fetch note for ${collectionName}:`, err)
+  }
+
+  // 3. Fallback fetch from Firestore
   try {
     const fetchPromise = getDocs(collection(db, collectionName))
     const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000))
@@ -374,6 +390,22 @@ export async function saveDocument(
       }
     }
 
+    // Attempt Supabase upsert
+    try {
+      Promise.resolve(
+        realSupabaseClient.from(collectionName).upsert({
+          ...data,
+          _docId: docId,
+          id: data.id || docId,
+          updated_at: new Date().toISOString(),
+        })
+      ).then((res: any) => {
+        if (res?.error) console.warn(`Supabase save note for ${collectionName}:`, res.error.message)
+      }).catch(() => {})
+    } catch {
+      // ignore
+    }
+
     // Attempt Firebase setDoc with timeout protection so offline/slow states don't hang
     const setPromise = setDoc(
       doc(db, collectionName, docId),
@@ -476,7 +508,16 @@ export async function saveBatchDocuments(
     }
   }
 
-  // 2. Commit in Firestore batches (max 400 per batch) with 2s timeout
+  // 2. Commit to Supabase in batches
+  try {
+    Promise.resolve(realSupabaseClient.from(collectionName).upsert(sanitizedItems)).then((res: any) => {
+      if (res?.error) console.warn(`Supabase batch upsert note for ${collectionName}:`, res.error.message)
+    }).catch(() => {})
+  } catch {
+    // ignore
+  }
+
+  // 3. Commit in Firestore batches (max 400 per batch) with 2s timeout
   try {
     const chunkSize = 400
     for (let i = 0; i < sanitizedItems.length; i += chunkSize) {
@@ -541,6 +582,19 @@ export async function deleteDocument(
       if (additionalInfo.fee_id) targetDocIds.add(String(additionalInfo.fee_id))
       if (additionalInfo.expense_id) targetDocIds.add(String(additionalInfo.expense_id))
       if (additionalInfo.income_id) targetDocIds.add(String(additionalInfo.income_id))
+    }
+
+    // Delete candidate IDs from Supabase
+    for (const id of targetDocIds) {
+      try {
+        Promise.resolve(
+          realSupabaseClient.from(collectionName).delete().or(`id.eq.${id},_docId.eq.${id}`)
+        ).then((res: any) => {
+          if (res?.error) console.warn(`Supabase delete note for ${collectionName}:`, res.error.message)
+        }).catch(() => {})
+      } catch {
+        // continue
+      }
     }
 
     // 1. Direct delete all candidate document IDs
@@ -1028,6 +1082,6 @@ export const firebaseClient = {
 }
 
 export const firebase = firebaseClient
-export const supabase = firebaseClient
+export const supabase = realSupabaseClient
 export const isSupabaseConfigured = true
 export const uploadToSupabaseStorage = uploadToFirebaseStorage
