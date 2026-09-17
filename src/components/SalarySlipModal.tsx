@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Printer, Download, X, Calendar, User, ShieldCheck, CheckCircle2, AlertCircle } from "lucide-react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
-import { fetchCollectionData } from "../lib/firebase";
+import { fetchCollectionData } from "../lib/supabase";
 import { calculateEmployeeLeaveSummary, EmployeeLeaveSummary } from "../lib/leaveSalaryRules";
 
 interface SalarySlipProps {

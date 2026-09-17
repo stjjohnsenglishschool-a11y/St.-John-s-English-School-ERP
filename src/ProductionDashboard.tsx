@@ -13,7 +13,7 @@ import {
   UsersRound,
   WalletCards,
 } from 'lucide-react'
-import { supabase } from './lib/firebase'
+import { supabase } from './lib/supabase'
 import { moduleName, modules } from './modules'
 import { getCurrentAcademicYear } from './lib/academicYear'
 

@@ -13,7 +13,7 @@ import {
   Award,
   Calendar,
 } from "lucide-react";
-import { logActivity, supabase } from "../lib/firebase";
+import { logActivity, supabase } from "../lib/supabase";
 
 interface SchoolProfile {
   school_id?: string;

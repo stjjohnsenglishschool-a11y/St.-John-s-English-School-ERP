@@ -33,7 +33,7 @@ import {
   Copy,
   Info,
 } from 'lucide-react'
-import { supabase, logActivity, deleteDocument, saveDocument, saveBatchDocuments, fetchCollectionData, subscribeToCollection, uploadToFirebaseStorage } from '../lib/firebase'
+import { supabase, logActivity, deleteDocument, saveDocument, saveBatchDocuments, fetchCollectionData, subscribeToCollection, uploadToFirebaseStorage } from '../lib/supabase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
 import { downloadSampleCsv } from '../lib/csvUtils'
@@ -508,9 +508,19 @@ export default function StudentMasterStudio({
         if (photoType === 'student') updateForm('student_photo_url', res.url)
         if (photoType === 'father') updateForm('father_photo_url', res.url)
         if (photoType === 'mother') updateForm('mother_photo_url', res.url)
-        setToast(`${photoType === 'student' ? 'Student' : photoType === 'father' ? "Father's" : "Mother's"} photo saved to Google Drive folder 'student_data_photo'!`)
+        setToast(`${photoType === 'student' ? 'Student' : photoType === 'father' ? "Father's" : "Mother's"} photo saved to Google Drive folder 'studen_photo_master'!`)
       } else {
-        setToast(res.error || 'Google Drive photo upload failed')
+        // Fallback to storage if Google Drive API is not active
+        const identifier = formState.admission_no || formState.full_name || 'student'
+        const fallbackUrl = await uploadToFirebaseStorage(
+          file,
+          `student_${identifier}_${photoType}.jpg`,
+          'studen_photo_master'
+        )
+        if (photoType === 'student') updateForm('student_photo_url', fallbackUrl)
+        if (photoType === 'father') updateForm('father_photo_url', fallbackUrl)
+        if (photoType === 'mother') updateForm('mother_photo_url', fallbackUrl)
+        setToast(`${photoType === 'student' ? 'Student' : photoType === 'father' ? "Father's" : "Mother's"} photo saved successfully!`)
       }
     } catch (err: any) {
       setToast(err.message || 'Photo upload error')
@@ -2508,215 +2518,6 @@ function initializeStudentSheet() {
             }
           }}
         />
-      )}
-
-      {/* Firebase Domain Authorization Guide Modal */}
-      {showDomainModal && (
-        <div className="modal-overlay" onClick={() => setShowDomainModal(false)}>
-          <div
-            className="modal-content"
-            style={{ maxWidth: '640px' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header" style={{ background: '#1e3a8a', color: '#ffffff' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Sparkles size={20} color="#93c5fd" />
-                <h3 style={{ margin: 0, color: '#ffffff' }}>Authorize Domain for Google Sign-In</h3>
-              </div>
-              <button
-                className="close-btn"
-                style={{ color: '#ffffff' }}
-                onClick={() => setShowDomainModal(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="modal-body" style={{ padding: '20px' }}>
-              <p style={{ fontSize: '14px', color: '#334155', lineHeight: 1.6, margin: '0 0 16px' }}>
-                Firebase requires web applications to whitelist their domain in the Firebase Console before Google Sign-In popups can complete.
-              </p>
-
-              {/* Current Domain Box */}
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '10px',
-                  padding: '14px',
-                  marginBottom: '20px',
-                }}
-              >
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>
-                  Your Current Domain to Authorize:
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    background: '#ffffff',
-                    border: '1px solid #94a3b8',
-                    borderRadius: '6px',
-                    padding: '8px 12px',
-                    gap: '8px',
-                  }}
-                >
-                  <code style={{ fontSize: '13px', color: '#0f172a', fontWeight: 600, wordBreak: 'break-all' }}>
-                    {typeof window !== 'undefined' ? window.location.hostname : 'Current App Domain'}
-                  </code>
-                  <button
-                    onClick={() => {
-                      if (typeof window !== 'undefined') {
-                        navigator.clipboard.writeText(window.location.hostname)
-                        setDomainCopied(true)
-                        setTimeout(() => setDomainCopied(false), 3000)
-                      }
-                    }}
-                    style={{
-                      background: domainCopied ? '#16a34a' : '#1e40af',
-                      color: '#ffffff',
-                      border: 'none',
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {domainCopied ? <Check size={14} /> : <Copy size={14} />}
-                    {domainCopied ? 'Copied!' : 'Copy Domain'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Step-by-Step Guide */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <div
-                    style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      background: '#1e3a8a',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 700,
-                      fontSize: '12px',
-                      flexShrink: 0,
-                    }}
-                  >
-                    1
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#334155' }}>
-                    Open your <b>Firebase Console</b> at{' '}
-                    <a
-                      href="https://console.firebase.google.com/"
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: '#2563eb', textDecoration: 'underline', fontWeight: 600 }}
-                    >
-                      console.firebase.google.com
-                    </a>{' '}
-                    and select your project.
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <div
-                    style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      background: '#1e3a8a',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 700,
-                      fontSize: '12px',
-                      flexShrink: 0,
-                    }}
-                  >
-                    2
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#334155' }}>
-                    In the left navigation menu, click on <b>Authentication</b> &rarr; click the <b>Settings</b> tab (top bar).
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <div
-                    style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      background: '#1e3a8a',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 700,
-                      fontSize: '12px',
-                      flexShrink: 0,
-                    }}
-                  >
-                    3
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#334155' }}>
-                    Scroll down to the <b>Authorized domains</b> section and click <b>Add domain</b>.
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <div
-                    style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      background: '#1e3a8a',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 700,
-                      fontSize: '12px',
-                      flexShrink: 0,
-                    }}
-                  >
-                    4
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#334155' }}>
-                    Paste your domain (copied above) and click <b>Save</b>. Then return here and click <b>Connect Google Account</b>.
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button
-                className="btn-secondary"
-                onClick={() => setShowDomainModal(false)}
-              >
-                Close
-              </button>
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  setShowDomainModal(false)
-                  handleGoogleConnect()
-                }}
-              >
-                <Sparkles size={14} /> Try Connecting Again
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   )

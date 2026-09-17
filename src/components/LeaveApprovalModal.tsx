@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { CheckCircle2, XCircle, AlertTriangle, Calendar, Clock, User, FileText, ShieldCheck, X } from "lucide-react";
 import { calculateEmployeeLeaveSummary } from "../lib/leaveSalaryRules";
-import { saveDocument, logActivity } from "../lib/firebase";
+import { saveDocument, logActivity } from "../lib/supabase";
 
 interface LeaveApprovalModalProps {
   leaveApp: Record<string, any>;

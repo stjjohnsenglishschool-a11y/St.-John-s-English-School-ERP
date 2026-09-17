@@ -15,7 +15,7 @@ import {
   ShieldAlert,
   Sparkles,
 } from "lucide-react";
-import { supabase, logActivity, deleteDocument } from "../lib/firebase";
+import { supabase, logActivity, deleteDocument } from "../lib/supabase";
 import { modules } from "../modules";
 import { downloadSampleCsv } from "../lib/csvUtils";
 import CsvImportModal from "./CsvImportModal";

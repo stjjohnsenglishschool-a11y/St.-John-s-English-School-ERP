@@ -1,10 +1,10 @@
-import { saveBatchDocuments, saveDocument, fetchCollectionData } from './firebase'
+import { saveBatchDocuments, saveDocument, fetchCollectionData } from './supabase'
 
 export type User = any
 
 // Google Workspace Constants - Students
-export const GOOGLE_DRIVE_FOLDER_ID = '19EmUMwDpNxuufOr995XPsg_XoG-BqZWO'
-export const GOOGLE_DRIVE_FOLDER_NAME = 'student_data_photo'
+export const GOOGLE_DRIVE_FOLDER_ID = '1JQgvlo_KbpIhD3jH-0ydqvs6X6JiUmr7'
+export const GOOGLE_DRIVE_FOLDER_NAME = 'studen_photo_master'
 export const GOOGLE_SHEET_ID = '1OGD09mG-m54rSKBJl2nmOc-pFraYZRnMcCTyoAEWGto'
 export const GOOGLE_SHEET_TAB_NAME = 'student_data'
 export const STUDENT_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxV3tDQi3ZB4XMnJaBkMN8FeCp4f392FRwxcHYFoWWHa-pXc4SzyxsrkEfyxFh8WKCZ/exec'

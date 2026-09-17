@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, ChangeEvent } from 'react'
 import { Camera, RefreshCw, X, Flashlight, Upload, AlertCircle, CheckCircle2, ShieldCheck, Search, Loader2 } from 'lucide-react'
 import jsQR from 'jsqr'
-import { supabase } from '../lib/firebase'
+import { supabase } from '../lib/supabase'
 import { VerificationData } from './DigitalVerificationModal'
 
 interface QRScannerModalProps {

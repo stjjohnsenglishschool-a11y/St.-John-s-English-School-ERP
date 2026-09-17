@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Table,
 } from 'lucide-react'
-import { supabase, logActivity } from '../lib/firebase'
+import { supabase, logActivity } from '../lib/supabase'
 import { Module, moduleName } from '../modules'
 import {
   parseCsvText,

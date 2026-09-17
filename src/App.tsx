@@ -55,7 +55,7 @@ import {
   Session,
   isSupabaseConfigured,
   supabase
-} from "./lib/firebase";
+} from "./lib/supabase";
 import { seedSupabaseDatabase } from "./lib/seedDatabase";
 import { ALL_SUBMENU_MODULES, Field, label, moduleName, modules, navGroups } from "./modules";
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS } from "./lib/academicYear";

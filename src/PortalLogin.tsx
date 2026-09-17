@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { Eye, EyeOff, GraduationCap, LockKeyhole, ShieldCheck, User, Key, Check } from 'lucide-react'
-import { logActivity, fetchCollectionData } from './lib/firebase'
+import { logActivity, fetchCollectionData } from './lib/supabase'
 
 const logo = 'https://res.cloudinary.com/oilisvfi/image/upload/v1786000074/logo_final_frchld.jpg'
 
