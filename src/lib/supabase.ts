@@ -32,7 +32,7 @@ export async function fetchSupabaseTable<T = any>(tableName: string): Promise<T[
 
   try {
     const { data, error } = await supabase.from(tableName).select('*')
-    if (!error && Array.isArray(data) && data.length > 0) {
+    if (!error && Array.isArray(data)) {
       if (typeof window !== 'undefined' && window.localStorage) {
         try {
           localStorage.setItem(cacheKey, JSON.stringify(data))

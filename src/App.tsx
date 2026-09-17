@@ -354,20 +354,6 @@ function App() {
 
       let data = await fetchCollectionData(mod.table);
 
-      const isMasterTable = [
-        "department_master",
-        "class_master",
-        "subject_master",
-        "vendor_master",
-        "school_master",
-        "user_master"
-      ].includes(mod.table);
-
-      if ((!data || data.length === 0) && isMasterTable) {
-        await seedSupabaseDatabase(false);
-        data = await fetchCollectionData(mod.table);
-      }
-
       let rowsData = data || [];
       if (mod.table === "user_master" && rowsData) {
         rowsData = rowsData.map((r: Row) => ({
