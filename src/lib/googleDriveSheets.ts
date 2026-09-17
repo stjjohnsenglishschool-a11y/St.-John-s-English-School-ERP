@@ -988,12 +988,13 @@ export async function syncAllEmployeesToGoogleSheet(
 }
 
 /**
- * Pulls employee data from Google Sheet ('staff_data')
+ * Pulls employee data from Google Sheet ('staff_data' or first available sheet tab)
  */
 export async function fetchEmployeesFromGoogleSheet(): Promise<{
   success: boolean
   data?: any[]
   error?: string
+  sheetName?: string
 }> {
   try {
     let token = cachedAccessToken
@@ -1008,100 +1009,198 @@ export async function fetchEmployeesFromGoogleSheet(): Promise<{
       token = conn.accessToken
     }
 
-    await ensureStaffSheetTabExists(token)
-
-    const res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1:X1000`,
+    // 1. Inspect spreadsheet metadata to discover all available sheet tabs
+    const metaRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
     )
 
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}))
-      throw new Error(errJson.error?.message || `HTTP ${res.status}`)
+    if (!metaRes.ok) {
+      const errJson = await metaRes.json().catch(() => ({}))
+      throw new Error(
+        errJson.error?.message ||
+          `Failed to access Google Spreadsheet (HTTP ${metaRes.status}). Please check Sheet permissions.`
+      )
     }
 
-    const json = await res.json()
-    const values: string[][] = json.values || []
+    const meta = await metaRes.json()
+    const sheetsList: string[] = (meta.sheets || [])
+      .map((s: any) => s.properties?.title)
+      .filter(Boolean)
 
-    if (values.length <= 1) {
-      return { success: true, data: [] }
+    if (sheetsList.length === 0) {
+      return {
+        success: false,
+        error: 'The Google Spreadsheet contains no sheets or tabs.',
+      }
     }
 
-    // First row is header
-    const headers = values[0].map((h) => h.trim().toLowerCase())
-    const getIdx = (name: string) => headers.indexOf(name.toLowerCase())
+    // Determine target tab: prefer 'staff_data', otherwise use first available tab
+    let targetTab = sheetsList.find((name) => name.toLowerCase() === STAFF_GOOGLE_SHEET_TAB_NAME.toLowerCase())
+    if (!targetTab) {
+      targetTab = sheetsList[0]
+    }
 
-    const empCodeIdx = getIdx('Emp Code')
-    const fNameIdx = getIdx('First Name')
-    const lNameIdx = getIdx('Last Name')
-    const catIdx = getIdx('Employee Category')
-    const deptIdx = getIdx('Department')
-    const desigIdx = getIdx('Designation')
-    const empTypeIdx = getIdx('Employment Type')
-    const statIdx = getIdx('Employment Status')
-    const dojIdx = getIdx('Date of Joining')
-    const dobIdx = getIdx('Date of Birth')
-    const genIdx = getIdx('Gender')
-    const bgIdx = getIdx('Blood Group')
-    const mobIdx = getIdx('Mobile Primary')
-    const waIdx = getIdx('WhatsApp Number')
-    const oEmailIdx = getIdx('Official Email')
-    const pEmailIdx = getIdx('Personal Email')
-    const salIdx = getIdx('Basic Salary')
-    const clsIdx = getIdx('Classes Assigned')
-    const subIdx = getIdx('Subjects Specialisation')
-    const photoIdx = getIdx('Photo URL')
-    const docIdx = getIdx('Document URL')
-    const addrIdx = getIdx('Current Address')
-    const ayIdx = getIdx('Academic Year')
+    // Fetch data from target tab
+    let res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${encodeURIComponent(
+        targetTab
+      )}'!A1:Z2000`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    )
+
+    let json = await res.json().catch(() => ({}))
+    let values: string[][] = json.values || []
+
+    // If target tab was empty and there are other tabs (e.g. Sheet1), try reading the first tab
+    if (values.length <= 1 && sheetsList.length > 1 && targetTab !== sheetsList[0]) {
+      const altTab = sheetsList[0]
+      const altRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${encodeURIComponent(
+          altTab
+        )}'!A1:Z2000`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+      if (altRes.ok) {
+        const altJson = await altRes.json().catch(() => ({}))
+        if (altJson.values && altJson.values.length > 1) {
+          targetTab = altTab
+          values = altJson.values
+        }
+      }
+    }
+
+    if (values.length === 0) {
+      return {
+        success: false,
+        error: `Sheet tab '${targetTab}' is completely empty. Please add employee data rows.`,
+      }
+    }
+
+    if (values.length === 1) {
+      return {
+        success: true,
+        data: [],
+        sheetName: targetTab,
+        error: `Sheet tab '${targetTab}' contains only a header row with no employee records.`,
+      }
+    }
+
+    // Normalize header row for fuzzy matching
+    const rawHeaders = values[0]
+    const cleanHeader = (h: string) =>
+      String(h || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+
+    const normHeaders = rawHeaders.map(cleanHeader)
+    const findCol = (...keywords: string[]) => {
+      const cleanKeywords = keywords.map(cleanHeader)
+      for (let i = 0; i < normHeaders.length; i++) {
+        if (cleanKeywords.includes(normHeaders[i])) return i
+      }
+      return -1
+    }
+
+    const empCodeIdx = findCol('empcode', 'employeecode', 'empid', 'staffid', 'staffcode', 'code', 'id')
+    const fullNameIdx = findCol('fullname', 'staffname', 'employeename', 'teachername', 'name')
+    const fNameIdx = findCol('firstname', 'givenname', 'fname', 'first')
+    const lNameIdx = findCol('lastname', 'surname', 'lname', 'last')
+    const catIdx = findCol('employeecategory', 'staffcategory', 'category', 'rolecategory', 'type')
+    const deptIdx = findCol('department', 'dept', 'stream', 'wing')
+    const desigIdx = findCol('designation', 'post', 'position', 'role', 'title')
+    const empTypeIdx = findCol('employmenttype', 'type', 'contracttype')
+    const statIdx = findCol('employmentstatus', 'status', 'staffstatus', 'active')
+    const dojIdx = findCol('dateofjoining', 'joiningdate', 'doj', 'joindate')
+    const dobIdx = findCol('dateofbirth', 'birthdate', 'dob')
+    const genIdx = findCol('gender', 'sex')
+    const bgIdx = findCol('bloodgroup', 'bloodgrp', 'blood')
+    const mobIdx = findCol('mobileprimary', 'mobile', 'phone', 'contact', 'primarymobile', 'contactnumber')
+    const waIdx = findCol('whatsappnumber', 'whatsapp', 'wanumber')
+    const oEmailIdx = findCol('officialemail', 'email', 'workemail', 'schoolemail', 'emailid')
+    const pEmailIdx = findCol('personalemail', 'alternateemail', 'altemail')
+    const salIdx = findCol('basicsalary', 'salary', 'basicpay', 'pay', 'monthlysalary', 'ctc')
+    const clsIdx = findCol('classesassigned', 'classes', 'assignedclasses', 'grade')
+    const subIdx = findCol('subjectsspecialisation', 'subjects', 'subject', 'specialisation', 'subjectspecialisation')
+    const photoIdx = findCol('photourl', 'photo', 'picture', 'imageurl', 'image', 'employeephotourl')
+    const docIdx = findCol('documenturl', 'documents', 'docurl', 'certificateurl', 'resume')
+    const addrIdx = findCol('currentaddress', 'address', 'residentialaddress', 'location')
+    const ayIdx = findCol('academicyear', 'year', 'session')
 
     const employees: any[] = []
 
     for (let i = 1; i < values.length; i++) {
       const row = values[i]
-      if (!row || row.length === 0) continue
+      if (!row || row.length === 0 || row.every((c) => !String(c).trim())) continue
 
-      const first = row[fNameIdx >= 0 ? fNameIdx : 1] || ''
-      const last = row[lNameIdx >= 0 ? lNameIdx : 2] || ''
-      if (!first && !last && !row[0]) continue
+      let first = fNameIdx >= 0 ? (row[fNameIdx] || '').trim() : ''
+      let last = lNameIdx >= 0 ? (row[lNameIdx] || '').trim() : ''
 
-      const code = row[empCodeIdx >= 0 ? empCodeIdx : 0] || `EMP-${Date.now().toString().slice(-4)}-${i}`
+      if (!first && fullNameIdx >= 0 && row[fullNameIdx]) {
+        const full = String(row[fullNameIdx]).trim()
+        const parts = full.split(/\s+/)
+        first = parts[0] || 'Staff'
+        last = parts.slice(1).join(' ') || ''
+      }
+
+      const codeRaw = empCodeIdx >= 0 ? (row[empCodeIdx] || '').trim() : ''
+      const code = codeRaw || `EMP-${Date.now().toString().slice(-4)}-${i}`
+
+      const rawStatus = statIdx >= 0 ? (row[statIdx] || '').trim() : 'Active'
+      const isInactive =
+        rawStatus.toLowerCase() === 'inactive' ||
+        rawStatus.toLowerCase() === 'resigned' ||
+        rawStatus.toLowerCase() === 'retired' ||
+        rawStatus.toLowerCase() === 'left' ||
+        rawStatus.toLowerCase() === 'false' ||
+        rawStatus === '0'
+
+      const salaryNum = salIdx >= 0 ? Number(String(row[salIdx]).replace(/[^0-9.]/g, '')) || 25000 : 25000
+
       const emp = {
         emp_id: code,
         emp_code: code,
+        _docId: code,
         first_name: first || 'Staff',
         last_name: last || '',
-        full_name: [first, last].filter(Boolean).join(' '),
-        employee_category: row[catIdx >= 0 ? catIdx : 3] || 'Teaching Staff',
-        department: row[deptIdx >= 0 ? deptIdx : 4] || 'Academics',
-        designation: row[desigIdx >= 0 ? desigIdx : 5] || 'Teacher',
-        employment_type: row[empTypeIdx >= 0 ? empTypeIdx : 6] || 'Permanent',
-        employment_status: row[statIdx >= 0 ? statIdx : 7] || 'Active',
-        date_of_joining: row[dojIdx >= 0 ? dojIdx : 8] || '',
-        date_of_birth: row[dobIdx >= 0 ? dobIdx : 9] || '',
-        gender: row[genIdx >= 0 ? genIdx : 10] || 'Male',
-        blood_group: row[bgIdx >= 0 ? bgIdx : 11] || '',
-        mobile_primary: row[mobIdx >= 0 ? mobIdx : 12] || '',
-        whatsapp_number: row[waIdx >= 0 ? waIdx : 13] || '',
-        official_email: row[oEmailIdx >= 0 ? oEmailIdx : 14] || '',
-        personal_email: row[pEmailIdx >= 0 ? pEmailIdx : 15] || '',
-        basic_salary: Number(row[salIdx >= 0 ? salIdx : 16]) || 25000,
-        classes_assigned: (row[clsIdx >= 0 ? clsIdx : 17] || '').split(',').map((s) => s.trim()).filter(Boolean),
-        subject_specialisation: (row[subIdx >= 0 ? subIdx : 18] || '').split(',').map((s) => s.trim()).filter(Boolean),
-        employee_photo_url: row[photoIdx >= 0 ? photoIdx : 19] || '',
-        document_url: row[docIdx >= 0 ? docIdx : 20] || '',
-        current_address: row[addrIdx >= 0 ? addrIdx : 21] || '',
-        academic_year: row[ayIdx >= 0 ? ayIdx : 22] || '2026-27',
-        is_active: (row[statIdx >= 0 ? statIdx : 7] || 'Active') !== 'Inactive',
+        full_name: [first, last].filter(Boolean).join(' ') || (fullNameIdx >= 0 ? row[fullNameIdx] : first || 'Staff Member'),
+        employee_category: catIdx >= 0 && row[catIdx] ? row[catIdx].trim() : 'Teaching Staff',
+        department: deptIdx >= 0 && row[deptIdx] ? row[deptIdx].trim() : 'Academics',
+        designation: desigIdx >= 0 && row[desigIdx] ? row[desigIdx].trim() : 'Teacher',
+        employment_type: empTypeIdx >= 0 && row[empTypeIdx] ? row[empTypeIdx].trim() : 'Permanent',
+        employment_status: rawStatus || (isInactive ? 'Inactive' : 'Active'),
+        date_of_joining: dojIdx >= 0 ? (row[dojIdx] || '').trim() : '',
+        date_of_birth: dobIdx >= 0 ? (row[dobIdx] || '').trim() : '',
+        gender: genIdx >= 0 && row[genIdx] ? row[genIdx].trim() : 'Male',
+        blood_group: bgIdx >= 0 ? (row[bgIdx] || '').trim() : '',
+        mobile_primary: mobIdx >= 0 ? (row[mobIdx] || '').trim() : '',
+        whatsapp_number: waIdx >= 0 ? (row[waIdx] || '').trim() : '',
+        official_email: oEmailIdx >= 0 ? (row[oEmailIdx] || '').trim() : '',
+        personal_email: pEmailIdx >= 0 ? (row[pEmailIdx] || '').trim() : '',
+        basic_salary: salaryNum,
+        classes_assigned: clsIdx >= 0 && row[clsIdx] ? String(row[clsIdx]).split(',').map((s) => s.trim()).filter(Boolean) : [],
+        subject_specialisation: subIdx >= 0 && row[subIdx] ? String(row[subIdx]).split(',').map((s) => s.trim()).filter(Boolean) : [],
+        employee_photo_url: photoIdx >= 0 ? (row[photoIdx] || '').trim() : '',
+        document_url: docIdx >= 0 ? (row[docIdx] || '').trim() : '',
+        current_address: addrIdx >= 0 ? (row[addrIdx] || '').trim() : '',
+        academic_year: ayIdx >= 0 && row[ayIdx] ? row[ayIdx].trim() : '2026-27',
+        is_active: !isInactive,
       }
+
       employees.push(emp)
     }
 
     return {
       success: true,
       data: employees,
+      sheetName: targetTab,
     }
   } catch (err: any) {
     console.error('Error fetching employees from Google Sheet:', err)

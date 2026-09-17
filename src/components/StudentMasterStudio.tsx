@@ -276,6 +276,67 @@ export default function StudentMasterStudio({
     }
   }
 
+  // Quick toggle student Active / Inactive status
+  const handleToggleStudentActive = async (student: Student, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    const currentlyActive =
+      student.is_active !== false &&
+      student.student_status !== 'Inactive' &&
+      student.student_status !== 'Left'
+    const newActive = !currentlyActive
+    const newStatus = newActive ? 'Active' : 'Inactive'
+
+    const updatedStudent: Student = {
+      ...student,
+      is_active: newActive,
+      student_status: newStatus,
+      updated_at: new Date().toISOString(),
+    }
+
+    setStudents((prev) =>
+      prev.map((s) => (s.admission_no === student.admission_no ? updatedStudent : s))
+    )
+
+    const pk = student.admission_no || student.student_id || (student as any)._docId || `ADM-${Date.now()}`
+    await saveDocument('student_master', 'admission_no', {
+      ...updatedStudent,
+      _docId: pk,
+    })
+
+    setToast(`✓ Student ${student.full_name || student.admission_no} marked as ${newStatus}`)
+
+    if (googleConnected) {
+      handleSyncToGoogleSheet()
+    }
+  }
+
+  // Quick change student status
+  const handleQuickChangeStatus = async (student: Student, newStatus: string) => {
+    const isActive = newStatus !== 'Inactive' && newStatus !== 'Left'
+    const updatedStudent: Student = {
+      ...student,
+      is_active: isActive,
+      student_status: newStatus,
+      updated_at: new Date().toISOString(),
+    }
+
+    setStudents((prev) =>
+      prev.map((s) => (s.admission_no === student.admission_no ? updatedStudent : s))
+    )
+
+    const pk = student.admission_no || student.student_id || (student as any)._docId || `ADM-${Date.now()}`
+    await saveDocument('student_master', 'admission_no', {
+      ...updatedStudent,
+      _docId: pk,
+    })
+
+    setToast(`✓ ${student.full_name || student.admission_no} status changed to '${newStatus}'`)
+
+    if (googleConnected) {
+      handleSyncToGoogleSheet()
+    }
+  }
+
   // Filtering
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
@@ -748,6 +809,148 @@ export default function StudentMasterStudio({
         </div>
       </div>
 
+      {/* Quick Status Filter Tabs */}
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => {
+            setFilterStatus('')
+            setPage(1)
+          }}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: !filterStatus ? '2px solid #1e40af' : '1px solid #cbd5e1',
+            background: !filterStatus ? '#eff6ff' : '#ffffff',
+            color: !filterStatus ? '#1e40af' : '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span>All Students</span>
+          <span
+            style={{
+              background: !filterStatus ? '#1e40af' : '#e2e8f0',
+              color: !filterStatus ? '#ffffff' : '#475569',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontSize: '11px',
+            }}
+          >
+            {students.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            setFilterStatus('Active')
+            setPage(1)
+          }}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: filterStatus === 'Active' ? '2px solid #16a34a' : '1px solid #cbd5e1',
+            background: filterStatus === 'Active' ? '#f0fdf4' : '#ffffff',
+            color: filterStatus === 'Active' ? '#15803d' : '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#16a34a' }} />
+          <span>Active (Enrolled)</span>
+          <span
+            style={{
+              background: filterStatus === 'Active' ? '#16a34a' : '#e2e8f0',
+              color: filterStatus === 'Active' ? '#ffffff' : '#475569',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontSize: '11px',
+            }}
+          >
+            {students.filter((s) => s.is_active !== false && s.student_status !== 'Inactive' && s.student_status !== 'Left').length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            setFilterStatus('Inactive')
+            setPage(1)
+          }}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: filterStatus === 'Inactive' ? '2px solid #dc2626' : '1px solid #cbd5e1',
+            background: filterStatus === 'Inactive' ? '#fef2f2' : '#ffffff',
+            color: filterStatus === 'Inactive' ? '#b91c1c' : '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626' }} />
+          <span>Inactive / Left</span>
+          <span
+            style={{
+              background: filterStatus === 'Inactive' ? '#dc2626' : '#e2e8f0',
+              color: filterStatus === 'Inactive' ? '#ffffff' : '#475569',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontSize: '11px',
+            }}
+          >
+            {students.filter((s) => s.is_active === false || s.student_status === 'Inactive' || s.student_status === 'Left').length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            setFilterStatus('New Admission')
+            setPage(1)
+          }}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: filterStatus === 'New Admission' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+            background: filterStatus === 'New Admission' ? '#eff6ff' : '#ffffff',
+            color: filterStatus === 'New Admission' ? '#1d4ed8' : '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563eb' }} />
+          <span>New Admissions</span>
+          <span
+            style={{
+              background: filterStatus === 'New Admission' ? '#2563eb' : '#e2e8f0',
+              color: filterStatus === 'New Admission' ? '#ffffff' : '#475569',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontSize: '11px',
+            }}
+          >
+            {students.filter((s) => s.student_status === 'New Admission').length}
+          </span>
+        </button>
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="studio-filters-card">
         <div className="search-box">
@@ -1031,32 +1234,78 @@ export default function StudentMasterStudio({
                       </div>
                     </td>
                     <td>
-                      <span
-                        style={{
-                          background:
-                            student.student_status === 'Active' || (student.is_active !== false && student.student_status !== 'Inactive')
-                              ? '#dcfce7'
-                              : student.student_status === 'New Admission'
-                              ? '#dbeafe'
-                              : student.student_status === 'Left' || student.student_status === 'Inactive'
-                              ? '#fee2e2'
-                              : '#fef3c7',
-                          color:
-                            student.student_status === 'Active' || (student.is_active !== false && student.student_status !== 'Inactive')
-                              ? '#15803d'
-                              : student.student_status === 'New Admission'
-                              ? '#1d4ed8'
-                              : student.student_status === 'Left' || student.student_status === 'Inactive'
-                              ? '#b91c1c'
-                              : '#b45309',
-                          padding: '3px 8px',
-                          borderRadius: '12px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {student.student_status || (student.is_active !== false ? 'Active' : 'Inactive')}
-                      </span>
+                      {(() => {
+                        const isActive =
+                          student.is_active !== false &&
+                          student.student_status !== 'Inactive' &&
+                          student.student_status !== 'Left'
+                        const statusLabel = student.student_status || (isActive ? 'Active' : 'Inactive')
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleStudentActive(student, e)}
+                              title={`Click to set ${isActive ? 'Inactive' : 'Active'}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '3px 9px',
+                                borderRadius: '12px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                background:
+                                  isActive && statusLabel === 'Active'
+                                    ? '#dcfce7'
+                                    : statusLabel === 'New Admission'
+                                    ? '#dbeafe'
+                                    : statusLabel === 'Promoted'
+                                    ? '#fef3c7'
+                                    : '#fee2e2',
+                                color:
+                                  isActive && statusLabel === 'Active'
+                                    ? '#15803d'
+                                    : statusLabel === 'New Admission'
+                                    ? '#1d4ed8'
+                                    : statusLabel === 'Promoted'
+                                    ? '#b45309'
+                                    : '#b91c1c',
+                                border: `1px solid ${
+                                  isActive && statusLabel === 'Active'
+                                    ? '#86efac'
+                                    : statusLabel === 'New Admission'
+                                    ? '#93c5fd'
+                                    : statusLabel === 'Promoted'
+                                    ? '#fde68a'
+                                    : '#fca5a5'
+                                }`,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: '6px',
+                                  height: '6px',
+                                  borderRadius: '50%',
+                                  background:
+                                    isActive && statusLabel === 'Active'
+                                      ? '#16a34a'
+                                      : statusLabel === 'New Admission'
+                                      ? '#2563eb'
+                                      : statusLabel === 'Promoted'
+                                      ? '#d97706'
+                                      : '#dc2626',
+                                }}
+                              />
+                              {statusLabel}
+                            </button>
+                            <span style={{ fontSize: '10px', color: '#64748b' }}>
+                              {isActive ? 'Enrolled' : 'Not Active'}
+                            </span>
+                          </div>
+                        )
+                      })()}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '4px' }}>
@@ -1952,17 +2201,34 @@ function initializeStudentSheet() {
         <CsvImportModal
           mod={modules.student_master}
           onClose={() => setShowCsvModal(false)}
-          onSuccess={async (count) => {
+          onSuccess={async (count, insertedItems) => {
             setShowCsvModal(false)
-            setToast(`Imported ${count} student records! Synchronizing Google Sheet...`)
-            await loadStudents()
-            // Auto sync to Google sheet
-            const data = await fetchCollectionData('student_master')
-            if (data) {
-              syncAllStudentsToGoogleSheet(data).then((res) => {
-                if (res.success) {
-                  setLastSyncTime(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }))
+            setToast(`✓ Imported ${count} student records! Synchronizing Google Sheet...`)
+            if (insertedItems && insertedItems.length > 0) {
+              setStudents((prev) => {
+                const combined = [...(insertedItems as unknown as Student[]), ...prev]
+                const seen = new Set<string>()
+                const deduped: Student[] = []
+                for (const s of combined) {
+                  const sid = String(s.admission_no || s.student_id || (s as any)._docId || JSON.stringify(s))
+                  if (!seen.has(sid)) {
+                    seen.add(sid)
+                    deduped.push(s)
+                  }
                 }
+                try {
+                  localStorage.setItem('sjes_table_student_master', JSON.stringify(deduped))
+                } catch {}
+
+                if (googleConnected) {
+                  syncAllStudentsToGoogleSheet(deduped).then((res) => {
+                    if (res.success) {
+                      setLastSyncTime(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }))
+                    }
+                  })
+                }
+
+                return deduped
               })
             }
           }}

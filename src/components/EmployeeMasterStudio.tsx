@@ -34,6 +34,7 @@ import {
 import {
   fetchCollectionData,
   saveDocument,
+  saveBatchDocuments,
   deleteDocument,
   subscribeToCollection,
   uploadToFirebaseStorage,
@@ -118,11 +119,25 @@ export default function EmployeeMasterStudio({
   onGenerateSalarySlip?: (emp: Employee) => void
   onGenerateIdCard?: (empId: string) => void
 }) {
-  const [employees, setEmployees] = useState<Employee[]>([])
+  const [employees, setEmployees] = useState<Employee[]>(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cached =
+          localStorage.getItem('sjes_table_employee_master') ||
+          localStorage.getItem('sjes_table_employees') ||
+          localStorage.getItem('sjes_table_staff')
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        }
+      } catch {}
+    }
+    return []
+  })
   const [departments, setDepartments] = useState<string[]>([])
   const [classesList, setClassesList] = useState<string[]>([])
   const [subjectsList, setSubjectsList] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   const [search, setSearch] = useState('')
   const [filterDept, setFilterDept] = useState('')
@@ -209,7 +224,27 @@ export default function EmployeeMasterStudio({
     setLoading(true)
     try {
       const data = await fetchCollectionData('employee_master')
-      setEmployees((data || []) as Employee[])
+      if (data && data.length > 0) {
+        setEmployees(data as Employee[])
+        try {
+          localStorage.setItem('sjes_table_employee_master', JSON.stringify(data))
+          localStorage.setItem('sjes_table_employees', JSON.stringify(data))
+        } catch {}
+      } else {
+        // Check local storage directly as fallback
+        const cached =
+          localStorage.getItem('sjes_table_employee_master') ||
+          localStorage.getItem('sjes_table_employees') ||
+          localStorage.getItem('sjes_table_staff')
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setEmployees(parsed as Employee[])
+            }
+          } catch {}
+        }
+      }
     } catch (err) {
       console.warn('Error loading employees:', err)
       setToast(err instanceof Error ? err.message : 'Failed to load employees')
@@ -223,14 +258,103 @@ export default function EmployeeMasterStudio({
 
     // Realtime subscription to Firebase Firestore
     const unsub = subscribeToCollection('employee_master', (data) => {
-      setEmployees((data || []) as Employee[])
-      setLoading(false)
+      if (data && data.length > 0) {
+        setEmployees((prev) => {
+          // Merge remote with local to ensure zero data loss
+          const remoteMap = new Map<string, Employee>()
+          data.forEach((d: any) => {
+            const id = String(d.emp_code || d.emp_id || d._docId)
+            remoteMap.set(id, d)
+          })
+          const merged: Employee[] = [...data]
+          prev.forEach((localEmp) => {
+            const id = String(localEmp.emp_code || localEmp.emp_id || (localEmp as any)._docId)
+            if (id && !remoteMap.has(id)) {
+              merged.push(localEmp)
+            }
+          })
+          try {
+            localStorage.setItem('sjes_table_employee_master', JSON.stringify(merged))
+            localStorage.setItem('sjes_table_employees', JSON.stringify(merged))
+          } catch {}
+          return merged
+        })
+        setLoading(false)
+      }
     })
 
     return () => {
-      if (unsub) unsub()
+      if (typeof unsub === 'function') unsub()
     }
   }, [])
+
+  // Quick toggle employee Active / Inactive status
+  const handleToggleEmployeeActive = async (emp: Employee, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    const currentlyActive = emp.is_active !== false && emp.employment_status !== 'Inactive' && emp.employment_status !== 'Resigned' && emp.employment_status !== 'Retired'
+    const newActive = !currentlyActive
+    const newStatus = newActive ? 'Active' : 'Inactive'
+
+    const updatedEmp: Employee = {
+      ...emp,
+      is_active: newActive,
+      employment_status: newStatus,
+      updated_at: new Date().toISOString(),
+    }
+
+    setEmployees((prev) =>
+      prev.map((item) =>
+        (item.emp_code === emp.emp_code || item.emp_id === emp.emp_id || (item as any)._docId === (emp as any)._docId)
+          ? updatedEmp
+          : item
+      )
+    )
+
+    const pk = emp.emp_code || emp.emp_id || (emp as any)._docId || `EMP-${Date.now()}`
+    await saveDocument('employee_master', 'emp_code', {
+      ...updatedEmp,
+      _docId: pk,
+    })
+
+    const displayName = [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.emp_code || 'Staff'
+    setToast(`✓ Staff member ${displayName} marked as ${newStatus}`)
+
+    if (autoSyncEnabled && googleConnected) {
+      handleSyncToGoogleSheet()
+    }
+  }
+
+  // Quick change employee status
+  const handleQuickChangeEmployeeStatus = async (emp: Employee, newStatus: string) => {
+    const isActive = newStatus === 'Active' || newStatus === 'On Leave'
+    const updatedEmp: Employee = {
+      ...emp,
+      is_active: isActive,
+      employment_status: newStatus,
+      updated_at: new Date().toISOString(),
+    }
+
+    setEmployees((prev) =>
+      prev.map((item) =>
+        (item.emp_code === emp.emp_code || item.emp_id === emp.emp_id || (item as any)._docId === (emp as any)._docId)
+          ? updatedEmp
+          : item
+      )
+    )
+
+    const pk = emp.emp_code || emp.emp_id || (emp as any)._docId || `EMP-${Date.now()}`
+    await saveDocument('employee_master', 'emp_code', {
+      ...updatedEmp,
+      _docId: pk,
+    })
+
+    const displayName = [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.emp_code || 'Staff'
+    setToast(`✓ ${displayName} status updated to '${newStatus}'`)
+
+    if (autoSyncEnabled && googleConnected) {
+      handleSyncToGoogleSheet()
+    }
+  }
 
   // Push all staff to Google Sheet (staff_data tab in Sheet 1JUZXNNcIZeMGFyzmFbdfxADLY8Jwb_r3e03rJK5rWgc)
   const handleSyncToGoogleSheet = async (employeesList?: Employee[]) => {
@@ -256,7 +380,7 @@ export default function EmployeeMasterStudio({
     }
   }
 
-  // Pull records from Google Sheet ('staff_data' tab)
+  // Pull records from Google Sheet ('staff_data' or first available tab)
   const handlePullFromGoogleSheet = async () => {
     setSyncingSheet(true)
     try {
@@ -265,25 +389,36 @@ export default function EmployeeMasterStudio({
         throw new Error(res.error || 'Failed to fetch Google Sheet data')
       }
       if (res.data.length === 0) {
-        setToast('No staff rows found in Google Sheet.')
+        setToast(res.error || 'No employee rows found in Google Sheet.')
         setSyncingSheet(false)
         return
       }
 
-      let saved = 0
-      for (const emp of res.data) {
-        const pk = emp.emp_code || emp.emp_id || `EMP-${Date.now().toString().slice(-4)}`
-        await saveDocument('employee_master', 'emp_code', {
-          ...emp,
-          _docId: pk,
-        })
-        saved++
-      }
+      // Permanently save to Firestore in batch & update local cache
+      await saveBatchDocuments('employee_master', 'emp_code', res.data)
 
-      setToast(`✓ Successfully imported & synced ${saved} staff members from Google Sheet!`)
-      loadEmployees()
+      setEmployees((prev) => {
+        const incoming = res.data as Employee[]
+        const combined = [...incoming, ...prev]
+        const seen = new Set<string>()
+        const deduped: Employee[] = []
+        for (const emp of combined) {
+          const id = String(emp.emp_code || emp.emp_id || (emp as any)._docId || JSON.stringify(emp))
+          if (!seen.has(id)) {
+            seen.add(id)
+            deduped.push(emp)
+          }
+        }
+        try {
+          localStorage.setItem('sjes_table_employee_master', JSON.stringify(deduped))
+          localStorage.setItem('sjes_table_employees', JSON.stringify(deduped))
+        } catch {}
+        return deduped
+      })
+
+      setToast(`✓ Successfully imported & saved ${res.data.length} staff members from Google Sheet (${res.sheetName || 'staff_data'})!`)
     } catch (err: any) {
-      setToast(`Failed to pull from Google Sheet: ${err.message || err}`)
+      setToast(`Google Sheet Import Error: ${err.message || err}`)
     } finally {
       setSyncingSheet(false)
     }
@@ -584,31 +719,53 @@ export default function EmployeeMasterStudio({
 
   // Export CSV
   const handleExportCsv = () => {
+    if (employees.length === 0) {
+      setToast('No employee records available to export')
+      return
+    }
     const headers = [
       'Emp Code',
       'First Name',
       'Last Name',
-      'Category',
+      'Employee Category',
       'Department',
       'Designation',
-      'Mobile',
-      'Email',
-      'Joining Date',
+      'Employment Type',
+      'Employment Status',
+      'Date of Joining',
+      'Date of Birth',
+      'Gender',
+      'Blood Group',
+      'Mobile Primary',
+      'WhatsApp Number',
+      'Official Email',
+      'Personal Email',
       'Basic Salary',
-      'Status',
+      'Classes Assigned',
+      'Subjects Specialisation',
+      'Academic Year',
     ]
     const rows = filteredEmployees.map((e) => [
-      e.emp_code || '',
-      e.first_name || '',
-      e.last_name || '',
-      e.employee_category || '',
-      e.department || '',
-      e.designation || '',
-      e.mobile_primary || '',
-      e.official_email || e.personal_email || '',
-      e.date_of_joining || '',
-      e.basic_salary || '',
-      e.employment_status || (e.is_active ? 'Active' : 'Inactive'),
+      `"${String(e.emp_code || '').replace(/"/g, '""')}"`,
+      `"${String(e.first_name || '').replace(/"/g, '""')}"`,
+      `"${String(e.last_name || '').replace(/"/g, '""')}"`,
+      `"${String(e.employee_category || 'Teaching Staff').replace(/"/g, '""')}"`,
+      `"${String(e.department || '').replace(/"/g, '""')}"`,
+      `"${String(e.designation || '').replace(/"/g, '""')}"`,
+      `"${String(e.employment_type || 'Permanent').replace(/"/g, '""')}"`,
+      `"${String(e.employment_status || (e.is_active !== false ? 'Active' : 'Inactive')).replace(/"/g, '""')}"`,
+      `"${String(e.date_of_joining || '').replace(/"/g, '""')}"`,
+      `"${String(e.date_of_birth || '').replace(/"/g, '""')}"`,
+      `"${String(e.gender || 'Male').replace(/"/g, '""')}"`,
+      `"${String(e.blood_group || '').replace(/"/g, '""')}"`,
+      `"${String(e.mobile_primary || '').replace(/"/g, '""')}"`,
+      `"${String(e.whatsapp_number || '').replace(/"/g, '""')}"`,
+      `"${String(e.official_email || '').replace(/"/g, '""')}"`,
+      `"${String(e.personal_email || '').replace(/"/g, '""')}"`,
+      `"${String(e.basic_salary || 25000).replace(/"/g, '""')}"`,
+      `"${(e.classes_assigned || []).join(', ').replace(/"/g, '""')}"`,
+      `"${(e.subject_specialisation || []).join(', ').replace(/"/g, '""')}"`,
+      `"${String(e.academic_year || '2026-27').replace(/"/g, '""')}"`,
     ])
 
     const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
@@ -617,7 +774,7 @@ export default function EmployeeMasterStudio({
     link.href = URL.createObjectURL(blob)
     link.download = `Employee_Master_${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
-    setToast('Employee list exported to CSV')
+    setToast(`Exported ${filteredEmployees.length} employee records to CSV`)
   }
 
   return (
@@ -646,7 +803,29 @@ export default function EmployeeMasterStudio({
           >
             <Upload size={16} /> Import CSV
           </button>
-          <button className="btn-secondary" onClick={loadEmployees} title="Reload">
+          <button
+            className="btn-secondary"
+            onClick={handlePullFromGoogleSheet}
+            disabled={syncingSheet}
+            title="Import or update staff records directly from linked Google Sheet"
+            style={{
+              background: '#eff6ff',
+              color: '#1d4ed8',
+              borderColor: '#93c5fd',
+              fontWeight: 600,
+            }}
+          >
+            <FileSpreadsheet size={16} className={syncingSheet ? 'spin' : ''} />
+            {syncingSheet ? 'Importing Sheet...' : 'Import Google Sheet'}
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={handleExportCsv}
+            title="Export filtered staff records to CSV"
+          >
+            <Download size={16} /> Export CSV
+          </button>
+          <button className="btn-secondary" onClick={loadEmployees} title="Reload records">
             <RefreshCw size={16} className={loading ? 'spin' : ''} />
           </button>
           <button className="btn-primary" onClick={() => openModal('create')}>
@@ -655,196 +834,162 @@ export default function EmployeeMasterStudio({
         </div>
       </div>
 
-      {/* Google Drive & Google Sheets Staff Realtime Integration Bar */}
-      <div
-        style={{
-          background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)',
-          color: '#ffffff',
-          borderRadius: '12px',
-          padding: '16px 20px',
-          marginBottom: '20px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '14px',
-          boxShadow: '0 4px 12px rgba(30, 58, 138, 0.15)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div
+      {/* Quick Status Filter Tabs */}
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => {
+            setFilterStatus('')
+            setPage(1)
+          }}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: !filterStatus ? '2px solid #1e40af' : '1px solid #cbd5e1',
+            background: !filterStatus ? '#eff6ff' : '#ffffff',
+            color: !filterStatus ? '#1e40af' : '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span>All Staff</span>
+          <span
             style={{
-              background: 'rgba(255, 255, 255, 0.15)',
-              padding: '10px',
+              background: !filterStatus ? '#1e40af' : '#e2e8f0',
+              color: !filterStatus ? '#ffffff' : '#475569',
+              padding: '1px 6px',
               borderRadius: '10px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              fontSize: '11px',
             }}
           >
-            <FileSpreadsheet size={24} color="#60a5fa" />
-          </div>
-          <div>
-            <div style={{ fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>Staff Google Drive & Sheets Realtime Sync</span>
-              <span
-                style={{
-                  background: googleConnected ? '#16a34a' : '#d97706',
-                  color: '#fff',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                }}
-              >
-                {googleConnected ? 'Connected & Active' : 'OAuth Ready'}
-              </span>
-            </div>
-            <div style={{ fontSize: '12px', color: '#bfdbfe', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-              <span>
-                📁 <b>Photos Drive Folder:</b> <code style={{ background: 'rgba(0,0,0,0.25)', padding: '2px 6px', borderRadius: '4px' }}>{STAFF_GOOGLE_DRIVE_FOLDER_NAME}</code> ({STAFF_GOOGLE_DRIVE_FOLDER_ID.slice(0, 8)}...)
-              </span>
-              <span>
-                📊 <b>Staff Google Sheet:</b> <code style={{ background: 'rgba(0,0,0,0.25)', padding: '2px 6px', borderRadius: '4px' }}>{STAFF_GOOGLE_SHEET_TAB_NAME}</code> ({STAFF_GOOGLE_SHEET_ID.slice(0, 8)}...)
-              </span>
-              {lastSyncTime && (
-                <span style={{ color: '#86efac', fontWeight: 600 }}>
-                  ✓ Last synced at {lastSyncTime}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+            {employees.length}
+          </span>
+        </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          {!googleConnected ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                onClick={handleGoogleConnect}
-                style={{
-                  background: '#ffffff',
-                  color: '#1e3a8a',
-                  border: 'none',
-                  padding: '8px 14px',
-                  borderRadius: '8px',
-                  fontWeight: 700,
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <Sparkles size={14} color="#2563eb" />
-                Connect Google Account
-              </button>
-              <button
-                onClick={() => setShowDomainModal(true)}
-                title="Firebase Domain Authorization Setup Guide"
-                style={{
-                  background: 'rgba(255,255,255,0.15)',
-                  color: '#ffffff',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <ExternalLink size={13} />
-                Domain Setup Help
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-              <button
-                onClick={() => handleSyncToGoogleSheet()}
-                disabled={syncingSheet}
-                title="Force push all staff records to Google Sheet"
-                style={{
-                  background: '#2563eb',
-                  color: '#ffffff',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  padding: '7px 12px',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <RefreshCw size={13} className={syncingSheet ? 'spin' : ''} />
-                {syncingSheet ? 'Syncing...' : 'Push to Sheet'}
-              </button>
+        <button
+          onClick={() => {
+            setFilterStatus('Active')
+            setPage(1)
+          }}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: filterStatus === 'Active' ? '2px solid #16a34a' : '1px solid #cbd5e1',
+            background: filterStatus === 'Active' ? '#f0fdf4' : '#ffffff',
+            color: filterStatus === 'Active' ? '#15803d' : '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#16a34a' }} />
+          <span>Active</span>
+          <span
+            style={{
+              background: filterStatus === 'Active' ? '#16a34a' : '#e2e8f0',
+              color: filterStatus === 'Active' ? '#ffffff' : '#475569',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontSize: '11px',
+            }}
+          >
+            {
+              employees.filter(
+                (e) =>
+                  e.is_active !== false &&
+                  e.employment_status !== 'Inactive' &&
+                  e.employment_status !== 'Resigned' &&
+                  e.employment_status !== 'Retired'
+              ).length
+            }
+          </span>
+        </button>
 
-              <button
-                onClick={handlePullFromGoogleSheet}
-                disabled={syncingSheet}
-                title="Pull latest staff changes from Google Sheet"
-                style={{
-                  background: 'rgba(255,255,255,0.15)',
-                  color: '#ffffff',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  padding: '7px 12px',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <Download size={13} />
-                Pull from Sheet
-              </button>
+        <button
+          onClick={() => {
+            setFilterStatus('Inactive')
+            setPage(1)
+          }}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: filterStatus === 'Inactive' ? '2px solid #dc2626' : '1px solid #cbd5e1',
+            background: filterStatus === 'Inactive' ? '#fef2f2' : '#ffffff',
+            color: filterStatus === 'Inactive' ? '#b91c1c' : '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626' }} />
+          <span>Inactive / Left</span>
+          <span
+            style={{
+              background: filterStatus === 'Inactive' ? '#dc2626' : '#e2e8f0',
+              color: filterStatus === 'Inactive' ? '#ffffff' : '#475569',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontSize: '11px',
+            }}
+          >
+            {
+              employees.filter(
+                (e) =>
+                  e.is_active === false ||
+                  e.employment_status === 'Inactive' ||
+                  e.employment_status === 'Resigned' ||
+                  e.employment_status === 'Retired'
+              ).length
+            }
+          </span>
+        </button>
 
-              <button
-                onClick={() => setShowAppsScriptModal(true)}
-                title="View Google Apps Script for 2-way real-time webhook sync"
-                style={{
-                  background: 'rgba(255,255,255,0.15)',
-                  color: '#ffffff',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  padding: '7px 12px',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <Code2 size={13} />
-                Apps Script Code
-              </button>
-
-              <button
-                onClick={handleGoogleDisconnect}
-                title="Disconnect Google Account"
-                style={{
-                  background: 'transparent',
-                  color: '#fca5a5',
-                  border: '1px solid rgba(252, 165, 165, 0.4)',
-                  padding: '7px 10px',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                }}
-              >
-                Disconnect
-              </button>
-            </div>
-          )}
-        </div>
+        <button
+          onClick={() => {
+            setFilterStatus('On Leave')
+            setPage(1)
+          }}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: filterStatus === 'On Leave' ? '2px solid #d97706' : '1px solid #cbd5e1',
+            background: filterStatus === 'On Leave' ? '#fffbeb' : '#ffffff',
+            color: filterStatus === 'On Leave' ? '#b45309' : '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#d97706' }} />
+          <span>On Leave</span>
+          <span
+            style={{
+              background: filterStatus === 'On Leave' ? '#d97706' : '#e2e8f0',
+              color: filterStatus === 'On Leave' ? '#ffffff' : '#475569',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontSize: '11px',
+            }}
+          >
+            {employees.filter((e) => e.employment_status === 'On Leave').length}
+          </span>
+        </button>
       </div>
 
       {/* Filter & Search */}
@@ -1052,27 +1197,56 @@ export default function EmployeeMasterStudio({
                     </td>
                     <td>
                       {(() => {
+                        const isActive =
+                          emp.is_active !== false &&
+                          emp.employment_status !== 'Inactive' &&
+                          emp.employment_status !== 'Resigned' &&
+                          emp.employment_status !== 'Retired'
                         const prob = getEmployeeProbationStatus(emp.date_of_joining)
                         const isProb = prob.status === 'Probationary'
                         return (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleEmployeeActive(emp, e)}
+                              title={`Click to set ${isActive ? 'Inactive' : 'Active'}`}
                               style={{
-                                display: 'inline-block',
-                                padding: '2px 8px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '3px 9px',
                                 borderRadius: '12px',
                                 fontSize: '11px',
                                 fontWeight: 700,
-                                background: isProb ? '#fef3c7' : '#dcfce7',
-                                color: isProb ? '#92400e' : '#166534',
-                                border: `1px solid ${isProb ? '#fde68a' : '#bbf7d0'}`,
-                                textAlign: 'center',
+                                background: isActive ? '#dcfce7' : '#fee2e2',
+                                color: isActive ? '#15803d' : '#b91c1c',
+                                border: `1px solid ${isActive ? '#86efac' : '#fca5a5'}`,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
                               }}
                             >
-                              {prob.status}
-                            </span>
-                            <span style={{ fontSize: '10px', color: '#64748b' }}>
-                              {prob.completedMonths}m completed
+                              <span
+                                style={{
+                                  width: '6px',
+                                  height: '6px',
+                                  borderRadius: '50%',
+                                  background: isActive ? '#16a34a' : '#dc2626',
+                                }}
+                              />
+                              {emp.employment_status || (isActive ? 'Active' : 'Inactive')}
+                            </button>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '1px 6px',
+                                borderRadius: '8px',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                background: isProb ? '#fef3c7' : '#f1f5f9',
+                                color: isProb ? '#92400e' : '#475569',
+                              }}
+                            >
+                              {prob.status} ({prob.completedMonths}m)
                             </span>
                           </div>
                         )
@@ -1902,6 +2076,7 @@ export default function EmployeeMasterStudio({
           mod={modules['employee_master']}
           onClose={() => setShowCsvModal(false)}
           onSuccess={(count, insertedItems) => {
+            setShowCsvModal(false)
             setToast(`✓ Successfully imported ${count} staff records!`)
             if (insertedItems && insertedItems.length > 0) {
               setEmployees((prev) => {
@@ -1915,11 +2090,22 @@ export default function EmployeeMasterStudio({
                     deduped.push(emp)
                   }
                 }
-                localStorage.setItem('sjes_table_employee_master', JSON.stringify(deduped))
+                try {
+                  localStorage.setItem('sjes_table_employee_master', JSON.stringify(deduped))
+                } catch {}
+
+                // Sync to Google Sheet if connected
+                if (googleConnected) {
+                  syncAllEmployeesToGoogleSheet(deduped).then((res) => {
+                    if (res.success) {
+                      setLastSyncTime(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }))
+                    }
+                  })
+                }
+
                 return deduped
               })
             }
-            loadEmployees()
           }}
         />
       )}

@@ -159,52 +159,95 @@ export async function uploadToFirebaseStorage(
 }
 
 /**
- * Fetch all documents from a Firestore collection with local fallback
+ * Fetch all documents from a Firestore collection with robust local fallback & merge
  */
 export async function fetchCollectionData<T = any>(collectionName: string): Promise<T[]> {
-  try {
-    const fetchPromise = getDocs(collection(db, collectionName))
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000))
-    const querySnapshot = await Promise.race([fetchPromise, timeoutPromise])
-
-    if (querySnapshot && typeof (querySnapshot as any).forEach === 'function') {
-      const results: T[] = []
-      querySnapshot.forEach((docSnap) => {
-        const d = docSnap.data() || {}
-        results.push({
-          _docId: docSnap.id,
-          id: d.id || docSnap.id,
-          ...d,
-        } as T)
-      })
-      if (typeof window !== 'undefined' && window.localStorage) {
-        try {
-          localStorage.setItem(`sjes_table_${collectionName}`, JSON.stringify(results))
-        } catch {
-          // ignore localStorage quota errors
-        }
-      }
-      return results
-    }
-  } catch (err) {
-    console.error(`Error fetching collection ${collectionName} from Firebase:`, err)
-  }
-
-  // Fallback to localStorage only if Firebase failed or timed out
+  // 1. Gather all cached local records first across primary and alias keys
+  let cachedResults: T[] = []
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
-      const cached = localStorage.getItem(`sjes_table_${collectionName}`)
-      if (cached) {
-        const parsed = JSON.parse(cached)
-        if (Array.isArray(parsed)) {
-          return parsed as T[]
+      const keysToCheck = [
+        `sjes_table_${collectionName}`,
+        collectionName === 'employee_master' ? 'sjes_table_employees' : null,
+        collectionName === 'employee_master' ? 'sjes_table_staff' : null,
+        collectionName === 'student_master' ? 'sjes_table_students' : null,
+      ].filter(Boolean) as string[]
+
+      for (const k of keysToCheck) {
+        const cached = localStorage.getItem(k)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            cachedResults = parsed as T[]
+            break
+          }
         }
       }
     } catch {
       // ignore
     }
   }
-  return []
+
+  // 2. Fetch remote documents from Firestore with a 3.5s timeout
+  try {
+    const fetchPromise = getDocs(collection(db, collectionName))
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500))
+    const querySnapshot = await Promise.race([fetchPromise, timeoutPromise])
+
+    if (querySnapshot && typeof (querySnapshot as any).forEach === 'function') {
+      const remoteResults: T[] = []
+      querySnapshot.forEach((docSnap) => {
+        const d = docSnap.data() || {}
+        remoteResults.push({
+          _docId: docSnap.id,
+          id: d.id || docSnap.id,
+          ...d,
+        } as T)
+      })
+
+      if (remoteResults.length > 0) {
+        // Merge remote records with any unique local records so no user uploads are lost
+        const combined = [...remoteResults]
+        const seen = new Set(
+          remoteResults.map((r: any) =>
+            String(r._docId || r.id || r.emp_code || r.emp_id || r.admission_no || r.student_id)
+          )
+        )
+        for (const localItem of cachedResults) {
+          const id = String(
+            (localItem as any)._docId ||
+              (localItem as any).id ||
+              (localItem as any).emp_code ||
+              (localItem as any).emp_id ||
+              (localItem as any).admission_no ||
+              (localItem as any).student_id
+          )
+          if (id && !seen.has(id)) {
+            seen.add(id)
+            combined.push(localItem)
+          }
+        }
+
+        if (typeof window !== 'undefined' && window.localStorage) {
+          try {
+            localStorage.setItem(`sjes_table_${collectionName}`, JSON.stringify(combined))
+          } catch {
+            // ignore localStorage quota
+          }
+        }
+        return combined
+      } else if (cachedResults.length > 0) {
+        // Firestore returned 0 docs, but we have locally uploaded items: preserve local items!
+        return cachedResults
+      }
+
+      return []
+    }
+  } catch (err) {
+    console.warn(`Firestore read notice for ${collectionName}:`, err)
+  }
+
+  return cachedResults
 }
 
 /**
@@ -554,7 +597,9 @@ export function subscribeToCollection<T = any>(
             ...d,
           } as T)
         })
-        onData(items)
+        if (items.length > 0) {
+          onData(items)
+        }
       },
       (err) => {
         console.warn(`Real-time listener notice for ${collectionName}:`, err?.message || err)
@@ -772,12 +817,40 @@ export class QueryBuilder {
       // Apply filters
       for (const filter of this.filters) {
         if (filter.op === 'eq') {
-          data = data.filter((item: any) => String(item[filter.field]) === String(filter.value))
+          if (filter.field === 'is_active' && (filter.value === true || String(filter.value) === 'true')) {
+            data = data.filter((item: any) => {
+              if (item.is_active === false || item.is_active === 'false' || item.is_active === 0) return false
+              const statusStr = String(item.employment_status || item.student_status || '').toLowerCase()
+              if (statusStr === 'inactive' || statusStr === 'resigned' || statusStr === 'retired' || statusStr === 'left') return false
+              return true
+            })
+          } else {
+            data = data.filter((item: any) => {
+              const val = item[filter.field]
+              if (typeof filter.value === 'string' && typeof val === 'string') {
+                return val.toLowerCase() === filter.value.toLowerCase()
+              }
+              return String(val) === String(filter.value)
+            })
+          }
         } else if (filter.op === 'neq') {
-          data = data.filter((item: any) => String(item[filter.field]) !== String(filter.value))
+          if (filter.field === 'employee_category' && String(filter.value).toLowerCase() === 'teaching staff') {
+            data = data.filter((item: any) => {
+              const cat = String(item.employee_category || '').toLowerCase()
+              return cat !== 'teaching staff' && cat !== 'teacher' && cat !== 'teaching' && cat !== 'faculty'
+            })
+          } else {
+            data = data.filter((item: any) => {
+              const val = item[filter.field]
+              if (typeof filter.value === 'string' && typeof val === 'string') {
+                return val.toLowerCase() !== filter.value.toLowerCase()
+              }
+              return String(val) !== String(filter.value)
+            })
+          }
         } else if (filter.op === 'in') {
-          const arr = Array.isArray(filter.value) ? filter.value.map(String) : []
-          data = data.filter((item: any) => arr.includes(String(item[filter.field])))
+          const arr = Array.isArray(filter.value) ? filter.value.map((v) => String(v).toLowerCase()) : []
+          data = data.filter((item: any) => arr.includes(String(item[filter.field] ?? '').toLowerCase()))
         } else if (filter.op === 'gt') {
           data = data.filter((item: any) => item[filter.field] > filter.value)
         } else if (filter.op === 'gte') {
