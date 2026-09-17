@@ -541,7 +541,23 @@ export default function EmployeeMasterStudio({
   }
 
   const updateForm = (key: keyof Employee, value: unknown) => {
-    setFormState((prev) => ({ ...prev, [key]: value }))
+    setFormState((prev) => {
+      const next = { ...prev, [key]: value }
+      if (key === 'employment_status') {
+        const valStr = String(value)
+        const isInactive =
+          valStr === 'Inactive' ||
+          valStr === 'Resigned' ||
+          valStr === 'Retired' ||
+          valStr === 'Left' ||
+          valStr === 'Suspended'
+        next.is_active = !isInactive
+        if (isInactive && !next.date_of_leaving) {
+          next.date_of_leaving = new Date().toISOString().slice(0, 10)
+        }
+      }
+      return next
+    })
   }
 
   // Toggle multi-select items
@@ -635,13 +651,23 @@ export default function EmployeeMasterStudio({
 
     setSubmitting(true)
     try {
+      const statusStr = String(formState.employment_status || 'Active')
+      const isInactiveStatus =
+        statusStr === 'Inactive' ||
+        statusStr === 'Resigned' ||
+        statusStr === 'Retired' ||
+        statusStr === 'Left' ||
+        statusStr === 'Suspended'
+
       const payload: Record<string, unknown> = {
         ...formState,
         emp_code: String(formState.emp_code).trim().toUpperCase(),
         first_name: String(formState.first_name).trim(),
         last_name: String(formState.last_name).trim(),
         academic_year: formState.academic_year || getCurrentAcademicYear(),
-        is_active: formState.is_active !== false,
+        employment_status: statusStr,
+        is_active: isInactiveStatus ? false : formState.is_active !== false,
+        updated_at: new Date().toISOString(),
       }
 
       if (modalMode === 'create') {

@@ -164,7 +164,7 @@ export async function saveDocument(
   data: Record<string, any>
 ): Promise<{ success: boolean; id: string; error?: string }> {
   try {
-    let docId = data[primaryKeyName] || data._docId || data.id || data.emp_code || data.admission_no || data.code
+    let docId = data[primaryKeyName] || data._docId || data.id || data.emp_code || data.emp_id || data.admission_no || data.student_id || data.code
     if (!docId) {
       docId = `${collectionName}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`
     }

@@ -18,11 +18,21 @@ export async function fetchSupabaseTable<T = any>(tableName: string): Promise<T[
 
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
-      const cached = localStorage.getItem(cacheKey)
-      if (cached) {
-        const parsed = JSON.parse(cached)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          localData = parsed
+      const keysToCheck = [
+        cacheKey,
+        tableName === 'employee_master' ? 'sjes_table_employees' : null,
+        tableName === 'employee_master' ? 'sjes_table_staff' : null,
+        tableName === 'student_master' ? 'sjes_table_students' : null,
+      ].filter(Boolean) as string[]
+
+      for (const k of keysToCheck) {
+        const cached = localStorage.getItem(k)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            localData = parsed
+            break
+          }
         }
       }
     } catch {
@@ -32,10 +42,66 @@ export async function fetchSupabaseTable<T = any>(tableName: string): Promise<T[
 
   try {
     const { data, error } = await supabase.from(tableName).select('*')
-    if (!error && Array.isArray(data)) {
+    if (!error && Array.isArray(data) && data.length > 0) {
       if (typeof window !== 'undefined' && window.localStorage) {
         try {
-          localStorage.setItem(cacheKey, JSON.stringify(data))
+          // Merge remote data with local cache if local cache has newer updated_at timestamp
+          if (localData.length > 0) {
+            const remoteMap = new Map<string, any>()
+            data.forEach((item: any) => {
+              const k = String(
+                item.emp_code ||
+                  item.emp_id ||
+                  item.admission_no ||
+                  item.student_id ||
+                  item._docId ||
+                  item.id ||
+                  item.code ||
+                  ''
+              ).toLowerCase()
+              if (k) remoteMap.set(k, item)
+            })
+
+            localData.forEach((locItem: any) => {
+              const k = String(
+                locItem.emp_code ||
+                  locItem.emp_id ||
+                  locItem.admission_no ||
+                  locItem.student_id ||
+                  locItem._docId ||
+                  locItem.id ||
+                  locItem.code ||
+                  ''
+              ).toLowerCase()
+              if (k) {
+                const remoteItem = remoteMap.get(k)
+                if (!remoteItem) {
+                  remoteMap.set(k, locItem)
+                } else {
+                  const locTime = new Date(locItem.updated_at || 0).getTime()
+                  const remTime = new Date(remoteItem.updated_at || 0).getTime()
+                  if (locTime > remTime) {
+                    remoteMap.set(k, { ...remoteItem, ...locItem })
+                  }
+                }
+              }
+            })
+
+            const merged = Array.from(remoteMap.values())
+            localStorage.setItem(cacheKey, JSON.stringify(merged))
+            if (tableName === 'employee_master') {
+              localStorage.setItem('sjes_table_employees', JSON.stringify(merged))
+              localStorage.setItem('sjes_table_staff', JSON.stringify(merged))
+            }
+            return merged as T[]
+          } else {
+            localStorage.setItem(cacheKey, JSON.stringify(data))
+            if (tableName === 'employee_master') {
+              localStorage.setItem('sjes_table_employees', JSON.stringify(data))
+              localStorage.setItem('sjes_table_staff', JSON.stringify(data))
+            }
+            return data as T[]
+          }
         } catch {
           // ignore quota
         }
@@ -57,30 +123,65 @@ export async function saveSupabaseRecord(
   record: Record<string, any>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const cacheKey = `sjes_table_${tableName}`
-    
-    // Update local storage cache immediately
-    if (typeof window !== 'undefined' && window.localStorage) {
-      try {
-        const cachedStr = localStorage.getItem(cacheKey)
-        let list: any[] = cachedStr ? JSON.parse(cachedStr) : []
-        const pk = record.id || record._docId || record.emp_id || record.student_id || record.department_id || record.vendor_id || record.class_id || record.code
-        const idx = list.findIndex((item) => (item.id || item._docId || item.emp_id || item.student_id || item.department_id || item.vendor_id || item.class_id || item.code) === pk)
-        if (idx >= 0) {
-          list[idx] = { ...list[idx], ...record }
-        } else {
-          list = [record, ...list]
+    const cacheKeys = [
+      `sjes_table_${tableName}`,
+      tableName === 'employee_master' ? 'sjes_table_employees' : null,
+      tableName === 'employee_master' ? 'sjes_table_staff' : null,
+      tableName === 'student_master' ? 'sjes_table_students' : null,
+      tableName === 'department_master' ? 'sjes_department_master' : null,
+    ].filter(Boolean) as string[]
+
+    const getRecordPk = (item: Record<string, any>) =>
+      String(
+        item.emp_code ||
+          item.emp_id ||
+          item.admission_no ||
+          item.student_id ||
+          item.department_code ||
+          item.department_id ||
+          item.vendor_code ||
+          item.vendor_id ||
+          item._docId ||
+          item.id ||
+          item.code ||
+          ''
+      ).toLowerCase()
+
+    const targetPk = getRecordPk(record)
+
+    // Update local storage cache immediately across all keys
+    if (typeof window !== 'undefined' && window.localStorage && targetPk) {
+      for (const cacheKey of cacheKeys) {
+        try {
+          const cachedStr = localStorage.getItem(cacheKey)
+          let list: any[] = cachedStr ? JSON.parse(cachedStr) : []
+          if (Array.isArray(list)) {
+            const idx = list.findIndex((item) => getRecordPk(item) === targetPk)
+            if (idx >= 0) {
+              list[idx] = { ...list[idx], ...record, updated_at: record.updated_at || new Date().toISOString() }
+            } else {
+              list = [{ ...record, updated_at: record.updated_at || new Date().toISOString() }, ...list]
+            }
+            localStorage.setItem(cacheKey, JSON.stringify(list))
+          }
+        } catch {
+          // ignore
         }
-        localStorage.setItem(cacheKey, JSON.stringify(list))
-      } catch {
-        // ignore
       }
     }
 
+    // Upsert into Supabase
     const { error } = await supabase.from(tableName).upsert(record)
     if (error) {
       console.warn(`Supabase upsert note for ${tableName}:`, error.message)
-      return { success: true } // gracefully return success with local fallback
+      // Attempt targeted update if upsert fails
+      if (record.emp_code) {
+        await supabase.from(tableName).update(record).eq('emp_code', record.emp_code)
+      } else if (record._docId) {
+        await supabase.from(tableName).update(record).eq('_docId', record._docId)
+      } else if (record.id) {
+        await supabase.from(tableName).update(record).eq('id', record.id)
+      }
     }
     return { success: true }
   } catch (err: any) {
