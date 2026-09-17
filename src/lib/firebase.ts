@@ -164,7 +164,7 @@ export async function uploadToFirebaseStorage(
 export async function fetchCollectionData<T = any>(collectionName: string): Promise<T[]> {
   try {
     const fetchPromise = getDocs(collection(db, collectionName))
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000))
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000))
     const querySnapshot = await Promise.race([fetchPromise, timeoutPromise])
 
     if (querySnapshot && typeof (querySnapshot as any).forEach === 'function') {
@@ -177,28 +177,26 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
           ...d,
         } as T)
       })
-      if (results.length > 0) {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          try {
-            localStorage.setItem(`sjes_table_${collectionName}`, JSON.stringify(results))
-          } catch {
-            // ignore localStorage quota errors
-          }
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          localStorage.setItem(`sjes_table_${collectionName}`, JSON.stringify(results))
+        } catch {
+          // ignore localStorage quota errors
         }
-        return results
       }
+      return results
     }
   } catch (err) {
     console.error(`Error fetching collection ${collectionName} from Firebase:`, err)
   }
 
-  // Fallback to localStorage if Firebase is empty, offline, or timed out
+  // Fallback to localStorage only if Firebase failed or timed out
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       const cached = localStorage.getItem(`sjes_table_${collectionName}`)
       if (cached) {
         const parsed = JSON.parse(cached)
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed as T[]
         }
       }
@@ -303,7 +301,7 @@ export async function saveDocument(
     })
 
     const timeoutPromise = new Promise<{ success: boolean }>((resolve) =>
-      setTimeout(() => resolve({ success: true }), 1000)
+      setTimeout(() => resolve({ success: true }), 3500)
     )
 
     await Promise.race([setPromise, timeoutPromise])
@@ -399,7 +397,7 @@ export async function saveBatchDocuments(
       const batchPromise = batch.commit().catch((err) => {
         console.warn(`Firestore batch commit note for ${collectionName}:`, err?.message)
       })
-      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1000))
+      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 3500))
       await Promise.race([batchPromise, timeoutPromise])
     }
   } catch (err) {
