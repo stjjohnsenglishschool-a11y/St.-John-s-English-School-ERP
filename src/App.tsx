@@ -1941,14 +1941,62 @@ function RecordModal({
       mod.table === "teacher_idcard"
     ) {
       setValues((prev) => {
+        const fullBasic = Number(record.basic_salary || prev.basic_salary || 0);
         const updated: Row = {
           ...prev,
           employee_name: empFullName || prev.employee_name,
           emp_code: (record.emp_code as string) || prev.emp_code,
           department: (record.department as string) || prev.department,
           designation: (record.designation as string) || prev.designation,
-          basic_salary: (record.basic_salary as number) || prev.basic_salary,
+          basic_salary: fullBasic,
         };
+
+        // For salary slip: handle resigned employee pro-rata salary & warnings
+        if (mod.table === "salary_slip") {
+          const empStatus = String(record.employment_status || (record.is_active === false ? "Inactive" : "Active"));
+          const lastWorking = String(record.last_working_date || record.date_of_leaving || record.resignation_date || "");
+
+          const monthStr = String(prev.month || "September");
+          const yearNum = Number(prev.year || new Date().getFullYear());
+
+          const parseMonthIdx = (m: string | number) => {
+            if (typeof m === "number") return m;
+            const str = String(m || "").trim().toLowerCase();
+            const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+            const idx = months.findIndex((name) => name.startsWith(str.slice(0, 3)));
+            return idx !== -1 ? idx + 1 : 9;
+          };
+
+          const slipMonthIdx = parseMonthIdx(monthStr);
+
+          if ((empStatus === "Resigned" || empStatus === "Terminated" || empStatus === "Inactive") && lastWorking) {
+            const [lYear, lMonth, lDay] = lastWorking.split("-").map(Number);
+            if (lYear && lMonth && lDay) {
+              const totalDays = new Date(yearNum, slipMonthIdx, 0).getDate() || 30;
+
+              if (yearNum === lYear && slipMonthIdx === lMonth) {
+                // Resignation month: calculate pro-rata salary up to last working date
+                const daysWorked = Math.min(lDay, totalDays);
+                const unworkedDays = Math.max(0, totalDays - daysWorked);
+                const proratedBasic = Math.round((fullBasic / totalDays) * daysWorked);
+                const lwpDeduction = Math.round((fullBasic / totalDays) * unworkedDays);
+
+                updated.basic_salary = proratedBasic;
+                updated.lwp_days = unworkedDays;
+                updated.lwp_deduction = lwpDeduction;
+                updated.gross_salary = proratedBasic + Number(prev.hra || 0) + Number(prev.da || 0) + Number(prev.other_allowances || 0);
+                updated.total_deductions = Number(prev.pf_deduction || 0) + Number(prev.esi_deduction || 0) + Number(prev.tds || 0) + lwpDeduction + Number(prev.other_deductions || 0);
+                updated.net_salary = Math.max(0, (updated.gross_salary as number) - (updated.total_deductions as number));
+                updated.resignation_settlement = true;
+                updated.remarks = `✓ Resigned staff pro-rata salary: ${daysWorked} days worked up to Last Working Date (${lastWorking}). ${unworkedDays} days deducted as LWP.`;
+              } else if (yearNum > lYear || (yearNum === lYear && slipMonthIdx > lMonth)) {
+                // Month is after last working date: warn admin
+                updated.remarks = `⚠️ EXCLUDED FROM REGULAR PAYROLL: Employee resigned on ${lastWorking}. Past last working date. Processing final settlement / pending dues only.`;
+                updated.resignation_settlement = true;
+              }
+            }
+          }
+        }
 
         // For leave balance: initialize smart defaults
         if (mod.table === "leave_balance" && mode === "create") {
@@ -2038,6 +2086,7 @@ function FormField({
   >([]);
   const [uploading, setUploading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showResigned, setShowResigned] = useState(false);
 
   useEffect(() => {
     if (field.type !== "relation" || !field.reference) return;
@@ -2046,6 +2095,19 @@ function FormField({
       setRelationOptions((data || []) as unknown as Array<Record<string, unknown>>);
     });
   }, [field]);
+
+  const filteredRelationOptions = useMemo(() => {
+    if (field.type !== "relation" || field.reference?.table !== "employee_master" || showResigned) {
+      return relationOptions;
+    }
+    return relationOptions.filter((opt) => {
+      const isSel = String(opt[field.reference!.value]) === String(value);
+      if (isSel) return true;
+      const status = String(opt.employment_status || "");
+      const isActive = opt.is_active !== false;
+      return isActive && status !== "Inactive" && status !== "Resigned" && status !== "Terminated" && status !== "Retired" && status !== "Left";
+    });
+  }, [relationOptions, field, showResigned, value]);
 
   const isUrlOrFileField =
     field.key.endsWith("_url") ||
@@ -2257,37 +2319,76 @@ function FormField({
           <option value="false">No / Inactive</option>
         </select>
       ) : field.type === "relation" && field.reference ? (
-        <select
-          disabled={disabled}
-          required={field.required}
-          value={String(value ?? "")}
-          onChange={(e) => {
-            const val = e.target.value;
-            change(val);
-            const found = relationOptions.find(
-              (opt) => String(opt[field.reference!.value]) === val
-            );
-            if (found && onRelationSelected) {
-              onRelationSelected(found);
-            }
-          }}
-        >
-          <option value="">Select...</option>
-          {relationOptions.map((option) => (
-            <option
-              key={String(option[field.reference!.value])}
-              value={String(option[field.reference!.value])}
-            >
-              {String(
-                option[field.reference!.label] ||
+        <div style={{ display: "grid", gap: "4px" }}>
+          <select
+            disabled={disabled}
+            required={field.required}
+            value={String(value ?? "")}
+            onChange={(e) => {
+              const val = e.target.value;
+              change(val);
+              const found = relationOptions.find(
+                (opt) => String(opt[field.reference!.value]) === val
+              );
+              if (found && onRelationSelected) {
+                onRelationSelected(found);
+              }
+            }}
+          >
+            <option value="">Select...</option>
+            {filteredRelationOptions.map((option) => {
+              const val = String(option[field.reference!.value]);
+              const code = String(option.emp_code || option.emp_id || "");
+              const name = String(
+                option.employee_name ||
                   option.full_name ||
-                  option.first_name ||
-                  option[field.reference!.value] ||
-                  ""
-              )}
-            </option>
-          ))}
-        </select>
+                  `${(option.first_name as string) || ""} ${(option.last_name as string) || ""}`.trim() ||
+                  option[field.reference!.label] ||
+                  val
+              );
+              const status = String(option.employment_status || (option.is_active === false ? "Inactive" : "Active"));
+              const lastWorking = String(option.last_working_date || option.date_of_leaving || "");
+
+              let displayLabel = code ? `${code} - ${name}` : name;
+              if (field.reference?.table === "employee_master" && status && status !== "Active") {
+                if ((status === "Resigned" || status === "Terminated") && lastWorking) {
+                  displayLabel += ` (${status}: Last Working ${lastWorking})`;
+                } else {
+                  displayLabel += ` (${status})`;
+                }
+              }
+
+              return (
+                <option key={val} value={val}>
+                  {displayLabel}
+                </option>
+              );
+            })}
+          </select>
+
+          {field.reference?.table === "employee_master" && !disabled && (
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "11px",
+                color: "#64748b",
+                marginTop: "2px",
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showResigned}
+                onChange={(e) => setShowResigned(e.target.checked)}
+                style={{ cursor: "pointer" }}
+              />
+              <span>Include Resigned / Terminated / Inactive Staff (For Final Settlement or Pending Payment)</span>
+            </label>
+          )}
+        </div>
       ) : field.type === "select" ? (
         <select
           disabled={disabled}

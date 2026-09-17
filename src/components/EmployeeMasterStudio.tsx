@@ -90,6 +90,8 @@ type Employee = {
   reporting_designation?: string
   date_of_joining?: string
   confirmation_date?: string
+  resignation_date?: string
+  last_working_date?: string
   date_of_leaving?: string
   shift_name?: string
   qualification?: string
@@ -285,6 +287,7 @@ export default function EmployeeMasterStudio({
     const isInactive =
       newStatus === 'Inactive' ||
       newStatus === 'Resigned' ||
+      newStatus === 'Terminated' ||
       newStatus === 'Retired' ||
       newStatus === 'Left' ||
       newStatus === 'Suspended'
@@ -293,11 +296,15 @@ export default function EmployeeMasterStudio({
     const displayName = [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.emp_code || 'Staff'
     setToast(`Saving status '${newStatus}' for ${displayName} directly to Supabase...`)
 
+    const todayStr = new Date().toISOString().slice(0, 10)
     const updatedEmp: Employee = {
       ...emp,
       is_active: isActive,
       employment_status: newStatus,
       updated_at: new Date().toISOString(),
+      date_of_leaving: isInactive ? emp.date_of_leaving || todayStr : emp.date_of_leaving,
+      resignation_date: isInactive ? emp.resignation_date || todayStr : emp.resignation_date,
+      last_working_date: isInactive ? emp.last_working_date || todayStr : emp.last_working_date,
     }
 
     const pk = emp.emp_code || emp.emp_id || (emp as any)._docId || `EMP-${Date.now()}`
@@ -459,8 +466,20 @@ export default function EmployeeMasterStudio({
       const matchStatus =
         !filterStatus ||
         (filterStatus === 'Active'
-          ? e.is_active !== false && e.employment_status !== 'Inactive' && e.employment_status !== 'Resigned' && e.employment_status !== 'Retired'
-          : e.employment_status === filterStatus || (filterStatus === 'Inactive' && e.is_active === false))
+          ? e.is_active !== false &&
+            e.employment_status !== 'Inactive' &&
+            e.employment_status !== 'Resigned' &&
+            e.employment_status !== 'Terminated' &&
+            e.employment_status !== 'Retired' &&
+            e.employment_status !== 'Left'
+          : filterStatus === 'Resigned'
+          ? e.employment_status === 'Resigned'
+          : filterStatus === 'Terminated'
+          ? e.employment_status === 'Terminated'
+          : filterStatus === 'Inactive'
+          ? e.employment_status === 'Inactive' ||
+            (e.is_active === false && e.employment_status !== 'Resigned' && e.employment_status !== 'Terminated')
+          : e.employment_status === filterStatus)
 
       const matchYear = !filterYear || e.academic_year === filterYear || (!e.academic_year && filterYear === CURRENT_ACADEMIC_YEAR)
 
@@ -526,12 +545,16 @@ export default function EmployeeMasterStudio({
         const isInactive =
           valStr === 'Inactive' ||
           valStr === 'Resigned' ||
+          valStr === 'Terminated' ||
           valStr === 'Retired' ||
           valStr === 'Left' ||
           valStr === 'Suspended'
         next.is_active = !isInactive
-        if (isInactive && !next.date_of_leaving) {
-          next.date_of_leaving = new Date().toISOString().slice(0, 10)
+        const todayStr = new Date().toISOString().slice(0, 10)
+        if (isInactive) {
+          if (!next.date_of_leaving) next.date_of_leaving = todayStr
+          if (!next.resignation_date) next.resignation_date = todayStr
+          if (!next.last_working_date) next.last_working_date = todayStr
         }
       }
       return next
@@ -879,9 +902,46 @@ export default function EmployeeMasterStudio({
                   e.is_active !== false &&
                   e.employment_status !== 'Inactive' &&
                   e.employment_status !== 'Resigned' &&
-                  e.employment_status !== 'Retired'
+                  e.employment_status !== 'Terminated' &&
+                  e.employment_status !== 'Retired' &&
+                  e.employment_status !== 'Left'
               ).length
             }
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            setFilterStatus('Resigned')
+            setPage(1)
+          }}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: filterStatus === 'Resigned' ? '2px solid #ea580c' : '1px solid #cbd5e1',
+            background: filterStatus === 'Resigned' ? '#fff7ed' : '#ffffff',
+            color: filterStatus === 'Resigned' ? '#c2410c' : '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ea580c' }} />
+          <span>Resigned</span>
+          <span
+            style={{
+              background: filterStatus === 'Resigned' ? '#ea580c' : '#e2e8f0',
+              color: filterStatus === 'Resigned' ? '#ffffff' : '#475569',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontSize: '11px',
+            }}
+          >
+            {employees.filter((e) => e.employment_status === 'Resigned').length}
           </span>
         </button>
 
@@ -906,7 +966,7 @@ export default function EmployeeMasterStudio({
           }}
         >
           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626' }} />
-          <span>Inactive / Left</span>
+          <span>Inactive</span>
           <span
             style={{
               background: filterStatus === 'Inactive' ? '#dc2626' : '#e2e8f0',
@@ -919,12 +979,45 @@ export default function EmployeeMasterStudio({
             {
               employees.filter(
                 (e) =>
-                  e.is_active === false ||
                   e.employment_status === 'Inactive' ||
-                  e.employment_status === 'Resigned' ||
-                  e.employment_status === 'Retired'
+                  (e.is_active === false && e.employment_status !== 'Resigned' && e.employment_status !== 'Terminated')
               ).length
             }
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            setFilterStatus('Terminated')
+            setPage(1)
+          }}
+          style={{
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: filterStatus === 'Terminated' ? '2px solid #7c3aed' : '1px solid #cbd5e1',
+            background: filterStatus === 'Terminated' ? '#f5f3ff' : '#ffffff',
+            color: filterStatus === 'Terminated' ? '#6d28d9' : '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#7c3aed' }} />
+          <span>Terminated</span>
+          <span
+            style={{
+              background: filterStatus === 'Terminated' ? '#7c3aed' : '#e2e8f0',
+              color: filterStatus === 'Terminated' ? '#ffffff' : '#475569',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontSize: '11px',
+            }}
+          >
+            {employees.filter((e) => e.employment_status === 'Terminated').length}
           </span>
         </button>
 
@@ -1022,9 +1115,11 @@ export default function EmployeeMasterStudio({
           >
             <option value="">All Statuses</option>
             <option value="Active">Active</option>
+            <option value="Resigned">Resigned</option>
+            <option value="Inactive">Inactive</option>
+            <option value="Terminated">Terminated</option>
             <option value="On Leave">On Leave</option>
             <option value="Suspended">Suspended</option>
-            <option value="Resigned">Resigned</option>
             <option value="Retired">Retired</option>
           </select>
 
@@ -1725,9 +1820,11 @@ export default function EmployeeMasterStudio({
                         onChange={(e) => updateForm('employment_status', e.target.value)}
                       >
                         <option value="Active">Active</option>
+                        <option value="Resigned">Resigned</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="Terminated">Terminated</option>
                         <option value="On Leave">On Leave</option>
                         <option value="Suspended">Suspended</option>
-                        <option value="Resigned">Resigned</option>
                         <option value="Retired">Retired</option>
                       </select>
                     </label>
@@ -1787,6 +1884,71 @@ export default function EmployeeMasterStudio({
                       />
                     </label>
                   </div>
+
+                  {/* Resignation & Termination Details */}
+                  {(formState.employment_status === 'Resigned' ||
+                    formState.employment_status === 'Terminated' ||
+                    formState.employment_status === 'Inactive' ||
+                    formState.employment_status === 'Retired' ||
+                    formState.employment_status === 'Left') && (
+                    <div
+                      style={{
+                        background: '#fff7ed',
+                        border: '1px solid #ffedd5',
+                        borderRadius: '10px',
+                        padding: '14px',
+                        marginTop: '12px',
+                        display: 'grid',
+                        gap: '12px',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: '13px', color: '#c2410c', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>⚠️ Resignation & Last Working Details (Supabase Source of Truth)</span>
+                      </div>
+                      <div className="form-row-3">
+                        <label>
+                          <span style={{ color: '#9a3412', fontWeight: 600 }}>Resignation Date</span>
+                          <input
+                            type="date"
+                            disabled={modalMode === 'view'}
+                            value={formState.resignation_date || ''}
+                            onChange={(e) => {
+                              updateForm('resignation_date', e.target.value)
+                              if (!formState.last_working_date) updateForm('last_working_date', e.target.value)
+                              if (!formState.date_of_leaving) updateForm('date_of_leaving', e.target.value)
+                            }}
+                          />
+                        </label>
+                        <label>
+                          <span style={{ color: '#9a3412', fontWeight: 600 }}>Last Working Date</span>
+                          <input
+                            type="date"
+                            disabled={modalMode === 'view'}
+                            value={formState.last_working_date || formState.date_of_leaving || ''}
+                            onChange={(e) => {
+                              updateForm('last_working_date', e.target.value)
+                              updateForm('date_of_leaving', e.target.value)
+                            }}
+                          />
+                        </label>
+                        <label>
+                          <span style={{ color: '#9a3412', fontWeight: 600 }}>Official Relieving / Leaving Date</span>
+                          <input
+                            type="date"
+                            disabled={modalMode === 'view'}
+                            value={formState.date_of_leaving || formState.last_working_date || ''}
+                            onChange={(e) => {
+                              updateForm('date_of_leaving', e.target.value)
+                              if (!formState.last_working_date) updateForm('last_working_date', e.target.value)
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#7c2d12', lineHeight: '1.4' }}>
+                        <b>Payroll Rule:</b> Salary for the resignation month will be calculated pro-rata up to the <b>Last Working Date</b>. For subsequent months, this employee will be excluded from regular payroll unless Admin selects them for final settlement.
+                      </div>
+                    </div>
+                  )}
 
                   {formState.date_of_joining && (() => {
                     const prob = getEmployeeProbationStatus(formState.date_of_joining);
