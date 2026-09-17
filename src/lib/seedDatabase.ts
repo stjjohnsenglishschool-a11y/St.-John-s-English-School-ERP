@@ -95,12 +95,12 @@ export async function seedSupabaseDatabase(force = false): Promise<{ success: bo
     return {
       success: true,
       message: errors.length > 0 
-        ? `Seeded ${count} records into Firebase (Some records skipped: ${errors.join('; ')})`
-        : `Successfully seeded ${count} live records into Firebase Firestore!`,
+        ? `Seeded ${count} records into Supabase (Some records skipped: ${errors.join('; ')})`
+        : `Successfully seeded ${count} live records into Supabase!`,
       seededCount: count,
     }
   } catch (err) {
-    console.error('Error seeding Firebase database:', err)
+    console.error('Error seeding Supabase database:', err)
     return {
       success: false,
       message: err instanceof Error ? err.message : 'Database seeding failed',

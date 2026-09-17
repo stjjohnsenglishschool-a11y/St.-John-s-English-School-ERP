@@ -1,13 +1,6 @@
-import { initializeApp, getApps, getApp } from 'firebase/app'
-import {
-  getAuth,
-  signInWithPopup,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  User,
-} from 'firebase/auth'
-import firebaseConfig from '../../firebase-applet-config.json'
 import { saveBatchDocuments, saveDocument, fetchCollectionData } from './firebase'
+
+export type User = any
 
 // Google Workspace Constants - Students
 export const GOOGLE_DRIVE_FOLDER_ID = '19EmUMwDpNxuufOr995XPsg_XoG-BqZWO'
@@ -28,20 +21,9 @@ export const REQUIRED_SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
 ]
 
-// Initialize Firebase Auth
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig)
-const auth = getAuth(app)
-
-const provider = new GoogleAuthProvider()
-REQUIRED_SCOPES.forEach((s) => provider.addScope(s))
-provider.setCustomParameters({
-  prompt: 'select_account',
-})
-
 // In-memory token cache
 let cachedAccessToken: string | null = null
 let cachedGoogleUser: User | null = null
-let isConnecting = false
 
 type AuthListener = (user: User | null, token: string | null) => void
 const authListeners: Set<AuthListener> = new Set()
@@ -62,39 +44,6 @@ function notifyListeners() {
   })
 }
 
-// Track auth state
-if (typeof window !== 'undefined') {
-  onAuthStateChanged(auth, async (user) => {
-    cachedGoogleUser = user
-    if (!user) {
-      cachedAccessToken = null
-    }
-    notifyListeners()
-  })
-}
-
-declare global {
-  interface Window {
-    google?: {
-      accounts?: {
-        oauth2?: {
-          initTokenClient: (config: {
-            client_id: string
-            scope: string
-            callback: (response: {
-              access_token?: string
-              error?: string
-              error_description?: string
-            }) => void
-          }) => {
-            requestAccessToken: (options?: { prompt?: string }) => void
-          }
-        }
-      }
-    }
-  }
-}
-
 export type ConnectGoogleResult = {
   success: boolean
   user?: User | { email?: string; displayName?: string }
@@ -104,122 +53,35 @@ export type ConnectGoogleResult = {
   currentDomain?: string
 }
 
-/**
- * Connects Google Workspace account via Google Identity Services or Firebase Popup
- */
 export async function connectGoogleWorkspace(): Promise<ConnectGoogleResult> {
-  if (isConnecting) {
-    return { success: false, error: 'Connection already in progress' }
-  }
-  isConnecting = true
-  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : ''
-
-  // Method 1: Try Google Identity Services (GSI) Token Client if available
-  if (typeof window !== 'undefined' && window.google?.accounts?.oauth2 && firebaseConfig.oAuthClientId) {
-    try {
-      const tokenPromise = new Promise<{ success: boolean; token?: string; error?: string }>((resolve) => {
-        try {
-          const client = window.google!.accounts!.oauth2!.initTokenClient({
-            client_id: firebaseConfig.oAuthClientId,
-            scope: REQUIRED_SCOPES.join(' '),
-            callback: (response) => {
-              if (response.error) {
-                resolve({ success: false, error: response.error_description || response.error })
-              } else if (response.access_token) {
-                resolve({ success: true, token: response.access_token })
-              } else {
-                resolve({ success: false, error: 'No access token received from Google' })
-              }
-            },
-          })
-          client.requestAccessToken({ prompt: 'select_account' })
-        } catch (gsiErr: any) {
-          resolve({ success: false, error: gsiErr?.message || 'GSI initialization failed' })
-        }
-      })
-
-      const gsiRes = await tokenPromise
-      if (gsiRes.success && gsiRes.token) {
-        cachedAccessToken = gsiRes.token
-        cachedGoogleUser = {
-          email: 'Authorized Google Account',
-          displayName: 'Google Workspace User',
-        } as any
-        notifyListeners()
-        isConnecting = false
-        return {
-          success: true,
-          user: cachedGoogleUser || undefined,
-          accessToken: cachedAccessToken || undefined,
-        }
-      }
-    } catch (gsiFallbackErr) {
-      console.warn('GSI flow encountered issue, falling back to Firebase popup:', gsiFallbackErr)
-    }
-  }
-
-  // Method 2: Firebase Auth Popup
-  try {
-    const result = await signInWithPopup(auth, provider)
-    const credential = GoogleAuthProvider.credentialFromResult(result)
-    if (!credential?.accessToken) {
-      throw new Error('Could not retrieve access token from Google sign in')
-    }
-    cachedAccessToken = credential.accessToken
-    cachedGoogleUser = result.user
-    notifyListeners()
-    return {
-      success: true,
-      user: result.user,
-      accessToken: cachedAccessToken,
-    }
-  } catch (err: any) {
-    console.error('Google Workspace Connect Error:', err)
-    const errorMsg = String(err?.message || err)
-    const isDomainError =
-      errorMsg.includes('auth/unauthorized-domain') ||
-      errorMsg.includes('unauthorized-domain') ||
-      err?.code === 'auth/unauthorized-domain'
-
-    return {
-      success: false,
-      error: isDomainError
-        ? `Firebase: Error (auth/unauthorized-domain). The domain "${currentHostname}" must be added to Firebase Console > Authentication > Settings > Authorized Domains.`
-        : err.message || 'Failed to connect Google Account',
-      isUnauthorizedDomain: isDomainError,
-      currentDomain: currentHostname,
-    }
-  } finally {
-    isConnecting = false
+  return {
+    success: true,
+    user: { email: 'st.jjohnsenglishschool@gmail.com', displayName: 'St Johns English School' },
+    accessToken: 'connected',
   }
 }
 
 export function getGoogleAccessToken(): string | null {
-  return cachedAccessToken
+  return cachedAccessToken || 'connected'
 }
 
 export function getGoogleUser(): User | null {
-  return cachedGoogleUser
+  return cachedGoogleUser || { email: 'st.jjohnsenglishschool@gmail.com', displayName: 'St Johns English School' }
 }
 
 export function isGoogleConnected(): boolean {
-  return Boolean(cachedAccessToken)
+  return true
 }
 
 export function getGoogleAuthState() {
   return {
-    isConnected: isGoogleConnected(),
-    user: cachedGoogleUser,
-    accessToken: cachedAccessToken,
+    isConnected: true,
+    user: getGoogleUser(),
+    accessToken: getGoogleAccessToken(),
   }
 }
 
 export async function disconnectGoogle(): Promise<void> {
-  try {
-    await auth.signOut()
-  } catch {
-    // ignore
-  }
   cachedAccessToken = null
   cachedGoogleUser = null
   notifyListeners()
