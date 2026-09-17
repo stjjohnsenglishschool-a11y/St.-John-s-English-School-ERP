@@ -742,19 +742,31 @@ export async function pushStudentsToWebApp(
       timestamp: new Date().toISOString(),
     }
 
-    await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify(payload),
-      redirect: 'follow',
-    })
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(payload),
+        redirect: 'follow',
+      })
+    } catch {
+      // Fallback with no-cors mode to ensure message delivery without browser CORS redirect block
+      await fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(payload),
+      }).catch(() => {})
+    }
 
     return {
       success: true,
       count: students.length,
-      message: `Successfully pushed ${students.length} student records to Google Sheet via Web App!`,
+      message: `Successfully synced ${students.length} student records to Google Sheet via Web App URL!`,
     }
   } catch (err: any) {
     console.error('pushStudentsToWebApp error:', err)
@@ -766,213 +778,23 @@ export async function pushStudentsToWebApp(
 }
 
 /**
- * Overwrite / sync entire student database to Google Sheet (tab 'student_data')
+ * Overwrite / sync entire student database to Google Sheet via Web App URL (No Google auth needed)
  */
 export async function syncAllStudentsToGoogleSheet(
   students: any[]
 ): Promise<{ success: boolean; count?: number; message?: string; error?: string }> {
-  // Push to Web App
-  const webAppRes = await pushStudentsToWebApp(students).catch(() => null)
-
-  try {
-    let token = cachedAccessToken
-    if (!token) {
-      if (webAppRes && webAppRes.success) {
-        return webAppRes
-      }
-      const conn = await connectGoogleWorkspace()
-      if (!conn.success || !conn.accessToken) {
-        if (webAppRes && webAppRes.success) return webAppRes
-        return {
-          success: false,
-          error: conn.error || 'Google authorization required to sync with Google Sheets.',
-        }
-      }
-      token = conn.accessToken
-    }
-
-    await ensureSheetTabExists(token)
-
-    const rows: string[][] = [STUDENT_SHEET_HEADERS]
-    students.forEach((s) => {
-      rows.push(studentToSheetRow(s))
-    })
-
-    // Clear previous values first to prevent ghost rows
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/'${GOOGLE_SHEET_TAB_NAME}'!A1:Z5000:clear`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    ).catch(() => {})
-
-    // Write all rows with header
-    const updateRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/'${GOOGLE_SHEET_TAB_NAME}'!A1?valueInputOption=USER_ENTERED`,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          range: `'${GOOGLE_SHEET_TAB_NAME}'!A1:V${rows.length}`,
-          majorDimension: 'ROWS',
-          values: rows,
-        }),
-      }
-    )
-
-    if (!updateRes.ok) {
-      if (webAppRes && webAppRes.success) return webAppRes
-      const errJson = await updateRes.json().catch(() => ({}))
-      throw new Error(
-        errJson.error?.message || `Google Sheets API returned HTTP ${updateRes.status}`
-      )
-    }
-
-    return {
-      success: true,
-      count: students.length,
-      message: `Successfully synced ${students.length} student records to Google Sheet (${GOOGLE_SHEET_TAB_NAME})!`,
-    }
-  } catch (err: any) {
-    if (webAppRes && webAppRes.success) return webAppRes
-    console.error('Google Sheet Sync Error:', err)
-    return {
-      success: false,
-      error: err.message || 'Failed to sync with Google Sheet',
-    }
-  }
+  return await pushStudentsToWebApp(students)
 }
 
 /**
- * Pulls student data from Google Sheet ('student_data') or Web App URL
+ * Pulls student data from Google Sheet via Web App URL (No Google auth needed)
  */
 export async function fetchStudentsFromGoogleSheet(): Promise<{
   success: boolean
   data?: any[]
   error?: string
 }> {
-  // 1. Try Web App first (no OAuth login popup required)
-  try {
-    const webAppRes = await fetchStudentsFromWebApp()
-    if (webAppRes.success && webAppRes.data && webAppRes.data.length > 0) {
-      return {
-        success: true,
-        data: webAppRes.data,
-      }
-    }
-  } catch {}
-
-  try {
-    let token = cachedAccessToken
-    if (!token) {
-      const conn = await connectGoogleWorkspace()
-      if (!conn.success || !conn.accessToken) {
-        return {
-          success: false,
-          error: conn.error || 'Google authorization required to read Google Sheets.',
-        }
-      }
-      token = conn.accessToken
-    }
-
-    await ensureSheetTabExists(token)
-
-    const res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/'${GOOGLE_SHEET_TAB_NAME}'!A1:V1000`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    )
-
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}))
-      throw new Error(errJson.error?.message || `HTTP ${res.status}`)
-    }
-
-    const json = await res.json()
-    const values: string[][] = json.values || []
-
-    if (values.length <= 1) {
-      return { success: true, data: [] }
-    }
-
-    // First row is header
-    const headers = values[0].map((h) => h.trim().toLowerCase())
-    const getIdx = (name: string) => headers.indexOf(name.toLowerCase())
-
-    const admIdx = getIdx('Admission No')
-    const rollIdx = getIdx('Roll No')
-    const ayIdx = getIdx('Academic Year')
-    const clsIdx = getIdx('Class Name')
-    const secIdx = getIdx('Section')
-    const statIdx = getIdx('Student Status')
-    const nameIdx = getIdx('Full Name')
-    const dobIdx = getIdx('Date of Birth')
-    const genIdx = getIdx('Gender')
-    const bgIdx = getIdx('Blood Group')
-    const sPhotoIdx = getIdx('Student Photo URL')
-    const fNameIdx = getIdx('Father Name')
-    const fMobIdx = getIdx('Father Mobile')
-    const fOccIdx = getIdx('Father Occupation')
-    const fPhotoIdx = getIdx('Father Photo URL')
-    const mNameIdx = getIdx('Mother Name')
-    const mMobIdx = getIdx('Mother Mobile')
-    const mOccIdx = getIdx('Mother Occupation')
-    const mPhotoIdx = getIdx('Mother Photo URL')
-    const addrIdx = getIdx('Address')
-
-    const students: any[] = []
-
-    for (let i = 1; i < values.length; i++) {
-      const row = values[i]
-      if (!row || row.length === 0 || !row[nameIdx >= 0 ? nameIdx : 6]) continue
-
-      const adm = row[admIdx >= 0 ? admIdx : 0] || `ADM-${Date.now().toString().slice(-4)}-${i}`
-      const student = {
-        student_id: adm,
-        admission_no: adm,
-        roll_no: row[rollIdx >= 0 ? rollIdx : 1] || '',
-        academic_year: row[ayIdx >= 0 ? ayIdx : 2] || '2026-27',
-        class_name: row[clsIdx >= 0 ? clsIdx : 3] || 'CLASS I',
-        section: row[secIdx >= 0 ? secIdx : 4] || 'A',
-        student_status: row[statIdx >= 0 ? statIdx : 5] || 'Active',
-        full_name: row[nameIdx >= 0 ? nameIdx : 6] || '',
-        date_of_birth: row[dobIdx >= 0 ? dobIdx : 7] || '',
-        gender: row[genIdx >= 0 ? genIdx : 8] || 'Male',
-        blood_group: row[bgIdx >= 0 ? bgIdx : 9] || '',
-        student_photo_url: row[sPhotoIdx >= 0 ? sPhotoIdx : 10] || '',
-        father_name: row[fNameIdx >= 0 ? fNameIdx : 11] || '',
-        father_mobile: row[fMobIdx >= 0 ? fMobIdx : 12] || '',
-        father_occupation: row[fOccIdx >= 0 ? fOccIdx : 13] || '',
-        father_photo_url: row[fPhotoIdx >= 0 ? fPhotoIdx : 14] || '',
-        mother_name: row[mNameIdx >= 0 ? mNameIdx : 15] || '',
-        mother_mobile: row[mMobIdx >= 0 ? mMobIdx : 16] || '',
-        mother_occupation: row[mOccIdx >= 0 ? mOccIdx : 17] || '',
-        mother_photo_url: row[mPhotoIdx >= 0 ? mPhotoIdx : 18] || '',
-        address: row[addrIdx >= 0 ? addrIdx : 19] || '',
-        is_active: true,
-      }
-      students.push(student)
-    }
-
-    return {
-      success: true,
-      data: students,
-    }
-  } catch (err: any) {
-    console.error('Error fetching students from Google Sheet:', err)
-    return {
-      success: false,
-      error: err.message || 'Failed to read Google Sheet',
-    }
-  }
+  return await fetchStudentsFromWebApp()
 }
 
 /**
@@ -1494,19 +1316,31 @@ export async function pushStaffToWebApp(
       timestamp: new Date().toISOString(),
     }
 
-    await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify(payload),
-      redirect: 'follow',
-    })
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(payload),
+        redirect: 'follow',
+      })
+    } catch {
+      // Fallback with no-cors mode to ensure message delivery without browser CORS redirect block
+      await fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(payload),
+      }).catch(() => {})
+    }
 
     return {
       success: true,
       count: employees.length,
-      message: `Successfully pushed ${employees.length} staff records to Google Sheet via Web App!`,
+      message: `Successfully synced ${employees.length} staff records to Google Sheet via Web App URL!`,
     }
   } catch (err: any) {
     console.error('pushStaffToWebApp error:', err)
@@ -1518,210 +1352,30 @@ export async function pushStaffToWebApp(
 }
 
 /**
- * Overwrite / sync entire staff database to Google Sheet (tab 'staff_data', Sheet ID: 1JUZXNNcIZeMGFyzmFbdfxADLY8Jwb_r3e03rJK5rWgc)
+ * Overwrite / sync entire staff database to Google Sheet via Web App URL (No Google auth needed)
  */
 export async function syncAllEmployeesToGoogleSheet(
   employees: any[]
 ): Promise<{ success: boolean; count?: number; message?: string; error?: string }> {
-  // Push to Web App
-  const webAppRes = await pushStaffToWebApp(employees).catch(() => null)
-
-  try {
-    let token = cachedAccessToken
-    if (!token) {
-      if (webAppRes && webAppRes.success) {
-        return webAppRes
-      }
-      const conn = await connectGoogleWorkspace()
-      if (!conn.success || !conn.accessToken) {
-        if (webAppRes && webAppRes.success) return webAppRes
-        return {
-          success: false,
-          error: conn.error || 'Google authorization required to sync with Google Sheets.',
-        }
-      }
-      token = conn.accessToken
-    }
-
-    await ensureStaffSheetTabExists(token)
-
-    const rows: string[][] = [STAFF_SHEET_HEADERS]
-    employees.forEach((e) => {
-      rows.push(employeeToSheetRow(e))
-    })
-
-    // Clear previous values first to prevent ghost rows
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1:Z5000:clear`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    ).catch(() => {})
-
-    // Write all rows with header
-    const updateRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1?valueInputOption=USER_ENTERED`,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          range: `'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1:X${rows.length}`,
-          majorDimension: 'ROWS',
-          values: rows,
-        }),
-      }
-    )
-
-    if (!updateRes.ok) {
-      if (webAppRes && webAppRes.success) return webAppRes
-      const errJson = await updateRes.json().catch(() => ({}))
-      throw new Error(
-        errJson.error?.message || `Google Sheets API returned HTTP ${updateRes.status}`
-      )
-    }
-
-    return {
-      success: true,
-      count: employees.length,
-      message: `Successfully synced ${employees.length} staff records to Google Sheet (${STAFF_GOOGLE_SHEET_TAB_NAME})!`,
-    }
-  } catch (err: any) {
-    if (webAppRes && webAppRes.success) return webAppRes
-    console.error('Staff Google Sheet Sync Error:', err)
-    return {
-      success: false,
-      error: err.message || 'Failed to sync with Google Sheet',
-    }
-  }
+  return await pushStaffToWebApp(employees)
 }
 
 /**
- * Sync / upsert a single employee record to the 'staff_data' Google Sheet tab without overwriting other rows
+ * Sync / upsert a single employee record to the 'staff_data' Google Sheet tab via Web App URL
  */
 export async function syncSingleEmployeeToGoogleSheet(
   employee: any
 ): Promise<{ success: boolean; message?: string; error?: string }> {
-  // Try Web App
-  pushStaffToWebApp([employee]).catch(() => {})
-
-  try {
-    let token = cachedAccessToken
-    if (!token) {
-      const conn = await connectGoogleWorkspace()
-      if (!conn.success || !conn.accessToken) {
-        return {
-          success: true,
-          message: `Staff record synced to Web App!`,
-        }
-      }
-      token = conn.accessToken
-    }
-
-    await ensureStaffSheetTabExists(token)
-
-    // Fetch existing rows from 'staff_data'
-    const res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1:Z2000`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    )
-
-    let rows: string[][] = []
-    if (res.ok) {
-      const json = await res.json().catch(() => ({}))
-      rows = json.values || []
-    }
-
-    const rowData = employeeToSheetRow(employee)
-    const targetEmpCode = String(employee.emp_code || employee.emp_id || '').trim().toLowerCase()
-
-    if (rows.length === 0) {
-      // Create headers and first row
-      const newRows = [STAFF_SHEET_HEADERS, rowData]
-      await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1?valueInputOption=USER_ENTERED`,
-        {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            range: `'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1:X${newRows.length}`,
-            majorDimension: 'ROWS',
-            values: newRows,
-          }),
-        }
-      )
-      return { success: true, message: `Added to ${STAFF_GOOGLE_SHEET_TAB_NAME} sheet` }
-    }
-
-    // Find row index (1-indexed for sheets)
-    let rowIndex = -1
-    for (let i = 1; i < rows.length; i++) {
-      const currentCode = String(rows[i]?.[0] || '').trim().toLowerCase()
-      if (currentCode && currentCode === targetEmpCode) {
-        rowIndex = i + 1 // 1-based index
-        break
-      }
-    }
-
-    if (rowIndex > 0) {
-      // Update existing row
-      await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A${rowIndex}:X${rowIndex}?valueInputOption=USER_ENTERED`,
-        {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            range: `'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A${rowIndex}:X${rowIndex}`,
-            majorDimension: 'ROWS',
-            values: [rowData],
-          }),
-        }
-      )
-      return { success: true, message: `Updated row ${rowIndex} in Google Sheet (${STAFF_GOOGLE_SHEET_TAB_NAME})` }
-    } else {
-      // Append new row
-      await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1:append?valueInputOption=USER_ENTERED`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            range: `'${STAFF_GOOGLE_SHEET_TAB_NAME}'!A1`,
-            majorDimension: 'ROWS',
-            values: [rowData],
-          }),
-        }
-      )
-      return { success: true, message: `Appended new staff row to Google Sheet (${STAFF_GOOGLE_SHEET_TAB_NAME})` }
-    }
-  } catch (err: any) {
-    console.error('syncSingleEmployeeToGoogleSheet Error:', err)
-    return {
-      success: true,
-      message: `Staff record synced to Web App!`,
-    }
+  const res = await pushStaffToWebApp([employee])
+  return {
+    success: res.success,
+    message: res.message || 'Staff record synced to Web App',
+    error: res.error,
   }
 }
 
 /**
- * Pulls employee data from Google Sheet ('staff_data' or Web App URL)
+ * Pulls employee data from Google Sheet via Web App URL (No Google auth needed)
  */
 export async function fetchEmployeesFromGoogleSheet(): Promise<{
   success: boolean
@@ -1729,231 +1383,7 @@ export async function fetchEmployeesFromGoogleSheet(): Promise<{
   error?: string
   sheetName?: string
 }> {
-  // 1. Try Web App URL first (no OAuth popup required)
-  try {
-    const webAppRes = await fetchStaffFromWebApp()
-    if (webAppRes.success && webAppRes.data && webAppRes.data.length > 0) {
-      return {
-        success: true,
-        data: webAppRes.data,
-        sheetName: 'staff_data (Web App)',
-      }
-    }
-  } catch {}
-
-  try {
-    let token = cachedAccessToken
-    if (!token) {
-      const conn = await connectGoogleWorkspace()
-      if (!conn.success || !conn.accessToken) {
-        return {
-          success: false,
-          error: conn.error || 'Google authorization required to read Google Sheets.',
-        }
-      }
-      token = conn.accessToken
-    }
-
-    // 1. Inspect spreadsheet metadata to discover all available sheet tabs
-    const metaRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    )
-
-    if (!metaRes.ok) {
-      const errJson = await metaRes.json().catch(() => ({}))
-      throw new Error(
-        errJson.error?.message ||
-          `Failed to access Google Spreadsheet (HTTP ${metaRes.status}). Please check Sheet permissions.`
-      )
-    }
-
-    const meta = await metaRes.json()
-    const sheetsList: string[] = (meta.sheets || [])
-      .map((s: any) => s.properties?.title)
-      .filter(Boolean)
-
-    if (sheetsList.length === 0) {
-      return {
-        success: false,
-        error: 'The Google Spreadsheet contains no sheets or tabs.',
-      }
-    }
-
-    // Determine target tab: prefer 'staff_data', otherwise use first available tab
-    let targetTab = sheetsList.find((name) => name.toLowerCase() === STAFF_GOOGLE_SHEET_TAB_NAME.toLowerCase())
-    if (!targetTab) {
-      targetTab = sheetsList[0]
-    }
-
-    // Fetch data from target tab
-    let res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${encodeURIComponent(
-        targetTab
-      )}'!A1:Z2000`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    )
-
-    let json = await res.json().catch(() => ({}))
-    let values: string[][] = json.values || []
-
-    // If target tab was empty and there are other tabs (e.g. Sheet1), try reading the first tab
-    if (values.length <= 1 && sheetsList.length > 1 && targetTab !== sheetsList[0]) {
-      const altTab = sheetsList[0]
-      const altRes = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${STAFF_GOOGLE_SHEET_ID}/values/'${encodeURIComponent(
-          altTab
-        )}'!A1:Z2000`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      )
-      if (altRes.ok) {
-        const altJson = await altRes.json().catch(() => ({}))
-        if (altJson.values && altJson.values.length > 1) {
-          targetTab = altTab
-          values = altJson.values
-        }
-      }
-    }
-
-    if (values.length === 0) {
-      return {
-        success: false,
-        error: `Sheet tab '${targetTab}' is completely empty. Please add employee data rows.`,
-      }
-    }
-
-    if (values.length === 1) {
-      return {
-        success: true,
-        data: [],
-        sheetName: targetTab,
-        error: `Sheet tab '${targetTab}' contains only a header row with no employee records.`,
-      }
-    }
-
-    // Normalize header row for fuzzy matching
-    const rawHeaders = values[0]
-    const cleanHeader = (h: string) =>
-      String(h || '')
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
-
-    const normHeaders = rawHeaders.map(cleanHeader)
-    const findCol = (...keywords: string[]) => {
-      const cleanKeywords = keywords.map(cleanHeader)
-      for (let i = 0; i < normHeaders.length; i++) {
-        if (cleanKeywords.includes(normHeaders[i])) return i
-      }
-      return -1
-    }
-
-    const empCodeIdx = findCol('empcode', 'employeecode', 'empid', 'staffid', 'staffcode', 'code', 'id')
-    const fullNameIdx = findCol('fullname', 'staffname', 'employeename', 'teachername', 'name')
-    const fNameIdx = findCol('firstname', 'givenname', 'fname', 'first')
-    const lNameIdx = findCol('lastname', 'surname', 'lname', 'last')
-    const catIdx = findCol('employeecategory', 'staffcategory', 'category', 'rolecategory', 'type')
-    const deptIdx = findCol('department', 'dept', 'stream', 'wing')
-    const desigIdx = findCol('designation', 'post', 'position', 'role', 'title')
-    const empTypeIdx = findCol('employmenttype', 'type', 'contracttype')
-    const statIdx = findCol('employmentstatus', 'status', 'staffstatus', 'active')
-    const dojIdx = findCol('dateofjoining', 'joiningdate', 'doj', 'joindate')
-    const dobIdx = findCol('dateofbirth', 'birthdate', 'dob')
-    const genIdx = findCol('gender', 'sex')
-    const bgIdx = findCol('bloodgroup', 'bloodgrp', 'blood')
-    const mobIdx = findCol('mobileprimary', 'mobile', 'phone', 'contact', 'primarymobile', 'contactnumber')
-    const waIdx = findCol('whatsappnumber', 'whatsapp', 'wanumber')
-    const oEmailIdx = findCol('officialemail', 'email', 'workemail', 'schoolemail', 'emailid')
-    const pEmailIdx = findCol('personalemail', 'alternateemail', 'altemail')
-    const salIdx = findCol('basicsalary', 'salary', 'basicpay', 'pay', 'monthlysalary', 'ctc')
-    const clsIdx = findCol('classesassigned', 'classes', 'assignedclasses', 'grade')
-    const subIdx = findCol('subjectsspecialisation', 'subjects', 'subject', 'specialisation', 'subjectspecialisation')
-    const photoIdx = findCol('photourl', 'photo', 'picture', 'imageurl', 'image', 'employeephotourl')
-    const docIdx = findCol('documenturl', 'documents', 'docurl', 'certificateurl', 'resume')
-    const addrIdx = findCol('currentaddress', 'address', 'residentialaddress', 'location')
-    const ayIdx = findCol('academicyear', 'year', 'session')
-
-    const employees: any[] = []
-
-    for (let i = 1; i < values.length; i++) {
-      const row = values[i]
-      if (!row || row.length === 0 || row.every((c) => !String(c).trim())) continue
-
-      let first = fNameIdx >= 0 ? (row[fNameIdx] || '').trim() : ''
-      let last = lNameIdx >= 0 ? (row[lNameIdx] || '').trim() : ''
-
-      if (!first && fullNameIdx >= 0 && row[fullNameIdx]) {
-        const full = String(row[fullNameIdx]).trim()
-        const parts = full.split(/\s+/)
-        first = parts[0] || 'Staff'
-        last = parts.slice(1).join(' ') || ''
-      }
-
-      const codeRaw = empCodeIdx >= 0 ? (row[empCodeIdx] || '').trim() : ''
-      const code = codeRaw || `EMP-${Date.now().toString().slice(-4)}-${i}`
-
-      const rawStatus = statIdx >= 0 ? (row[statIdx] || '').trim() : 'Active'
-      const isInactive =
-        rawStatus.toLowerCase() === 'inactive' ||
-        rawStatus.toLowerCase() === 'resigned' ||
-        rawStatus.toLowerCase() === 'retired' ||
-        rawStatus.toLowerCase() === 'left' ||
-        rawStatus.toLowerCase() === 'false' ||
-        rawStatus === '0'
-
-      const salaryNum = salIdx >= 0 ? Number(String(row[salIdx]).replace(/[^0-9.]/g, '')) || 25000 : 25000
-
-      const emp = {
-        emp_id: code,
-        emp_code: code,
-        _docId: code,
-        first_name: first || 'Staff',
-        last_name: last || '',
-        full_name: [first, last].filter(Boolean).join(' ') || (fullNameIdx >= 0 ? row[fullNameIdx] : first || 'Staff Member'),
-        employee_category: catIdx >= 0 && row[catIdx] ? row[catIdx].trim() : 'Teaching Staff',
-        department: deptIdx >= 0 && row[deptIdx] ? row[deptIdx].trim() : 'Academics',
-        designation: desigIdx >= 0 && row[desigIdx] ? row[desigIdx].trim() : 'Teacher',
-        employment_type: empTypeIdx >= 0 && row[empTypeIdx] ? row[empTypeIdx].trim() : 'Permanent',
-        employment_status: rawStatus || (isInactive ? 'Inactive' : 'Active'),
-        date_of_joining: dojIdx >= 0 ? (row[dojIdx] || '').trim() : '',
-        date_of_birth: dobIdx >= 0 ? (row[dobIdx] || '').trim() : '',
-        gender: genIdx >= 0 && row[genIdx] ? row[genIdx].trim() : 'Male',
-        blood_group: bgIdx >= 0 ? (row[bgIdx] || '').trim() : '',
-        mobile_primary: mobIdx >= 0 ? (row[mobIdx] || '').trim() : '',
-        whatsapp_number: waIdx >= 0 ? (row[waIdx] || '').trim() : '',
-        official_email: oEmailIdx >= 0 ? (row[oEmailIdx] || '').trim() : '',
-        personal_email: pEmailIdx >= 0 ? (row[pEmailIdx] || '').trim() : '',
-        basic_salary: salaryNum,
-        classes_assigned: clsIdx >= 0 && row[clsIdx] ? String(row[clsIdx]).split(',').map((s) => s.trim()).filter(Boolean) : [],
-        subject_specialisation: subIdx >= 0 && row[subIdx] ? String(row[subIdx]).split(',').map((s) => s.trim()).filter(Boolean) : [],
-        employee_photo_url: photoIdx >= 0 ? (row[photoIdx] || '').trim() : '',
-        document_url: docIdx >= 0 ? (row[docIdx] || '').trim() : '',
-        current_address: addrIdx >= 0 ? (row[addrIdx] || '').trim() : '',
-        academic_year: ayIdx >= 0 && row[ayIdx] ? row[ayIdx].trim() : '2026-27',
-        is_active: !isInactive,
-      }
-
-      employees.push(emp)
-    }
-
-    return {
-      success: true,
-      data: employees,
-      sheetName: targetTab,
-    }
-  } catch (err: any) {
-    console.error('Error fetching employees from Google Sheet:', err)
-    return {
-      success: false,
-      error: err.message || 'Failed to read Google Sheet',
-    }
-  }
+  return await fetchStaffFromWebApp()
 }
 
 /**

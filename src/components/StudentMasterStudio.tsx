@@ -33,7 +33,7 @@ import {
   Copy,
   Info,
 } from 'lucide-react'
-import { supabase, logActivity, deleteDocument, saveDocument, fetchCollectionData, subscribeToCollection } from '../lib/firebase'
+import { supabase, logActivity, deleteDocument, saveDocument, saveBatchDocuments, fetchCollectionData, subscribeToCollection } from '../lib/firebase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
 import { downloadSampleCsv } from '../lib/csvUtils'
@@ -238,7 +238,7 @@ export default function StudentMasterStudio({
     return () => unsub()
   }, [])
 
-  // Auto-sync helper to write to Google Sheet
+  // Push all students to Google Sheet via Web App URL (no Google auth)
   const handleSyncToGoogleSheet = async (studentsList?: Student[]) => {
     const listToSync = studentsList || students
     if (listToSync.length === 0) {
@@ -251,9 +251,9 @@ export default function StudentMasterStudio({
       if (res.success) {
         const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })
         setLastSyncTime(timeStr)
-        setToast(`Google Sheet synchronized (${res.count} records) on tab '${GOOGLE_SHEET_TAB_NAME}'!`)
+        setToast(`✓ Google Sheet synced (${res.count || listToSync.length} student records) via Web App!`)
       } else {
-        setToast(`Google Sheet Sync: ${res.error || 'Authentication required'}`)
+        setToast(`Google Sheet Sync: ${res.error || 'Failed to sync with Web App'}`)
       }
     } catch (err: any) {
       setToast(`Sheet Sync Failed: ${err.message || 'Unknown error'}`)
@@ -262,34 +262,45 @@ export default function StudentMasterStudio({
     }
   }
 
-  // Pull records from Google Sheet
+  // Pull records from Google Sheet via Web App URL (no Google auth)
   const handlePullFromGoogleSheet = async () => {
     setSyncingSheet(true)
     try {
       const res = await fetchStudentsFromGoogleSheet()
       if (!res.success || !res.data) {
-        throw new Error(res.error || 'Failed to fetch Google Sheet data')
+        throw new Error(res.error || 'Failed to fetch student data from Web App')
       }
       if (res.data.length === 0) {
-        setToast('No student rows found in Google Sheet.')
+        setToast(res.error || 'No student rows found in Google Sheet.')
         setSyncingSheet(false)
         return
       }
 
-      let saved = 0
-      for (const st of res.data) {
-        const pk = st.admission_no || `ADM-${Date.now().toString().slice(-4)}`
-        await saveDocument('student_master', 'admission_no', {
-          ...st,
-          _docId: pk,
-        })
-        saved++
-      }
+      await saveBatchDocuments('student_master', 'admission_no', res.data)
+      setStudents((prev) => {
+        const incoming = res.data as Student[]
+        const combined = [...incoming, ...prev]
+        const seen = new Set<string>()
+        const deduped: Student[] = []
+        for (const s of combined) {
+          const id = String(s.admission_no || s.student_id || (s as any)._docId || JSON.stringify(s))
+          if (!seen.has(id)) {
+            seen.add(id)
+            deduped.push(s)
+          }
+        }
+        try {
+          localStorage.setItem('sjes_table_student_master', JSON.stringify(deduped))
+          localStorage.setItem('sjes_table_students', JSON.stringify(deduped))
+        } catch {}
+        return deduped
+      })
 
-      setToast(`Successfully imported & synced ${saved} students from Google Sheet!`)
-      await loadStudents()
+      const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })
+      setLastSyncTime(timeStr)
+      setToast(`✓ Successfully imported ${res.data.length} students from Google Sheet via Web App!`)
     } catch (err: any) {
-      setToast(`Pull Error: ${err.message || 'Failed to read Google Sheet'}`)
+      setToast(`Google Sheet Import Error: ${err.message || err}`)
     } finally {
       setSyncingSheet(false)
     }
@@ -658,6 +669,36 @@ export default function StudentMasterStudio({
             title="Import student roster from CSV"
           >
             <Upload size={16} /> Import CSV
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={handleSyncToGoogleSheet}
+            disabled={syncingSheet}
+            title="Sync all current student records directly into linked Google Sheet (student_data)"
+            style={{
+              background: '#f0fdf4',
+              color: '#15803d',
+              borderColor: '#bbf7d0',
+              fontWeight: 600,
+            }}
+          >
+            <RefreshCw size={16} className={syncingSheet ? 'spin' : ''} />
+            {syncingSheet ? 'Syncing...' : 'Sync with Google Sheet'}
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={handlePullFromGoogleSheet}
+            disabled={syncingSheet}
+            title="Import or update student records directly from linked Google Sheet"
+            style={{
+              background: '#eff6ff',
+              color: '#1d4ed8',
+              borderColor: '#93c5fd',
+              fontWeight: 600,
+            }}
+          >
+            <FileSpreadsheet size={16} className={syncingSheet ? 'spin' : ''} />
+            {syncingSheet ? 'Importing Sheet...' : 'Import Google Sheet'}
           </button>
           <button
             className="btn-secondary"
