@@ -97,7 +97,7 @@ export default function DepartmentMasterStudio({
         // use default
       }
     }
-    return DEFAULT_DEPARTMENTS;
+    return [];
   });
 
   const [loading, setLoading] = useState(false);

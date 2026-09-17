@@ -90,7 +90,7 @@ export async function saveSupabaseRecord(
 }
 
 /**
- * Delete a record from Supabase
+ * Delete a record from Supabase and purge from all local caches
  */
 export async function deleteSupabaseRecord(
   tableName: string,
@@ -98,24 +98,73 @@ export async function deleteSupabaseRecord(
   matchValue: any
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const cacheKey = `sjes_table_${tableName}`
+    const valStr = String(matchValue || '').trim()
+    if (!valStr) return { success: true }
+
+    // List of possible cache keys to purge
+    const cacheKeys = [
+      `sjes_table_${tableName}`,
+      tableName === 'student_master' ? 'sjes_table_students' : null,
+      tableName === 'employee_master' ? 'sjes_table_employees' : null,
+      tableName === 'employee_master' ? 'sjes_table_staff' : null,
+      tableName === 'department_master' ? 'sjes_department_master' : null,
+    ].filter(Boolean) as string[]
+
     if (typeof window !== 'undefined' && window.localStorage) {
-      try {
-        const cachedStr = localStorage.getItem(cacheKey)
-        if (cachedStr) {
-          const list: any[] = JSON.parse(cachedStr)
-          const filtered = list.filter((item) => String(item[matchField]) !== String(matchValue))
-          localStorage.setItem(cacheKey, JSON.stringify(filtered))
+      for (const cacheKey of cacheKeys) {
+        try {
+          const cachedStr = localStorage.getItem(cacheKey)
+          if (cachedStr) {
+            const list: any[] = JSON.parse(cachedStr)
+            const filtered = list.filter((item) => {
+              const itemVals = [
+                item._docId,
+                item.id,
+                item.student_id,
+                item.admission_no,
+                item.emp_id,
+                item.emp_code,
+                item.department_id,
+                item.department_code,
+                item.vendor_id,
+                item.vendor_code,
+                item.class_id,
+                item.subject_id,
+                item.asset_id,
+                item.item_id,
+                item.fee_id,
+                item.notice_id,
+                item.assignment_id,
+                item.expense_id,
+                item.income_id,
+                item.slip_id,
+                item.code,
+                item[matchField],
+              ].map((v) => String(v || '').trim())
+
+              return !itemVals.includes(valStr)
+            })
+            localStorage.setItem(cacheKey, JSON.stringify(filtered))
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
       }
     }
 
-    const { error } = await supabase.from(tableName).delete().eq(matchField, matchValue)
-    if (error) {
-      console.warn(`Supabase delete note for ${tableName}:`, error.message)
+    // Attempt delete in Supabase across possible primary key column names
+    const deleteFields = [matchField, '_docId', 'id', 'admission_no', 'emp_code', 'department_code', 'vendor_code', 'code'].filter(
+      (v, i, a) => a.indexOf(v) === i
+    )
+
+    for (const field of deleteFields) {
+      try {
+        await supabase.from(tableName).delete().eq(field, matchValue)
+      } catch {
+        // try next
+      }
     }
+
     return { success: true }
   } catch (err: any) {
     return { success: true }

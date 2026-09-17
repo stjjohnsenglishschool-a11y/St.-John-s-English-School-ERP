@@ -365,7 +365,7 @@ function App() {
       setRows(rowsData);
       localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(rowsData));
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Failed to load records from Firebase");
+      setToast(e instanceof Error ? e.message : "Failed to load records from Supabase");
     } finally {
       setLoading(false);
     }
@@ -389,7 +389,7 @@ function App() {
       if (mod) {
         await refresh();
       }
-      setToast("✓ Live Cloud Sync Complete: Synchronized with Firebase Firestore!");
+      setToast("✓ Live Cloud Sync Complete: Synchronized with Supabase!");
     } catch (e: any) {
       setToast(e?.message || "Sync completed.");
     } finally {
@@ -525,7 +525,7 @@ function App() {
   };
 
   if (!authReady)
-    return <div className="auth-loading">Connecting to Firebase…</div>;
+    return <div className="auth-loading">Connecting to Supabase…</div>;
 
   if (
     loggedOut ||
@@ -1058,13 +1058,13 @@ function App() {
           <strong>{active === "Overview" ? "Dashboard" : moduleName(active)}</strong>
         </div>
         <div>
-          <button onClick={() => handleGlobalSync()} title="Sync live data from Firebase">
+          <button onClick={() => handleGlobalSync()} title="Sync live data from Supabase">
             <RefreshCw className={loading ? "spin" : ""} />
             <span>Sync Live Data</span>
           </button>
           <span className="live">
             <i />
-            Live Firebase
+            Live Supabase
           </span>
         </div>
       </div>
@@ -1983,7 +1983,7 @@ function RecordModal({
             <p>
               {mode === "view"
                 ? "Review saved database record."
-                : "Complete the fields below. Changes persist directly to Firebase."}
+                : "Complete the fields below. Changes persist directly to Supabase."}
             </p>
           </div>
           <button type="button" onClick={close} aria-label="Close modal">

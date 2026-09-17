@@ -179,7 +179,7 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
           <div className="auth-features">
             <b>
               <GraduationCap />
-              Connected directly to Firebase Cloud Database
+              Connected directly to Supabase Database
             </b>
             <b>
               <ShieldCheck />

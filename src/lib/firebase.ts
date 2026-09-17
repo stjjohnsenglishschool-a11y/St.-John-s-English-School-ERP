@@ -117,6 +117,15 @@ export async function uploadToFirebaseStorage(
  * Fetch all documents from a Supabase collection/table with local caching fallback
  */
 export async function fetchCollectionData<T = any>(collectionName: string): Promise<T[]> {
+  try {
+    const supaData = await fetchSupabaseTable<T>(collectionName)
+    if (supaData && Array.isArray(supaData)) {
+      return supaData
+    }
+  } catch (err) {
+    console.warn(`Supabase fetch error for ${collectionName}:`, err)
+  }
+
   let cachedResults: T[] = []
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
@@ -132,7 +141,7 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
         const cached = localStorage.getItem(k)
         if (cached) {
           const parsed = JSON.parse(cached)
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed)) {
             cachedResults = parsed as T[]
             break
           }
@@ -141,15 +150,6 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
     } catch {
       // ignore
     }
-  }
-
-  try {
-    const supaData = await fetchSupabaseTable<T>(collectionName)
-    if (supaData && supaData.length > 0) {
-      return supaData
-    }
-  } catch (err) {
-    console.warn(`Supabase fetch error for ${collectionName}:`, err)
   }
 
   return cachedResults

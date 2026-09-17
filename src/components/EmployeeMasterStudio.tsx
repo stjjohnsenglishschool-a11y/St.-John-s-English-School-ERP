@@ -220,32 +220,17 @@ export default function EmployeeMasterStudio({
     })
   }, [])
 
-  // Load Employees from Firebase / Firestore & local storage fallback
+  // Load Employees from Supabase
   const loadEmployees = async () => {
     setLoading(true)
     try {
       const data = await fetchCollectionData('employee_master')
-      if (data && data.length > 0) {
-        setEmployees(data as Employee[])
-        try {
-          localStorage.setItem('sjes_table_employee_master', JSON.stringify(data))
-          localStorage.setItem('sjes_table_employees', JSON.stringify(data))
-        } catch {}
-      } else {
-        // Check local storage directly as fallback
-        const cached =
-          localStorage.getItem('sjes_table_employee_master') ||
-          localStorage.getItem('sjes_table_employees') ||
-          localStorage.getItem('sjes_table_staff')
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached)
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setEmployees(parsed as Employee[])
-            }
-          } catch {}
-        }
-      }
+      const empList = (data || []) as Employee[]
+      setEmployees(empList)
+      try {
+        localStorage.setItem('sjes_table_employee_master', JSON.stringify(empList))
+        localStorage.setItem('sjes_table_employees', JSON.stringify(empList))
+      } catch {}
     } catch (err) {
       console.warn('Error loading employees:', err)
       setToast(err instanceof Error ? err.message : 'Failed to load employees')
@@ -257,31 +242,15 @@ export default function EmployeeMasterStudio({
   useEffect(() => {
     loadEmployees()
 
-    // Realtime subscription to Firebase Firestore
+    // Realtime subscription to Supabase
     const unsub = subscribeToCollection('employee_master', (data) => {
-      if (data && data.length > 0) {
-        setEmployees((prev) => {
-          // Merge remote with local to ensure zero data loss
-          const remoteMap = new Map<string, Employee>()
-          data.forEach((d: any) => {
-            const id = String(d.emp_code || d.emp_id || d._docId)
-            remoteMap.set(id, d)
-          })
-          const merged: Employee[] = [...data]
-          prev.forEach((localEmp) => {
-            const id = String(localEmp.emp_code || localEmp.emp_id || (localEmp as any)._docId)
-            if (id && !remoteMap.has(id)) {
-              merged.push(localEmp)
-            }
-          })
-          try {
-            localStorage.setItem('sjes_table_employee_master', JSON.stringify(merged))
-            localStorage.setItem('sjes_table_employees', JSON.stringify(merged))
-          } catch {}
-          return merged
-        })
-        setLoading(false)
-      }
+      const empList = (data || []) as Employee[]
+      setEmployees(empList)
+      try {
+        localStorage.setItem('sjes_table_employee_master', JSON.stringify(empList))
+        localStorage.setItem('sjes_table_employees', JSON.stringify(empList))
+      } catch {}
+      setLoading(false)
     })
 
     return () => {

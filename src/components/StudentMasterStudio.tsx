@@ -199,22 +199,11 @@ export default function StudentMasterStudio({
     try {
       const data = await fetchCollectionData('student_master')
       const sanitized = (data || []).map(sanitizeStudentRecord)
-      if (sanitized && sanitized.length > 0) {
-        setStudents(sanitized)
-        try {
-          localStorage.setItem('sjes_table_student_master', JSON.stringify(sanitized))
-          localStorage.setItem('sjes_table_students', JSON.stringify(sanitized))
-        } catch {}
-      } else {
-        // Fallback to local storage if remote returned empty
-        const cached = localStorage.getItem('sjes_table_student_master') || localStorage.getItem('sjes_table_students')
-        if (cached) {
-          const parsed = JSON.parse(cached)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setStudents(parsed.map(sanitizeStudentRecord))
-          }
-        }
-      }
+      setStudents(sanitized)
+      try {
+        localStorage.setItem('sjes_table_student_master', JSON.stringify(sanitized))
+        localStorage.setItem('sjes_table_students', JSON.stringify(sanitized))
+      } catch {}
     } catch (err: any) {
       console.warn('Error loading students:', err)
       setToast(err?.message || 'Failed to load students')
@@ -226,14 +215,12 @@ export default function StudentMasterStudio({
   useEffect(() => {
     loadStudents()
     const unsub = subscribeToCollection<Student>('student_master', (data) => {
-      if (data && data.length > 0) {
-        const sanitized = data.map(sanitizeStudentRecord)
-        setStudents(sanitized)
-        try {
-          localStorage.setItem('sjes_table_student_master', JSON.stringify(sanitized))
-          localStorage.setItem('sjes_table_students', JSON.stringify(sanitized))
-        } catch {}
-      }
+      const sanitized = (data || []).map(sanitizeStudentRecord)
+      setStudents(sanitized)
+      try {
+        localStorage.setItem('sjes_table_student_master', JSON.stringify(sanitized))
+        localStorage.setItem('sjes_table_students', JSON.stringify(sanitized))
+      } catch {}
     })
     return () => unsub()
   }, [])
