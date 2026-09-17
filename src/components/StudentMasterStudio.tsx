@@ -33,7 +33,7 @@ import {
   Copy,
   Info,
 } from 'lucide-react'
-import { supabase, logActivity, deleteDocument, saveDocument, fetchCollectionData } from '../lib/firebase'
+import { supabase, logActivity, deleteDocument, saveDocument, fetchCollectionData, subscribeToCollection } from '../lib/firebase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
 import { modules } from '../modules'
 import { downloadSampleCsv } from '../lib/csvUtils'
@@ -92,7 +92,20 @@ export default function StudentMasterStudio({
   onNavigateToIdCard?: (studentId: string) => void
   onNavigateToFees?: (studentId: string) => void
 }) {
-  const [students, setStudents] = useState<Student[]>([])
+  const [students, setStudents] = useState<Student[]>(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cached =
+          localStorage.getItem('sjes_table_student_master') ||
+          localStorage.getItem('sjes_table_students')
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        }
+      } catch {}
+    }
+    return []
+  })
   const [classes, setClasses] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -186,7 +199,22 @@ export default function StudentMasterStudio({
     try {
       const data = await fetchCollectionData('student_master')
       const sanitized = (data || []).map(sanitizeStudentRecord)
-      setStudents(sanitized)
+      if (sanitized && sanitized.length > 0) {
+        setStudents(sanitized)
+        try {
+          localStorage.setItem('sjes_table_student_master', JSON.stringify(sanitized))
+          localStorage.setItem('sjes_table_students', JSON.stringify(sanitized))
+        } catch {}
+      } else {
+        // Fallback to local storage if remote returned empty
+        const cached = localStorage.getItem('sjes_table_student_master') || localStorage.getItem('sjes_table_students')
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setStudents(parsed.map(sanitizeStudentRecord))
+          }
+        }
+      }
     } catch (err: any) {
       console.warn('Error loading students:', err)
       setToast(err?.message || 'Failed to load students')
@@ -197,6 +225,17 @@ export default function StudentMasterStudio({
 
   useEffect(() => {
     loadStudents()
+    const unsub = subscribeToCollection<Student>('student_master', (data) => {
+      if (data && data.length > 0) {
+        const sanitized = data.map(sanitizeStudentRecord)
+        setStudents(sanitized)
+        try {
+          localStorage.setItem('sjes_table_student_master', JSON.stringify(sanitized))
+          localStorage.setItem('sjes_table_students', JSON.stringify(sanitized))
+        } catch {}
+      }
+    })
+    return () => unsub()
   }, [])
 
   // Auto-sync helper to write to Google Sheet

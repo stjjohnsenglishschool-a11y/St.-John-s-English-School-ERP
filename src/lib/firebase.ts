@@ -325,6 +325,14 @@ export async function saveDocument(
           cachedList = [updatedItem, ...cachedList]
         }
         localStorage.setItem(cacheKey, JSON.stringify(cachedList))
+        if (collectionName === 'employee_master') {
+          localStorage.setItem('sjes_table_employees', JSON.stringify(cachedList))
+          localStorage.setItem('sjes_table_staff', JSON.stringify(cachedList))
+        } else if (collectionName === 'student_master') {
+          localStorage.setItem('sjes_table_students', JSON.stringify(cachedList))
+        } else if (collectionName === 'department_master') {
+          localStorage.setItem('sjes_department_master', JSON.stringify(cachedList))
+        }
       } catch {
         // ignore localStorage error
       }
@@ -419,7 +427,12 @@ export async function saveBatchDocuments(
         }
       }
       localStorage.setItem(cacheKey, JSON.stringify(deduped))
-      if (collectionName === 'department_master') {
+      if (collectionName === 'employee_master') {
+        localStorage.setItem('sjes_table_employees', JSON.stringify(deduped))
+        localStorage.setItem('sjes_table_staff', JSON.stringify(deduped))
+      } else if (collectionName === 'student_master') {
+        localStorage.setItem('sjes_table_students', JSON.stringify(deduped))
+      } else if (collectionName === 'department_master') {
         localStorage.setItem('sjes_department_master', JSON.stringify(deduped))
       }
     } catch {

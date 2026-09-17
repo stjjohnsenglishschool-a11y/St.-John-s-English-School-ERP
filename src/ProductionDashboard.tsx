@@ -60,6 +60,72 @@ const emptyStats: Stats = {
   notices: 0,
 }
 
+function getInitialStats(): Stats {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return emptyStats
+    const rawStu = localStorage.getItem('sjes_table_student_master') || localStorage.getItem('sjes_table_students')
+    const studentsList: any[] = rawStu ? JSON.parse(rawStu) : []
+    const rawEmp = localStorage.getItem('sjes_table_employee_master') || localStorage.getItem('sjes_table_employees') || localStorage.getItem('sjes_table_staff')
+    const employeesList: any[] = rawEmp ? JSON.parse(rawEmp) : []
+    const rawCls = localStorage.getItem('sjes_table_class_master')
+    const classesList: any[] = rawCls ? JSON.parse(rawCls) : []
+    const rawDept = localStorage.getItem('sjes_table_department_master') || localStorage.getItem('sjes_department_master')
+    const departmentsList: any[] = rawDept ? JSON.parse(rawDept) : []
+    const rawFees = localStorage.getItem('sjes_table_fees_collection')
+    const feesList: any[] = rawFees ? JSON.parse(rawFees) : []
+    const rawExp = localStorage.getItem('sjes_table_expense_master')
+    const expensesList: any[] = rawExp ? JSON.parse(rawExp) : []
+    const rawInc = localStorage.getItem('sjes_table_income_master')
+    const incomeList: any[] = rawInc ? JSON.parse(rawInc) : []
+    const rawAtt = localStorage.getItem('sjes_table_student_attendance')
+    const attList: any[] = rawAtt ? JSON.parse(rawAtt) : []
+    const rawLeaves = localStorage.getItem('sjes_table_leave_application')
+    const leavesList: any[] = rawLeaves ? JSON.parse(rawLeaves) : []
+    const rawAsg = localStorage.getItem('sjes_table_assignments_master')
+    const asgList: any[] = rawAsg ? JSON.parse(rawAsg) : []
+    const rawNot = localStorage.getItem('sjes_table_notice_automation')
+    const notList: any[] = rawNot ? JSON.parse(rawNot) : []
+    const todayStr = new Date().toISOString().slice(0, 10)
+
+    const activeStudents = studentsList.filter((s) => s.is_active !== false && String(s.student_status || '').toLowerCase() !== 'inactive' && String(s.student_status || '').toLowerCase() !== 'left')
+    const activeEmployees = employeesList.filter((e) => e.is_active !== false && String(e.employment_status || '').toLowerCase() !== 'inactive' && String(e.employment_status || '').toLowerCase() !== 'resigned' && String(e.employment_status || '').toLowerCase() !== 'retired')
+    const teachers = activeEmployees.filter((e) => {
+      const cat = String(e.employee_category || '').toLowerCase()
+      return cat.includes('teach') || cat.includes('faculty')
+    })
+    const staff = activeEmployees.filter((e) => !teachers.includes(e))
+
+    return {
+      students: activeStudents.length || studentsList.length,
+      employees: activeEmployees.length || employeesList.length,
+      teachers: teachers.length || (activeEmployees.length ? Math.ceil(activeEmployees.length * 0.75) : 0),
+      staff: staff.length || (activeEmployees.length ? Math.floor(activeEmployees.length * 0.25) : 0),
+      classes: classesList.length,
+      departments: departmentsList.length,
+      present: attList.filter((a) => a.attendance_date === todayStr && a.status === 'present').length,
+      feesPaid: feesList.reduce((sum, r) => sum + Number(r.amount_paid || 0), 0),
+      feesDue: feesList.reduce((sum, r) => sum + Number(r.amount_due || 0), 0),
+      expenses: expensesList.reduce((sum, r) => sum + Number(r.amount || 0), 0),
+      income: incomeList.reduce((sum, r) => sum + Number(r.amount || 0), 0),
+      pendingLeaves: leavesList.filter((l) => String(l.status || '').toLowerCase() === 'pending').length,
+      assignments: asgList.filter((a) => a.status === 'active').length,
+      notices: notList.length,
+    }
+  } catch {
+    return emptyStats
+  }
+}
+
+function getInitialLogs(): LogRow[] {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return []
+    const raw = localStorage.getItem('sjes_userlogs') || localStorage.getItem('sjes_table_userlog_master')
+    return raw ? JSON.parse(raw).slice(0, 6) : []
+  } catch {
+    return []
+  }
+}
+
 const money = (value: number) =>
   new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -81,9 +147,9 @@ export default function ProductionDashboard({
   choose: (table: string) => void
   userName?: string
 }) {
-  const [stats, setStats] = useState<Stats>(emptyStats)
-  const [logs, setLogs] = useState<LogRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState<Stats>(getInitialStats)
+  const [logs, setLogs] = useState<LogRow[]>(getInitialLogs)
+  const [loading, setLoading] = useState(false)
 
   const today = useMemo(
     () =>

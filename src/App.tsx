@@ -271,19 +271,6 @@ function App() {
 
   useEffect(() => {
     setAuthReady(true);
-    // Purge any legacy dummy student/fees records from browser cache
-    try {
-      const studentCache = localStorage.getItem("sjes_table_student_master");
-      if (studentCache && (studentCache.includes("Aarav") || studentCache.includes("Banerjee") || studentCache.includes("ADM-2026-001"))) {
-        localStorage.removeItem("sjes_table_student_master");
-      }
-      const feesCache = localStorage.getItem("sjes_table_fees_collection");
-      if (feesCache && (feesCache.includes("RCPT-2026-101") || feesCache.includes("Aarav"))) {
-        localStorage.removeItem("sjes_table_fees_collection");
-      }
-    } catch {
-      // ignore
-    }
   }, []);
 
   // Auto-initialize annual leave balances for all active school staff
