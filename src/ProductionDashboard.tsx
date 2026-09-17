@@ -193,18 +193,13 @@ export default function ProductionDashboard({
           .eq('is_active', true),
         client
           .from('employee_master')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_active', true),
+          .select('is_active,employment_status,employee_category'),
         client
           .from('employee_master')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_active', true)
-          .eq('employee_category', 'Teaching Staff'),
+          .select('is_active,employment_status,employee_category'),
         client
           .from('employee_master')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_active', true)
-          .neq('employee_category', 'Teaching Staff'),
+          .select('is_active,employment_status,employee_category'),
         client
           .from('class_master')
           .select('*', { count: 'exact', head: true })
@@ -239,11 +234,23 @@ export default function ProductionDashboard({
           .limit(6),
       ])
 
+      const activeEmpList = (employees.data || []).filter(
+        (e) =>
+          e.is_active !== false &&
+          e.employment_status !== 'Inactive' &&
+          e.employment_status !== 'Resigned' &&
+          e.employment_status !== 'Retired' &&
+          e.employment_status !== 'Left' &&
+          e.employment_status !== 'Suspended'
+      )
+      const teacherCount = activeEmpList.filter((e) => e.employee_category === 'Teaching Staff').length
+      const staffCount = activeEmpList.filter((e) => e.employee_category !== 'Teaching Staff').length
+
       setStats({
         students: students.count ?? 0,
-        employees: employees.count ?? 0,
-        teachers: teachers.count ?? 0,
-        staff: staff.count ?? 0,
+        employees: activeEmpList.length,
+        teachers: teacherCount,
+        staff: staffCount,
         classes: classes.count ?? 0,
         departments: departments.count ?? 0,
         present: attendance.count ?? 0,
@@ -288,6 +295,11 @@ export default function ProductionDashboard({
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'student_master' },
+        () => loadData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'employee_master' },
         () => loadData()
       )
       .on(

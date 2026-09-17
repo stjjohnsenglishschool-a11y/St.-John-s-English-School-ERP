@@ -120,21 +120,7 @@ export default function EmployeeMasterStudio({
   onGenerateSalarySlip?: (emp: Employee) => void
   onGenerateIdCard?: (empId: string) => void
 }) {
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      try {
-        const cached =
-          localStorage.getItem('sjes_table_employee_master') ||
-          localStorage.getItem('sjes_table_employees') ||
-          localStorage.getItem('sjes_table_staff')
-        if (cached) {
-          const parsed = JSON.parse(cached)
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed
-        }
-      } catch {}
-    }
-    return []
-  })
+  const [employees, setEmployees] = useState<Employee[]>([])
   const [departments, setDepartments] = useState<string[]>([])
   const [classesList, setClassesList] = useState<string[]>([])
   const [subjectsList, setSubjectsList] = useState<string[]>([])
@@ -220,20 +206,16 @@ export default function EmployeeMasterStudio({
     })
   }, [])
 
-  // Load Employees from Supabase
+  // Load Employees directly from Supabase (Live Source of Truth)
   const loadEmployees = async () => {
     setLoading(true)
     try {
       const data = await fetchCollectionData('employee_master')
       const empList = (data || []) as Employee[]
       setEmployees(empList)
-      try {
-        localStorage.setItem('sjes_table_employee_master', JSON.stringify(empList))
-        localStorage.setItem('sjes_table_employees', JSON.stringify(empList))
-      } catch {}
     } catch (err) {
       console.warn('Error loading employees:', err)
-      setToast(err instanceof Error ? err.message : 'Failed to load employees')
+      setToast(err instanceof Error ? err.message : 'Failed to load employees from Supabase')
     } finally {
       setLoading(false)
     }
@@ -242,14 +224,10 @@ export default function EmployeeMasterStudio({
   useEffect(() => {
     loadEmployees()
 
-    // Realtime subscription to Supabase
+    // Realtime subscription to Supabase employee_master table
     const unsub = subscribeToCollection('employee_master', (data) => {
       const empList = (data || []) as Employee[]
       setEmployees(empList)
-      try {
-        localStorage.setItem('sjes_table_employee_master', JSON.stringify(empList))
-        localStorage.setItem('sjes_table_employees', JSON.stringify(empList))
-      } catch {}
       setLoading(false)
     })
 
@@ -265,9 +243,15 @@ export default function EmployeeMasterStudio({
       emp.is_active !== false &&
       emp.employment_status !== 'Inactive' &&
       emp.employment_status !== 'Resigned' &&
-      emp.employment_status !== 'Retired'
+      emp.employment_status !== 'Retired' &&
+      emp.employment_status !== 'Left' &&
+      emp.employment_status !== 'Suspended'
+
     const newActive = !currentlyActive
     const newStatus = newActive ? 'Active' : 'Inactive'
+
+    const displayName = [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.emp_code || 'Staff'
+    setToast(`Saving status '${newStatus}' for ${displayName} directly to Supabase...`)
 
     const updatedEmp: Employee = {
       ...emp,
@@ -276,29 +260,21 @@ export default function EmployeeMasterStudio({
       updated_at: new Date().toISOString(),
     }
 
-    setEmployees((prev) => {
-      const updated = prev.map((item) =>
-        item.emp_code === emp.emp_code ||
-        item.emp_id === emp.emp_id ||
-        (item as any)._docId === (emp as any)._docId
-          ? updatedEmp
-          : item
-      )
-      try {
-        localStorage.setItem('sjes_table_employee_master', JSON.stringify(updated))
-        localStorage.setItem('sjes_table_employees', JSON.stringify(updated))
-      } catch {}
-      return updated
-    })
-
     const pk = emp.emp_code || emp.emp_id || (emp as any)._docId || `EMP-${Date.now()}`
-    await saveDocument('employee_master', 'emp_code', {
+    const res = await saveDocument('employee_master', 'emp_code', {
       ...updatedEmp,
       _docId: pk,
     })
 
-    const displayName = [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.emp_code || 'Staff'
-    setToast(`✓ Staff member ${displayName} marked as ${newStatus}`)
+    if (!res.success) {
+      setToast(`❌ Supabase update failed: ${res.error || 'Could not save status change'}`)
+      return
+    }
+
+    // Immediately re-fetch live data from Supabase to verify status
+    await loadEmployees()
+
+    setToast(`✓ ${displayName} status updated to '${newStatus}' in Supabase`)
 
     // Real-time synchronization to Google Sheet (staff_data)
     syncSingleEmployeeToGoogleSheet(updatedEmp).catch(() => {})
@@ -306,7 +282,17 @@ export default function EmployeeMasterStudio({
 
   // Quick change employee status
   const handleQuickChangeEmployeeStatus = async (emp: Employee, newStatus: string) => {
-    const isActive = newStatus === 'Active' || newStatus === 'On Leave'
+    const isInactive =
+      newStatus === 'Inactive' ||
+      newStatus === 'Resigned' ||
+      newStatus === 'Retired' ||
+      newStatus === 'Left' ||
+      newStatus === 'Suspended'
+
+    const isActive = !isInactive
+    const displayName = [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.emp_code || 'Staff'
+    setToast(`Saving status '${newStatus}' for ${displayName} directly to Supabase...`)
+
     const updatedEmp: Employee = {
       ...emp,
       is_active: isActive,
@@ -314,29 +300,21 @@ export default function EmployeeMasterStudio({
       updated_at: new Date().toISOString(),
     }
 
-    setEmployees((prev) => {
-      const updated = prev.map((item) =>
-        item.emp_code === emp.emp_code ||
-        item.emp_id === emp.emp_id ||
-        (item as any)._docId === (emp as any)._docId
-          ? updatedEmp
-          : item
-      )
-      try {
-        localStorage.setItem('sjes_table_employee_master', JSON.stringify(updated))
-        localStorage.setItem('sjes_table_employees', JSON.stringify(updated))
-      } catch {}
-      return updated
-    })
-
     const pk = emp.emp_code || emp.emp_id || (emp as any)._docId || `EMP-${Date.now()}`
-    await saveDocument('employee_master', 'emp_code', {
+    const res = await saveDocument('employee_master', 'emp_code', {
       ...updatedEmp,
       _docId: pk,
     })
 
-    const displayName = [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.emp_code || 'Staff'
-    setToast(`✓ ${displayName} status updated to '${newStatus}'`)
+    if (!res.success) {
+      setToast(`❌ Supabase update failed: ${res.error || 'Could not save status change'}`)
+      return
+    }
+
+    // Immediately re-fetch live data from Supabase to verify status
+    await loadEmployees()
+
+    setToast(`✓ ${displayName} status updated to '${newStatus}' in Supabase`)
 
     // Real-time synchronization to Google Sheet (staff_data)
     syncSingleEmployeeToGoogleSheet(updatedEmp).catch(() => {})
@@ -688,26 +666,7 @@ export default function EmployeeMasterStudio({
         setToast('Staff record updated successfully')
       }
 
-      // Update local state immediately so user sees it right away
-      setEmployees((prev) => {
-        const targetCode = String(payload.emp_code || payload.emp_id || '').toLowerCase()
-        const existingIdx = prev.findIndex(
-          (e) => String(e.emp_code || e.emp_id || (e as any)._docId || '').toLowerCase() === targetCode
-        )
-        let updated: Employee[]
-        if (existingIdx >= 0) {
-          updated = [...prev]
-          updated[existingIdx] = { ...updated[existingIdx], ...payload }
-        } else {
-          updated = [payload as Employee, ...prev]
-        }
-        try {
-          localStorage.setItem('sjes_table_employee_master', JSON.stringify(updated))
-          localStorage.setItem('sjes_table_employees', JSON.stringify(updated))
-        } catch {}
-        return updated
-      })
-
+      await loadEmployees()
       closeModal()
 
       // Real-time synchronization to Google Sheet (staff_data)
@@ -738,16 +697,7 @@ export default function EmployeeMasterStudio({
         action: `Deleted employee: ${emp.first_name} ${emp.last_name} (${emp.emp_code})`,
         module: 'employee_master',
       })
-      setEmployees((prev) => {
-        const updated = prev.filter(
-          (e) => e.emp_code !== emp.emp_code && e.emp_id !== emp.emp_id && (e as any)._docId !== eId
-        )
-        try {
-          localStorage.setItem('sjes_table_employee_master', JSON.stringify(updated))
-          localStorage.setItem('sjes_table_employees', JSON.stringify(updated))
-        } catch {}
-        return updated
-      })
+      await loadEmployees()
       setToast('Employee record deleted')
     } catch (err) {
       setToast(err instanceof Error ? err.message : 'Delete failed')

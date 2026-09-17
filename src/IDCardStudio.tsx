@@ -97,8 +97,13 @@ export default function IDCardStudio({
     } else {
       supabase
         .from('employee_master')
-        .select('emp_id,emp_code,first_name,last_name,designation,department,mobile_primary,employee_photo_url')
+        .select('emp_id,emp_code,first_name,last_name,designation,department,mobile_primary,employee_photo_url,employment_status')
         .eq('is_active', true)
+        .neq('employment_status', 'Inactive')
+        .neq('employment_status', 'Resigned')
+        .neq('employment_status', 'Retired')
+        .neq('employment_status', 'Left')
+        .neq('employment_status', 'Suspended')
         .order('first_name')
         .then(({ data, error }) => {
           if (error) {

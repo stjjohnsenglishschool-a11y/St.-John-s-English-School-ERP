@@ -10,183 +10,130 @@ export const SUPABASE_ANON_KEY =
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 /**
- * Fetch all records from a Supabase table with local caching
+ * Fetch all records directly from Supabase (Live Source of Truth)
  */
 export async function fetchSupabaseTable<T = any>(tableName: string): Promise<T[]> {
-  const cacheKey = `sjes_table_${tableName}`
-  let localData: T[] = []
-
-  if (typeof window !== 'undefined' && window.localStorage) {
+  // Purge any stale employee local storage caches to prevent stale data display
+  if (typeof window !== 'undefined' && window.localStorage && (tableName === 'employee_master' || tableName === 'employees')) {
     try {
-      const keysToCheck = [
-        cacheKey,
-        tableName === 'employee_master' ? 'sjes_table_employees' : null,
-        tableName === 'employee_master' ? 'sjes_table_staff' : null,
-        tableName === 'student_master' ? 'sjes_table_students' : null,
-      ].filter(Boolean) as string[]
-
-      for (const k of keysToCheck) {
-        const cached = localStorage.getItem(k)
-        if (cached) {
-          const parsed = JSON.parse(cached)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            localData = parsed
-            break
-          }
-        }
-      }
-    } catch {
-      // ignore cache error
-    }
+      localStorage.removeItem('sjes_table_employee_master')
+      localStorage.removeItem('sjes_table_employees')
+      localStorage.removeItem('sjes_table_staff')
+    } catch {}
   }
 
   try {
     const { data, error } = await supabase.from(tableName).select('*')
-    if (!error && Array.isArray(data) && data.length > 0) {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        try {
-          // Merge remote data with local cache if local cache has newer updated_at timestamp
-          if (localData.length > 0) {
-            const remoteMap = new Map<string, any>()
-            data.forEach((item: any) => {
-              const k = String(
-                item.emp_code ||
-                  item.emp_id ||
-                  item.admission_no ||
-                  item.student_id ||
-                  item._docId ||
-                  item.id ||
-                  item.code ||
-                  ''
-              ).toLowerCase()
-              if (k) remoteMap.set(k, item)
-            })
-
-            localData.forEach((locItem: any) => {
-              const k = String(
-                locItem.emp_code ||
-                  locItem.emp_id ||
-                  locItem.admission_no ||
-                  locItem.student_id ||
-                  locItem._docId ||
-                  locItem.id ||
-                  locItem.code ||
-                  ''
-              ).toLowerCase()
-              if (k) {
-                const remoteItem = remoteMap.get(k)
-                if (!remoteItem) {
-                  remoteMap.set(k, locItem)
-                } else {
-                  const locTime = new Date(locItem.updated_at || 0).getTime()
-                  const remTime = new Date(remoteItem.updated_at || 0).getTime()
-                  if (locTime > remTime) {
-                    remoteMap.set(k, { ...remoteItem, ...locItem })
-                  }
-                }
-              }
-            })
-
-            const merged = Array.from(remoteMap.values())
-            localStorage.setItem(cacheKey, JSON.stringify(merged))
-            if (tableName === 'employee_master') {
-              localStorage.setItem('sjes_table_employees', JSON.stringify(merged))
-              localStorage.setItem('sjes_table_staff', JSON.stringify(merged))
-            }
-            return merged as T[]
-          } else {
-            localStorage.setItem(cacheKey, JSON.stringify(data))
-            if (tableName === 'employee_master') {
-              localStorage.setItem('sjes_table_employees', JSON.stringify(data))
-              localStorage.setItem('sjes_table_staff', JSON.stringify(data))
-            }
-            return data as T[]
-          }
-        } catch {
-          // ignore quota
-        }
-      }
-      return data as T[]
+    if (error) {
+      console.error(`Supabase query error for table ${tableName}:`, error.message)
+      throw new Error(error.message)
     }
-  } catch (err) {
-    console.warn(`Supabase fetch notice for ${tableName}:`, err)
+    return (data || []) as T[]
+  } catch (err: any) {
+    console.error(`Fetch failure for table ${tableName}:`, err)
+    throw err
   }
-
-  return localData
 }
 
 /**
- * Insert or update a record in Supabase
+ * Save or update a record directly in Supabase table
  */
 export async function saveSupabaseRecord(
   tableName: string,
   record: Record<string, any>
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
-    const cacheKeys = [
-      `sjes_table_${tableName}`,
-      tableName === 'employee_master' ? 'sjes_table_employees' : null,
-      tableName === 'employee_master' ? 'sjes_table_staff' : null,
-      tableName === 'student_master' ? 'sjes_table_students' : null,
-      tableName === 'department_master' ? 'sjes_department_master' : null,
-    ].filter(Boolean) as string[]
-
-    const getRecordPk = (item: Record<string, any>) =>
-      String(
-        item.emp_code ||
-          item.emp_id ||
-          item.admission_no ||
-          item.student_id ||
-          item.department_code ||
-          item.department_id ||
-          item.vendor_code ||
-          item.vendor_id ||
-          item._docId ||
-          item.id ||
-          item.code ||
-          ''
-      ).toLowerCase()
-
-    const targetPk = getRecordPk(record)
-
-    // Update local storage cache immediately across all keys
-    if (typeof window !== 'undefined' && window.localStorage && targetPk) {
-      for (const cacheKey of cacheKeys) {
-        try {
-          const cachedStr = localStorage.getItem(cacheKey)
-          let list: any[] = cachedStr ? JSON.parse(cachedStr) : []
-          if (Array.isArray(list)) {
-            const idx = list.findIndex((item) => getRecordPk(item) === targetPk)
-            if (idx >= 0) {
-              list[idx] = { ...list[idx], ...record, updated_at: record.updated_at || new Date().toISOString() }
-            } else {
-              list = [{ ...record, updated_at: record.updated_at || new Date().toISOString() }, ...list]
-            }
-            localStorage.setItem(cacheKey, JSON.stringify(list))
-          }
-        } catch {
-          // ignore
-        }
-      }
+    // Purge local storage employee cache so stale status is never served
+    if (typeof window !== 'undefined' && window.localStorage && (tableName === 'employee_master' || tableName === 'employees')) {
+      try {
+        localStorage.removeItem('sjes_table_employee_master')
+        localStorage.removeItem('sjes_table_employees')
+        localStorage.removeItem('sjes_table_staff')
+      } catch {}
     }
 
-    // Upsert into Supabase
-    const { error } = await supabase.from(tableName).upsert(record)
-    if (error) {
-      console.warn(`Supabase upsert note for ${tableName}:`, error.message)
-      // Attempt targeted update if upsert fails
-      if (record.emp_code) {
-        await supabase.from(tableName).update(record).eq('emp_code', record.emp_code)
-      } else if (record._docId) {
-        await supabase.from(tableName).update(record).eq('_docId', record._docId)
-      } else if (record.id) {
-        await supabase.from(tableName).update(record).eq('id', record.id)
-      }
+    // Sync employment_status and is_active strictly for employee_master
+    if (tableName === 'employee_master') {
+      const statusStr = String(record.employment_status || 'Active')
+      const isInactive =
+        statusStr === 'Inactive' ||
+        statusStr === 'Resigned' ||
+        statusStr === 'Retired' ||
+        statusStr === 'Left' ||
+        statusStr === 'Suspended'
+      record.employment_status = statusStr
+      record.is_active = !isInactive
     }
-    return { success: true }
+    record.updated_at = new Date().toISOString()
+
+    let resError: string | null = null
+    let resData: any = null
+
+    // Perform exact update query matching primary keys
+    if (record.emp_code) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .update(record)
+        .eq('emp_code', record.emp_code)
+        .select()
+
+      if (!error && data && data.length > 0) {
+        resData = data[0]
+      } else if (error) {
+        resError = error.message
+      } else {
+        // Fallback to upsert if row doesn't exist yet
+        const upsertRes = await supabase.from(tableName).upsert([record]).select()
+        if (upsertRes.error) resError = upsertRes.error.message
+        else resData = upsertRes.data?.[0]
+      }
+    } else if (record.emp_id) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .update(record)
+        .eq('emp_id', record.emp_id)
+        .select()
+
+      if (!error && data && data.length > 0) {
+        resData = data[0]
+      } else if (error) {
+        resError = error.message
+      } else {
+        const upsertRes = await supabase.from(tableName).upsert([record]).select()
+        if (upsertRes.error) resError = upsertRes.error.message
+        else resData = upsertRes.data?.[0]
+      }
+    } else if (record.id) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .update(record)
+        .eq('id', record.id)
+        .select()
+
+      if (!error && data && data.length > 0) {
+        resData = data[0]
+      } else if (error) {
+        resError = error.message
+      } else {
+        const upsertRes = await supabase.from(tableName).upsert([record]).select()
+        if (upsertRes.error) resError = upsertRes.error.message
+        else resData = upsertRes.data?.[0]
+      }
+    } else {
+      const upsertRes = await supabase.from(tableName).upsert([record]).select()
+      if (upsertRes.error) resError = upsertRes.error.message
+      else resData = upsertRes.data?.[0]
+    }
+
+    if (resError) {
+      console.error(`Supabase update error on table ${tableName}:`, resError)
+      return { success: false, error: resError }
+    }
+
+    return { success: true, data: resData }
   } catch (err: any) {
-    console.warn(`Supabase save error for ${tableName}:`, err)
-    return { success: true }
+    console.error(`Exception saving to Supabase table ${tableName}:`, err)
+    return { success: false, error: err?.message || 'Database error occurred' }
   }
 }
 

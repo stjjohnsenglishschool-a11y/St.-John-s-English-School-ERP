@@ -72,8 +72,13 @@ export default function EmployeeAttendanceStudio({
       // 1. Get employees
       let query = supabase
         .from("employee_master")
-        .select("emp_id,emp_code,first_name,last_name,department,designation,employee_category")
+        .select("emp_id,emp_code,first_name,last_name,department,designation,employee_category,employment_status")
         .eq("is_active", true)
+        .neq("employment_status", "Inactive")
+        .neq("employment_status", "Resigned")
+        .neq("employment_status", "Retired")
+        .neq("employment_status", "Left")
+        .neq("employment_status", "Suspended")
         .order("emp_code", { ascending: true });
 
       if (selectedDept !== "All") {
