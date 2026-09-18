@@ -98,6 +98,24 @@ export function sanitizePayload(record: Record<string, any>, tableName?: string)
   const clean: Record<string, any> = {}
   const knownCols = tableName && TABLE_KNOWN_COLUMNS[tableName] ? new Set(TABLE_KNOWN_COLUMNS[tableName]) : null
 
+  // Special preservation for student_master parent photos into document_url
+  if (tableName === 'student_master' && (record.father_photo_url || record.mother_photo_url)) {
+    let docParsed: Record<string, any> = {}
+    const existingDoc = record.document_url
+    if (existingDoc && typeof existingDoc === 'string' && existingDoc.trim().startsWith('{')) {
+      try {
+        docParsed = JSON.parse(existingDoc)
+      } catch {}
+    }
+    if (record.father_photo_url) docParsed.father_photo_url = record.father_photo_url
+    if (record.mother_photo_url) docParsed.mother_photo_url = record.mother_photo_url
+    if (record.father_name) docParsed.father_name = record.father_name
+    if (record.father_mobile) docParsed.father_mobile = record.father_mobile
+    if (record.mother_name) docParsed.mother_name = record.mother_name
+    if (record.mother_mobile) docParsed.mother_mobile = record.mother_mobile
+    clean.document_url = JSON.stringify(docParsed)
+  }
+
   for (const key of Object.keys(record)) {
     if (key === '_docId' || key === '_id') {
       continue
@@ -108,6 +126,10 @@ export function sanitizePayload(record: Record<string, any>, tableName?: string)
     }
     // If key ends with _id or is id and is non-empty string but not a valid UUID format, remove it so Postgres auto-generates UUID
     if ((key.endsWith('_id') || key === 'id') && record[key] && typeof record[key] === 'string' && !isUUID(record[key])) {
+      continue
+    }
+    // Do not overwrite document_url if already packed with parent photos
+    if (key === 'document_url' && clean.document_url) {
       continue
     }
     clean[key] = record[key]
@@ -496,10 +518,31 @@ export const uploadToFirebaseStorage = uploadToSupabaseStorage
  * Fetch all documents from a Supabase collection/table with local caching fallback
  */
 export async function fetchCollectionData<T = any>(collectionName: string): Promise<T[]> {
+  const unpackStudentRow = (row: any) => {
+    if (collectionName === 'student_master' && row) {
+      if (row.document_url && typeof row.document_url === 'string' && row.document_url.trim().startsWith('{')) {
+        try {
+          const doc = JSON.parse(row.document_url)
+          if (!row.father_photo_url && (doc.father_photo_url || doc.fatherPhotoUrl)) {
+            row.father_photo_url = doc.father_photo_url || doc.fatherPhotoUrl
+          }
+          if (!row.mother_photo_url && (doc.mother_photo_url || doc.motherPhotoUrl)) {
+            row.mother_photo_url = doc.mother_photo_url || doc.motherPhotoUrl
+          }
+          if (!row.father_name && doc.father_name) row.father_name = doc.father_name
+          if (!row.father_mobile && doc.father_mobile) row.father_mobile = doc.father_mobile
+          if (!row.mother_name && doc.mother_name) row.mother_name = doc.mother_name
+          if (!row.mother_mobile && doc.mother_mobile) row.mother_mobile = doc.mother_mobile
+        } catch {}
+      }
+    }
+    return row
+  }
+
   try {
     const supaData = await fetchSupabaseTable<T>(collectionName)
     if (supaData && Array.isArray(supaData)) {
-      return supaData
+      return (collectionName === 'student_master' ? supaData.map(unpackStudentRow) : supaData) as T[]
     }
   } catch (err) {
     console.warn(`Supabase fetch error for ${collectionName}:`, err)
@@ -521,7 +564,7 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
         if (cached) {
           const parsed = JSON.parse(cached)
           if (Array.isArray(parsed)) {
-            cachedResults = parsed as T[]
+            cachedResults = (collectionName === 'student_master' ? parsed.map(unpackStudentRow) : parsed) as T[]
             break
           }
         }

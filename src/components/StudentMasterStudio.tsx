@@ -190,6 +190,49 @@ export default function StudentMasterStudio({
     delete clean.student_email
     delete clean.father_email
     delete clean.mother_email
+
+    // Parse document_url if present
+    let docParsed: any = {}
+    if (clean.document_url && typeof clean.document_url === 'string' && clean.document_url.trim().startsWith('{')) {
+      try {
+        docParsed = JSON.parse(clean.document_url)
+      } catch {}
+    }
+
+    // Local extra cache lookup
+    let extra: any = {}
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const allExtra = JSON.parse(localStorage.getItem('sjes_escort_cards_extra') || '{}')
+        extra =
+          allExtra[clean.student_id] ||
+          allExtra[clean.admission_no] ||
+          allExtra[clean.full_name] ||
+          {}
+      } catch {}
+    }
+
+    clean.father_photo_url =
+      clean.father_photo_url ||
+      docParsed.father_photo_url ||
+      docParsed.fatherPhotoUrl ||
+      extra.fatherPhotoUrl ||
+      extra.father_photo_url ||
+      ''
+
+    clean.mother_photo_url =
+      clean.mother_photo_url ||
+      docParsed.mother_photo_url ||
+      docParsed.motherPhotoUrl ||
+      extra.motherPhotoUrl ||
+      extra.mother_photo_url ||
+      ''
+
+    clean.father_name = clean.father_name || docParsed.father_name || extra.fatherName || ''
+    clean.father_mobile = clean.father_mobile || docParsed.father_mobile || extra.fatherContact || ''
+    clean.mother_name = clean.mother_name || docParsed.mother_name || extra.motherName || ''
+    clean.mother_mobile = clean.mother_mobile || docParsed.mother_mobile || extra.motherContact || ''
+
     return clean as Student
   }
 
@@ -198,7 +241,67 @@ export default function StudentMasterStudio({
     setLoading(true)
     try {
       const data = await fetchCollectionData('student_master')
-      const sanitized = (data || []).map(sanitizeStudentRecord)
+
+      // Fetch escort_card table to merge any escort photos
+      let escortRows: any[] = []
+      if (supabase) {
+        try {
+          const { data: escorts } = await supabase.from('escort_card').select('*')
+          if (escorts) escortRows = escorts
+        } catch (e) {
+          console.warn('Could not fetch escort_card table:', e)
+        }
+      }
+
+      // Load local extra cache
+      let allExtra: Record<string, any> = {}
+      try {
+        allExtra = JSON.parse(localStorage.getItem('sjes_escort_cards_extra') || '{}')
+      } catch {}
+
+      const sanitized = (data || []).map((s) => {
+        const studentObj = sanitizeStudentRecord(s)
+
+        // Find escort matches if not already resolved
+        if (!studentObj.father_photo_url) {
+          const fatherEscort = escortRows.find(
+            (er: any) =>
+              (er.student_name === studentObj.full_name ||
+                er.student_name?.toLowerCase() === studentObj.full_name?.toLowerCase()) &&
+              (er.relation === 'Father' || er.relation?.toLowerCase() === 'father')
+          )
+          if (fatherEscort?.photo_url) {
+            studentObj.father_photo_url = fatherEscort.photo_url
+          }
+        }
+
+        if (!studentObj.mother_photo_url) {
+          const motherEscort = escortRows.find(
+            (er: any) =>
+              (er.student_name === studentObj.full_name ||
+                er.student_name?.toLowerCase() === studentObj.full_name?.toLowerCase()) &&
+              (er.relation === 'Mother' || er.relation?.toLowerCase() === 'mother')
+          )
+          if (motherEscort?.photo_url) {
+            studentObj.mother_photo_url = motherEscort.photo_url
+          }
+        }
+
+        const extra =
+          allExtra[studentObj.student_id || ''] ||
+          allExtra[studentObj.admission_no || ''] ||
+          allExtra[studentObj.full_name || ''] ||
+          {}
+        if (!studentObj.father_photo_url && (extra.fatherPhotoUrl || extra.father_photo_url)) {
+          studentObj.father_photo_url = extra.fatherPhotoUrl || extra.father_photo_url
+        }
+        if (!studentObj.mother_photo_url && (extra.motherPhotoUrl || extra.mother_photo_url)) {
+          studentObj.mother_photo_url = extra.motherPhotoUrl || extra.mother_photo_url
+        }
+
+        return studentObj
+      })
+
       setStudents(sanitized)
       try {
         localStorage.setItem('sjes_table_student_master', JSON.stringify(sanitized))
@@ -215,7 +318,26 @@ export default function StudentMasterStudio({
   useEffect(() => {
     loadStudents()
     const unsub = subscribeToCollection<Student>('student_master', (data) => {
-      const sanitized = (data || []).map(sanitizeStudentRecord)
+      let allExtra: Record<string, any> = {}
+      try {
+        allExtra = JSON.parse(localStorage.getItem('sjes_escort_cards_extra') || '{}')
+      } catch {}
+
+      const sanitized = (data || []).map((s) => {
+        const studentObj = sanitizeStudentRecord(s)
+        const extra =
+          allExtra[studentObj.student_id || ''] ||
+          allExtra[studentObj.admission_no || ''] ||
+          allExtra[studentObj.full_name || ''] ||
+          {}
+        if (!studentObj.father_photo_url && (extra.fatherPhotoUrl || extra.father_photo_url)) {
+          studentObj.father_photo_url = extra.fatherPhotoUrl || extra.father_photo_url
+        }
+        if (!studentObj.mother_photo_url && (extra.motherPhotoUrl || extra.mother_photo_url)) {
+          studentObj.mother_photo_url = extra.motherPhotoUrl || extra.mother_photo_url
+        }
+        return studentObj
+      })
       setStudents(sanitized)
       try {
         localStorage.setItem('sjes_table_student_master', JSON.stringify(sanitized))
@@ -449,11 +571,38 @@ export default function StudentMasterStudio({
           last = tokens[tokens.length - 1]
         }
       }
+
+      let fPhoto = student.father_photo_url || ''
+      let mPhoto = student.mother_photo_url || ''
+
+      // Check document_url
+      if ((!fPhoto || !mPhoto) && student.document_url && typeof student.document_url === 'string' && student.document_url.trim().startsWith('{')) {
+        try {
+          const docObj = JSON.parse(student.document_url)
+          if (!fPhoto) fPhoto = docObj.father_photo_url || docObj.fatherPhotoUrl || ''
+          if (!mPhoto) mPhoto = docObj.mother_photo_url || docObj.motherPhotoUrl || ''
+        } catch {}
+      }
+
+      // Check localStorage extra cache
+      if (!fPhoto || !mPhoto) {
+        try {
+          const allExtra = JSON.parse(localStorage.getItem('sjes_escort_cards_extra') || '{}')
+          const ex = allExtra[student.student_id || ''] || allExtra[student.admission_no || ''] || allExtra[student.full_name || '']
+          if (ex) {
+            if (!fPhoto) fPhoto = ex.fatherPhotoUrl || ex.father_photo_url || ''
+            if (!mPhoto) mPhoto = ex.motherPhotoUrl || ex.mother_photo_url || ''
+          }
+        } catch {}
+      }
+
       setFormState({
         ...student,
         first_name: first,
         middle_name: middle,
         last_name: last,
+        father_photo_url: fPhoto,
+        mother_photo_url: mPhoto,
       })
     }
   }
@@ -492,6 +641,13 @@ export default function StudentMasterStudio({
     photoType: 'student' | 'father' | 'mother'
   ) => {
     if (!file) return
+
+    // Immediately show instant object preview
+    const instantPreview = URL.createObjectURL(file)
+    if (photoType === 'student') updateForm('student_photo_url', instantPreview)
+    if (photoType === 'father') updateForm('father_photo_url', instantPreview)
+    if (photoType === 'mother') updateForm('mother_photo_url', instantPreview)
+
     const setLoader =
       photoType === 'student'
         ? setUploadingStudentPhoto
@@ -508,7 +664,7 @@ export default function StudentMasterStudio({
         if (photoType === 'student') updateForm('student_photo_url', res.url)
         if (photoType === 'father') updateForm('father_photo_url', res.url)
         if (photoType === 'mother') updateForm('mother_photo_url', res.url)
-        setToast(`${photoType === 'student' ? 'Student' : photoType === 'father' ? "Father's" : "Mother's"} photo saved to Google Drive folder 'studen_photo_master'!`)
+        setToast(`${photoType === 'student' ? 'Student' : photoType === 'father' ? "Father's" : "Mother's"} photo saved to Google Drive!`)
       } else {
         // Fallback to storage if Google Drive API is not active
         const identifier = formState.admission_no || formState.full_name || 'student'
@@ -535,6 +691,13 @@ export default function StudentMasterStudio({
     photoType: 'student' | 'father' | 'mother'
   ) => {
     if (!file) return
+
+    // Immediately show instant object preview
+    const instantPreview = URL.createObjectURL(file)
+    if (photoType === 'student') updateForm('student_photo_url', instantPreview)
+    if (photoType === 'father') updateForm('father_photo_url', instantPreview)
+    if (photoType === 'mother') updateForm('mother_photo_url', instantPreview)
+
     const setLoader =
       photoType === 'student'
         ? setUploadingStudentPhoto
@@ -583,8 +746,26 @@ export default function StudentMasterStudio({
         ...formState,
         full_name: calculatedFullName,
       })
+
+      // 1. Pack father_photo_url and mother_photo_url into document_url JSON
+      let docParsed: Record<string, any> = {}
+      if (formState.document_url && typeof formState.document_url === 'string' && formState.document_url.trim().startsWith('{')) {
+        try { docParsed = JSON.parse(formState.document_url) } catch {}
+      }
+      const docPayload = {
+        ...docParsed,
+        father_photo_url: formState.father_photo_url || '',
+        mother_photo_url: formState.mother_photo_url || '',
+        father_name: formState.father_name || '',
+        father_mobile: formState.father_mobile || '',
+        mother_name: formState.mother_name || '',
+        mother_mobile: formState.mother_mobile || '',
+        updated_at: new Date().toISOString(),
+      }
+
       const payload: Record<string, unknown> = {
         ...sanitized,
+        document_url: JSON.stringify(docPayload),
         roll_no: formState.roll_no ? String(formState.roll_no).trim() : '',
         academic_year: formState.academic_year || getCurrentAcademicYear(),
         student_status: formState.student_status || 'Active',
@@ -595,22 +776,99 @@ export default function StudentMasterStudio({
       payload.student_id = docId
       payload._docId = docId
 
-      // 1. Save to Firebase / local DB
+      // 2. Save to Supabase student_master
       await saveDocument('student_master', 'admission_no', payload)
+
+      // 3. Upsert Father & Mother escort records into Supabase escort_card table
+      const todayIso = new Date().toISOString().slice(0, 10)
+      if (supabase && (formState.father_name || formState.father_photo_url)) {
+        try {
+          await supabase.from('escort_card').upsert(
+            [
+              {
+                student_name: calculatedFullName,
+                class_name: formState.class_name,
+                escort_name: formState.father_name || 'Father',
+                relation: 'Father',
+                mobile: formState.father_mobile || null,
+                photo_url: formState.father_photo_url || null,
+                issue_date: todayIso,
+                is_active: true,
+              },
+            ],
+            { onConflict: 'card_id' }
+          )
+        } catch (e) {
+          console.warn('Escort card father upsert error:', e)
+        }
+      }
+
+      if (supabase && (formState.mother_name || formState.mother_photo_url)) {
+        try {
+          await supabase.from('escort_card').upsert(
+            [
+              {
+                student_name: calculatedFullName,
+                class_name: formState.class_name,
+                escort_name: formState.mother_name || 'Mother',
+                relation: 'Mother',
+                mobile: formState.mother_mobile || null,
+                photo_url: formState.mother_photo_url || null,
+                issue_date: todayIso,
+                is_active: true,
+              },
+            ],
+            { onConflict: 'card_id' }
+          )
+        } catch (e) {
+          console.warn('Escort card mother upsert error:', e)
+        }
+      }
+
+      // 4. Update sjes_escort_cards_extra cache in localStorage
+      try {
+        const allExtra = JSON.parse(localStorage.getItem('sjes_escort_cards_extra') || '{}')
+        const extraObj = {
+          fatherName: formState.father_name || '',
+          fatherContact: formState.father_mobile || '',
+          fatherPhotoUrl: formState.father_photo_url || '',
+          motherName: formState.mother_name || '',
+          motherContact: formState.mother_mobile || '',
+          motherPhotoUrl: formState.mother_photo_url || '',
+          studentName: calculatedFullName,
+          className: formState.class_name || '',
+          updatedAt: new Date().toISOString(),
+        }
+        if (payload.student_id) allExtra[String(payload.student_id)] = extraObj
+        if (payload.admission_no) allExtra[String(payload.admission_no)] = extraObj
+        allExtra[calculatedFullName] = extraObj
+        localStorage.setItem('sjes_escort_cards_extra', JSON.stringify(allExtra))
+      } catch {}
 
       await logActivity({
         action: `${modalMode === 'create' ? 'Admitted' : 'Updated'} student: ${formState.full_name} (${formState.admission_no})`,
         module: 'student_master',
       })
 
-      // 2. Realtime Sync with Google Sheet
+      // 5. Update local state and cache
+      const studentResult: Student = {
+        ...(payload as any),
+        father_photo_url: formState.father_photo_url || '',
+        mother_photo_url: formState.mother_photo_url || '',
+      }
+
       const updatedList = modalMode === 'create'
-        ? [payload as Student, ...students.filter((s) => s.admission_no !== payload.admission_no)]
-        : students.map((s) => (s.admission_no === payload.admission_no ? (payload as Student) : s))
+        ? [studentResult, ...students.filter((s) => s.admission_no !== payload.admission_no)]
+        : students.map((s) => (s.admission_no === payload.admission_no ? studentResult : s))
 
       setStudents(updatedList)
+      try {
+        localStorage.setItem('sjes_table_student_master', JSON.stringify(updatedList))
+        localStorage.setItem('sjes_table_students', JSON.stringify(updatedList))
+      } catch {}
+
       closeModal()
-      setToast(`Student ${formState.full_name} saved successfully! Syncing Google Sheet...`)
+      setToast(`Student ${calculatedFullName} saved successfully! Syncing Google Sheet...`)
 
       // Background Google Sheet Sync
       syncAllStudentsToGoogleSheet(updatedList).then((res) => {
@@ -1392,7 +1650,17 @@ export default function StudentMasterStudio({
                 <div className="tab-pane">
                   {/* Photo Upload Box matching Employee style */}
                   <div className="photo-upload-section">
-                    <div className="avatar-preview-box">
+                    <div
+                      className="avatar-preview-box"
+                      style={{ position: 'relative', cursor: modalMode !== 'view' ? 'pointer' : 'default' }}
+                      title={modalMode !== 'view' ? 'Click to upload Student photo' : 'Student photo'}
+                      onClick={() => {
+                        if (modalMode !== 'view') {
+                          const input = document.getElementById('student-photo-input') as HTMLInputElement
+                          input?.click()
+                        }
+                      }}
+                    >
                       {formState.student_photo_url ? (
                         <img
                           src={formatImageUrl(formState.student_photo_url)}
@@ -1403,10 +1671,29 @@ export default function StudentMasterStudio({
                       ) : (
                         <User size={40} opacity={0.35} />
                       )}
+                      {modalMode !== 'view' && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            background: 'rgba(15, 23, 42, 0.75)',
+                            color: '#ffffff',
+                            fontSize: '9px',
+                            textAlign: 'center',
+                            padding: '2px 0',
+                            fontWeight: 600,
+                          }}
+                        >
+                          <Camera size={10} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '2px' }} />
+                          Edit
+                        </div>
+                      )}
                     </div>
                     {modalMode !== 'view' && (
                       <div className="photo-actions" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                           <label
                             className="btn-upload-label"
                             style={{
@@ -1427,6 +1714,7 @@ export default function StudentMasterStudio({
                             <CloudUpload size={14} />
                             {uploadingStudentPhoto ? 'Saving to Drive...' : 'Drive (student_photo)'}
                             <input
+                              id="student-photo-input"
                               type="file"
                               accept="image/*"
                               onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null, 'student')}
@@ -1461,21 +1749,69 @@ export default function StudentMasterStudio({
                               style={{ display: 'none' }}
                             />
                           </label>
+
+                          {formState.student_photo_url && (
+                            <button
+                              type="button"
+                              onClick={() => updateForm('student_photo_url', '')}
+                              style={{
+                                background: '#fee2e2',
+                                color: '#dc2626',
+                                border: '1px solid #fecaca',
+                                padding: '6px 12px',
+                                borderRadius: '8px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                              title="Clear Student Photo"
+                            >
+                              <X size={12} /> Clear
+                            </button>
+                          )}
                         </div>
 
-                        <input
-                          type="url"
-                          placeholder="Or paste Google Drive Photo link / Direct image URL..."
-                          value={formState.student_photo_url || ''}
-                          onChange={(e) => updateForm('student_photo_url', e.target.value)}
-                          style={{
-                            padding: '8px 12px',
-                            fontSize: '12px',
-                            borderRadius: '8px',
-                            border: '1px solid #cbd5e1',
-                            width: '100%',
-                          }}
-                        />
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            placeholder="Or paste Google Drive Photo link / Direct image URL / File ID..."
+                            value={
+                              formState.student_photo_url?.startsWith('data:')
+                                ? '[Uploaded Image File - Active]'
+                                : formState.student_photo_url || ''
+                            }
+                            onChange={(e) => updateForm('student_photo_url', e.target.value)}
+                            style={{
+                              padding: '8px 12px',
+                              fontSize: '12px',
+                              borderRadius: '8px',
+                              border: '1px solid #cbd5e1',
+                              flex: 1,
+                            }}
+                          />
+                          {formState.student_photo_url && !formState.student_photo_url.startsWith('data:') && (
+                            <a
+                              href={formatImageUrl(formState.student_photo_url)}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                padding: '8px 10px',
+                                borderRadius: '8px',
+                                border: '1px solid #cbd5e1',
+                                background: '#ffffff',
+                                color: '#475569',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                              }}
+                              title="Open image in new tab"
+                            >
+                              <ExternalLink size={14} />
+                            </a>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1888,7 +2224,17 @@ export default function StudentMasterStudio({
                   >
                     <div className="section-title">Father&apos;s Information</div>
                     <div className="photo-upload-section" style={{ marginBottom: '14px' }}>
-                      <div className="avatar-preview-box">
+                      <div
+                        className="avatar-preview-box"
+                        style={{ position: 'relative', cursor: modalMode !== 'view' ? 'pointer' : 'default' }}
+                        title={modalMode !== 'view' ? 'Click to upload Father photo' : 'Father photo'}
+                        onClick={() => {
+                          if (modalMode !== 'view') {
+                            const input = document.getElementById('father-photo-input') as HTMLInputElement
+                            input?.click()
+                          }
+                        }}
+                      >
                         {formState.father_photo_url ? (
                           <img
                             src={formatImageUrl(formState.father_photo_url)}
@@ -1899,10 +2245,29 @@ export default function StudentMasterStudio({
                         ) : (
                           <User size={36} opacity={0.35} />
                         )}
+                        {modalMode !== 'view' && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              background: 'rgba(15, 23, 42, 0.75)',
+                              color: '#ffffff',
+                              fontSize: '9px',
+                              textAlign: 'center',
+                              padding: '2px 0',
+                              fontWeight: 600,
+                            }}
+                          >
+                            <Camera size={10} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '2px' }} />
+                            Edit
+                          </div>
+                        )}
                       </div>
                       {modalMode !== 'view' && (
                         <div className="photo-actions" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                             <label
                               className="btn-upload-label"
                               style={{
@@ -1920,8 +2285,9 @@ export default function StudentMasterStudio({
                               }}
                             >
                               <CloudUpload size={13} />
-                              Drive (father_photo)
+                              {uploadingFatherPhoto ? 'Uploading...' : 'Drive (father_photo)'}
                               <input
+                                id="father-photo-input"
                                 type="file"
                                 accept="image/*"
                                 onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null, 'father')}
@@ -1956,14 +2322,62 @@ export default function StudentMasterStudio({
                                 style={{ display: 'none' }}
                               />
                             </label>
+
+                            {formState.father_photo_url && (
+                              <button
+                                type="button"
+                                onClick={() => updateForm('father_photo_url', '')}
+                                style={{
+                                  background: '#fee2e2',
+                                  color: '#dc2626',
+                                  border: '1px solid #fecaca',
+                                  padding: '5px 10px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                                title="Clear Father Photo"
+                              >
+                                <X size={12} /> Clear
+                              </button>
+                            )}
                           </div>
-                          <input
-                            type="url"
-                            placeholder="Father Drive photo URL / image link..."
-                            value={formState.father_photo_url || ''}
-                            onChange={(e) => updateForm('father_photo_url', e.target.value)}
-                            style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                          />
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <input
+                              type="text"
+                              placeholder="Father Drive link / file ID / photo URL..."
+                              value={
+                                formState.father_photo_url?.startsWith('data:')
+                                  ? '[Uploaded Image File - Active]'
+                                  : formState.father_photo_url || ''
+                              }
+                              onChange={(e) => updateForm('father_photo_url', e.target.value)}
+                              style={{ flex: 1, padding: '6px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                            />
+                            {formState.father_photo_url && !formState.father_photo_url.startsWith('data:') && (
+                              <a
+                                href={formatImageUrl(formState.father_photo_url)}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  padding: '6px 8px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #cbd5e1',
+                                  background: '#ffffff',
+                                  color: '#475569',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                }}
+                                title="Open in new tab"
+                              >
+                                <ExternalLink size={12} />
+                              </a>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2013,7 +2427,17 @@ export default function StudentMasterStudio({
                   >
                     <div className="section-title" style={{ color: '#86198f', borderColor: '#f5d0fe' }}>Mother&apos;s Information</div>
                     <div className="photo-upload-section" style={{ marginBottom: '14px', background: '#ffffff', borderColor: '#f0abfc' }}>
-                      <div className="avatar-preview-box" style={{ background: '#fdf2f8', borderColor: '#f472b6' }}>
+                      <div
+                        className="avatar-preview-box"
+                        style={{ background: '#fdf2f8', borderColor: '#f472b6', position: 'relative', cursor: modalMode !== 'view' ? 'pointer' : 'default' }}
+                        title={modalMode !== 'view' ? 'Click to upload Mother photo' : 'Mother photo'}
+                        onClick={() => {
+                          if (modalMode !== 'view') {
+                            const input = document.getElementById('mother-photo-input') as HTMLInputElement
+                            input?.click()
+                          }
+                        }}
+                      >
                         {formState.mother_photo_url ? (
                           <img
                             src={formatImageUrl(formState.mother_photo_url)}
@@ -2024,10 +2448,29 @@ export default function StudentMasterStudio({
                         ) : (
                           <User size={36} opacity={0.35} color="#db2777" />
                         )}
+                        {modalMode !== 'view' && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              background: 'rgba(15, 23, 42, 0.75)',
+                              color: '#ffffff',
+                              fontSize: '9px',
+                              textAlign: 'center',
+                              padding: '2px 0',
+                              fontWeight: 600,
+                            }}
+                          >
+                            <Camera size={10} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '2px' }} />
+                            Edit
+                          </div>
+                        )}
                       </div>
                       {modalMode !== 'view' && (
                         <div className="photo-actions" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                             <label
                               className="btn-upload-label"
                               style={{
@@ -2045,8 +2488,9 @@ export default function StudentMasterStudio({
                               }}
                             >
                               <CloudUpload size={13} />
-                              Drive (mother_photo)
+                              {uploadingMotherPhoto ? 'Uploading...' : 'Drive (mother_photo)'}
                               <input
+                                id="mother-photo-input"
                                 type="file"
                                 accept="image/*"
                                 onChange={(e) => handlePhotoUpload(e.target.files?.[0] || null, 'mother')}
@@ -2081,14 +2525,62 @@ export default function StudentMasterStudio({
                                 style={{ display: 'none' }}
                               />
                             </label>
+
+                            {formState.mother_photo_url && (
+                              <button
+                                type="button"
+                                onClick={() => updateForm('mother_photo_url', '')}
+                                style={{
+                                  background: '#fee2e2',
+                                  color: '#dc2626',
+                                  border: '1px solid #fecaca',
+                                  padding: '5px 10px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                                title="Clear Mother Photo"
+                              >
+                                <X size={12} /> Clear
+                              </button>
+                            )}
                           </div>
-                          <input
-                            type="url"
-                            placeholder="Mother Drive photo URL / image link..."
-                            value={formState.mother_photo_url || ''}
-                            onChange={(e) => updateForm('mother_photo_url', e.target.value)}
-                            style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                          />
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <input
+                              type="text"
+                              placeholder="Mother Drive link / file ID / photo URL..."
+                              value={
+                                formState.mother_photo_url?.startsWith('data:')
+                                  ? '[Uploaded Image File - Active]'
+                                  : formState.mother_photo_url || ''
+                              }
+                              onChange={(e) => updateForm('mother_photo_url', e.target.value)}
+                              style={{ flex: 1, padding: '6px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                            />
+                            {formState.mother_photo_url && !formState.mother_photo_url.startsWith('data:') && (
+                              <a
+                                href={formatImageUrl(formState.mother_photo_url)}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  padding: '6px 8px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #cbd5e1',
+                                  background: '#ffffff',
+                                  color: '#475569',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                }}
+                                title="Open in new tab"
+                              >
+                                <ExternalLink size={12} />
+                              </a>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

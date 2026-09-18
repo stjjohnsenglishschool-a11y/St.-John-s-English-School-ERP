@@ -292,7 +292,25 @@ export function sanitizeRecordForTable(
     }
     if (payload.is_active === undefined) payload.is_active = true
     if (!payload.student_status) payload.student_status = 'Active'
-    // Ensure father_photo_url & mother_photo_url are stripped since they do not exist in Postgres
+
+    // Preserve father_photo_url & mother_photo_url in document_url JSON
+    const fPhoto = String(rawRow.father_photo_url || rawRow.father_photo || rawRow.fatherPhotoUrl || payload.father_photo_url || '').trim()
+    const mPhoto = String(rawRow.mother_photo_url || rawRow.mother_photo || rawRow.motherPhotoUrl || payload.mother_photo_url || '').trim()
+    if (fPhoto || mPhoto) {
+      let docParsed: Record<string, any> = {}
+      if (payload.document_url && typeof payload.document_url === 'string' && payload.document_url.trim().startsWith('{')) {
+        try { docParsed = JSON.parse(payload.document_url) } catch {}
+      }
+      if (fPhoto) docParsed.father_photo_url = fPhoto
+      if (mPhoto) docParsed.mother_photo_url = mPhoto
+      if (payload.father_name) docParsed.father_name = payload.father_name
+      if (payload.father_mobile) docParsed.father_mobile = payload.father_mobile
+      if (payload.mother_name) docParsed.mother_name = payload.mother_name
+      if (payload.mother_mobile) docParsed.mother_mobile = payload.mother_mobile
+      payload.document_url = JSON.stringify(docParsed)
+    }
+
+    // Ensure raw unmapped columns are stripped from Postgres top-level fields
     delete payload.father_photo_url
     delete payload.mother_photo_url
   }

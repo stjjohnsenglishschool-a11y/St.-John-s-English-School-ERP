@@ -10,13 +10,13 @@ import {
   RefreshCw,
   QrCode as QrCodeIcon,
   ShieldCheck,
-  PhoneCall,
-  CheckCircle2,
   Camera,
   Users,
   User,
-  Phone,
+  ExternalLink,
+  Layers,
   Image as ImageIcon,
+  Check,
 } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
@@ -80,6 +80,10 @@ export default function IDCardStudio({
     }
   }, [initialType])
 
+  const [escortActiveTab, setEscortActiveTab] = useState<
+    'all' | 'student' | 'father' | 'mother'
+  >('all')
+
   const [people, setPeople] = useState<Person[]>([])
   const [selectedId, setSelectedId] = useState('')
 
@@ -122,67 +126,162 @@ export default function IDCardStudio({
   const [isScannerOpen, setIsScannerOpen] = useState(false)
 
   const cardRef = useRef<HTMLDivElement>(null)
+  const studentFileRef = useRef<HTMLInputElement>(null)
+  const fatherFileRef = useRef<HTMLInputElement>(null)
+  const motherFileRef = useRef<HTMLInputElement>(null)
 
-  // Load records from Supabase or localStorage
+  // Load records from Supabase, Escort Card table, and Local Storage
   useEffect(() => {
     if (!supabase) return
 
     if (cardType === 'student' || cardType === 'escort') {
-      supabase
-        .from('student_master')
-        .select(
-          'student_id,admission_no,roll_no,full_name,date_of_birth,mobile_primary,class_name,student_photo_url,father_name,father_mobile,father_whatsapp,mother_name,mother_mobile,mother_whatsapp,emergency_contact_name,emergency_contact_phone'
-        )
-        .eq('is_active', true)
-        .order('full_name')
-        .then(({ data, error }) => {
-          if (error) {
-            setToast(error.message)
-          } else {
-            // Check local storage for any extra cached parent photos
-            let allExtra: Record<string, any> = {}
+      Promise.all([
+        supabase
+          .from('student_master')
+          .select(
+            'student_id,admission_no,roll_no,full_name,date_of_birth,mobile_primary,class_name,student_photo_url,father_name,father_mobile,father_whatsapp,mother_name,mother_mobile,mother_whatsapp,emergency_contact_name,emergency_contact_phone,document_url'
+          )
+          .eq('is_active', true)
+          .order('full_name'),
+        supabase.from('escort_card').select('*'),
+      ]).then(([studentsRes, escortRes]) => {
+        if (studentsRes.error) {
+          setToast(studentsRes.error.message)
+          return
+        }
+
+        const escortRows = escortRes.data || []
+
+        // Load local extra cache
+        let allExtra: Record<string, any> = {}
+        try {
+          allExtra = JSON.parse(
+            localStorage.getItem('sjes_escort_cards_extra') || '{}'
+          )
+        } catch {}
+
+        // Load local student master cache if present
+        let localMasterList: any[] = []
+        try {
+          const cached =
+            localStorage.getItem('sjes_table_student_master') ||
+            localStorage.getItem('sjes_table_students')
+          if (cached) localMasterList = JSON.parse(cached)
+        } catch {}
+
+        const list: Person[] = (studentsRes.data || []).map((s) => {
+          const extra =
+            allExtra[s.student_id] || allExtra[s.admission_no] || allExtra[s.full_name] || {}
+
+          // Find local master match
+          const localMatch = localMasterList.find(
+            (lm: any) =>
+              lm.admission_no === s.admission_no ||
+              lm.student_id === s.student_id ||
+              lm.full_name === s.full_name
+          )
+
+          // Find escort_card match from Supabase
+          const fatherEscort = escortRows.find(
+            (er: any) =>
+              (er.student_name === s.full_name ||
+                er.student_name?.toLowerCase() === s.full_name?.toLowerCase()) &&
+              (er.relation === 'Father' || er.relation?.toLowerCase() === 'father')
+          )
+          const motherEscort = escortRows.find(
+            (er: any) =>
+              (er.student_name === s.full_name ||
+                er.student_name?.toLowerCase() === s.full_name?.toLowerCase()) &&
+              (er.relation === 'Mother' || er.relation?.toLowerCase() === 'mother')
+          )
+
+          // Document URL JSON fallback
+          let docParsed: any = {}
+          if (s.document_url && typeof s.document_url === 'string' && s.document_url.startsWith('{')) {
             try {
-              allExtra = JSON.parse(
-                localStorage.getItem('sjes_escort_cards_extra') || '{}'
-              )
+              docParsed = JSON.parse(s.document_url)
             } catch {}
+          }
 
-            const list: Person[] = (data || []).map((s) => {
-              const extra = allExtra[s.student_id] || allExtra[s.admission_no] || {}
-              return {
-                id: s.student_id,
-                code: s.admission_no,
-                fullName: s.full_name,
-                secondaryInfo: s.class_name ? `Class ${s.class_name}` : undefined,
-                dateOfBirth: s.date_of_birth,
-                mobile: s.mobile_primary,
-                photoUrl: extra.studentPhotoUrl || s.student_photo_url,
-                type: 'student',
-                className: s.class_name,
-                rollNo: s.roll_no,
-                fatherName: extra.fatherName || s.father_name || '',
-                fatherContact:
-                  extra.fatherContact ||
-                  s.father_mobile ||
-                  s.father_whatsapp ||
-                  '',
-                fatherPhotoUrl: extra.fatherPhotoUrl || '',
-                motherName: extra.motherName || s.mother_name || '',
-                motherContact:
-                  extra.motherContact ||
-                  s.mother_mobile ||
-                  s.mother_whatsapp ||
-                  '',
-                motherPhotoUrl: extra.motherPhotoUrl || '',
-              }
-            })
+          const resolvedFatherPhoto =
+            extra.fatherPhotoUrl ||
+            extra.father_photo_url ||
+            fatherEscort?.photo_url ||
+            docParsed.father_photo_url ||
+            docParsed.fatherPhotoUrl ||
+            localMatch?.father_photo_url ||
+            localMatch?.father_photo ||
+            ''
 
-            setPeople(list)
-            if (list.length > 0 && !selectedId) {
-              setSelectedId(list[0].id)
-            }
+          const resolvedMotherPhoto =
+            extra.motherPhotoUrl ||
+            extra.mother_photo_url ||
+            motherEscort?.photo_url ||
+            docParsed.mother_photo_url ||
+            docParsed.motherPhotoUrl ||
+            localMatch?.mother_photo_url ||
+            localMatch?.mother_photo ||
+            ''
+
+          const resolvedFatherName =
+            extra.fatherName ||
+            s.father_name ||
+            fatherEscort?.escort_name ||
+            localMatch?.father_name ||
+            ''
+
+          const resolvedFatherContact =
+            extra.fatherContact ||
+            s.father_mobile ||
+            s.father_whatsapp ||
+            fatherEscort?.mobile ||
+            localMatch?.father_mobile ||
+            ''
+
+          const resolvedMotherName =
+            extra.motherName ||
+            s.mother_name ||
+            motherEscort?.escort_name ||
+            localMatch?.mother_name ||
+            ''
+
+          const resolvedMotherContact =
+            extra.motherContact ||
+            s.mother_mobile ||
+            s.mother_whatsapp ||
+            motherEscort?.mobile ||
+            localMatch?.mother_mobile ||
+            ''
+
+          return {
+            id: s.student_id,
+            code: s.admission_no,
+            fullName: s.full_name,
+            secondaryInfo: s.class_name ? `Class ${s.class_name}` : undefined,
+            dateOfBirth: s.date_of_birth,
+            mobile: s.mobile_primary,
+            photoUrl:
+              extra.studentPhotoUrl ||
+              s.student_photo_url ||
+              localMatch?.student_photo_url ||
+              '',
+            type: 'student',
+            className: s.class_name,
+            rollNo: s.roll_no,
+            fatherName: resolvedFatherName,
+            fatherContact: resolvedFatherContact,
+            fatherPhotoUrl: resolvedFatherPhoto,
+            motherName: resolvedMotherName,
+            motherContact: resolvedMotherContact,
+            motherPhotoUrl: resolvedMotherPhoto,
           }
         })
+
+        setPeople(list)
+        if (list.length > 0 && !selectedId) {
+          setSelectedId(list[0].id)
+        }
+      })
     } else {
       supabase
         .from('employee_master')
@@ -235,23 +334,37 @@ export default function IDCardStudio({
       setPhotoUrl(selected.photoUrl || '')
       setPhotoPreview('')
 
-      // Check local storage for any extra cached parent photos
+      // Load extra cached details if present
       let extra: any = null
       try {
         const allExtra = JSON.parse(
           localStorage.getItem('sjes_escort_cards_extra') || '{}'
         )
-        extra = allExtra[selected.id] || allExtra[selected.code] || {}
+        extra =
+          allExtra[selected.id] ||
+          allExtra[selected.code] ||
+          allExtra[selected.fullName] ||
+          {}
       } catch {}
 
       setFatherName(extra?.fatherName || selected.fatherName || '')
       setFatherContact(extra?.fatherContact || selected.fatherContact || '')
-      setFatherPhotoUrl(extra?.fatherPhotoUrl || selected.fatherPhotoUrl || '')
+      setFatherPhotoUrl(
+        extra?.fatherPhotoUrl ||
+          extra?.father_photo_url ||
+          selected.fatherPhotoUrl ||
+          ''
+      )
       setFatherPhotoPreview('')
 
       setMotherName(extra?.motherName || selected.motherName || '')
       setMotherContact(extra?.motherContact || selected.motherContact || '')
-      setMotherPhotoUrl(extra?.motherPhotoUrl || selected.motherPhotoUrl || '')
+      setMotherPhotoUrl(
+        extra?.motherPhotoUrl ||
+          extra?.mother_photo_url ||
+          selected.motherPhotoUrl ||
+          ''
+      )
       setMotherPhotoPreview('')
     }
   }, [selected])
@@ -287,7 +400,6 @@ export default function IDCardStudio({
           : designation || 'Teacher'
     const dept = department || 'Teaching Staff'
 
-    // Generate a web-verifiable URL compatible with standard smartphone cameras and QR scanners
     const baseOrigin =
       typeof window !== 'undefined' && window.location.origin
         ? window.location.origin
@@ -500,7 +612,6 @@ export default function IDCardStudio({
       logging: false,
       imageTimeout: 10000,
     })
-    // ISO/IEC 7810 ID-1 standard portrait format: 54mm width x 85.6mm height
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -541,12 +652,12 @@ export default function IDCardStudio({
       const todayIso = new Date().toISOString().slice(0, 10)
 
       if (cardType === 'escort') {
-        // 1. Save Father Escort Record if father name provided
-        if (fatherName) {
+        // 1. Save Father Escort Record in Supabase escort_card table
+        if (fatherName || visibleFatherPhoto) {
           const fatherRecord = {
             student_name: studentName,
             class_name: className,
-            escort_name: fatherName,
+            escort_name: fatherName || 'Father',
             relation: 'Father',
             mobile: fatherContact || null,
             photo_url: visibleFatherPhoto || null,
@@ -557,12 +668,12 @@ export default function IDCardStudio({
           await resilientUpsert('escort_card', [fatherRecord])
         }
 
-        // 2. Save Mother Escort Record if mother name provided
-        if (motherName) {
+        // 2. Save Mother Escort Record in Supabase escort_card table
+        if (motherName || visibleMotherPhoto) {
           const motherRecord = {
             student_name: studentName,
             class_name: className,
-            escort_name: motherName,
+            escort_name: motherName || 'Mother',
             relation: 'Mother',
             mobile: motherContact || null,
             photo_url: visibleMotherPhoto || null,
@@ -573,8 +684,18 @@ export default function IDCardStudio({
           await resilientUpsert('escort_card', [motherRecord])
         }
 
-        // 3. Update student_master parent info in Supabase
+        // 3. Update student_master parent info & document_url (JSON metadata) in Supabase
         if (selected?.id) {
+          const docData = JSON.stringify({
+            father_photo_url: visibleFatherPhoto || '',
+            mother_photo_url: visibleMotherPhoto || '',
+            father_name: fatherName,
+            father_mobile: fatherContact,
+            mother_name: motherName,
+            mother_mobile: motherContact,
+            updated_at: new Date().toISOString(),
+          })
+
           await supabase
             .from('student_master')
             .update({
@@ -582,11 +703,34 @@ export default function IDCardStudio({
               father_mobile: fatherContact || null,
               mother_name: motherName || null,
               mother_mobile: motherContact || null,
+              student_photo_url: visibleStudentPhoto || null,
+              document_url: docData,
             })
             .eq('student_id', selected.id)
         }
 
-        // 4. Save to local storage cache so all photos and contact details are permanently retained
+        // 4. Update memory state for this person
+        setPeople((prev) =>
+          prev.map((p) =>
+            p.id === selected.id
+              ? {
+                  ...p,
+                  fullName: studentName,
+                  className,
+                  rollNo,
+                  photoUrl: visibleStudentPhoto,
+                  fatherName,
+                  fatherContact,
+                  fatherPhotoUrl: visibleFatherPhoto,
+                  motherName,
+                  motherContact,
+                  motherPhotoUrl: visibleMotherPhoto,
+                }
+              : p
+          )
+        )
+
+        // 5. Save to local storage caches so all photos and contact details are permanently retained
         try {
           const allExtra = JSON.parse(
             localStorage.getItem('sjes_escort_cards_extra') || '{}'
@@ -610,6 +754,33 @@ export default function IDCardStudio({
             'sjes_escort_cards_extra',
             JSON.stringify(allExtra)
           )
+
+          // Also update sjes_table_student_master cache
+          const localMasterStr = localStorage.getItem('sjes_table_student_master')
+          if (localMasterStr) {
+            const localMaster = JSON.parse(localMasterStr)
+            if (Array.isArray(localMaster)) {
+              const updatedMaster = localMaster.map((sm: any) =>
+                sm.admission_no === selected.code || sm.student_id === selected.id
+                  ? {
+                      ...sm,
+                      full_name: studentName,
+                      class_name: className,
+                      roll_no: rollNo,
+                      student_photo_url: visibleStudentPhoto,
+                      father_name: fatherName,
+                      father_mobile: fatherContact,
+                      father_photo_url: visibleFatherPhoto,
+                      mother_name: motherName,
+                      mother_mobile: motherContact,
+                      mother_photo_url: visibleMotherPhoto,
+                    }
+                  : sm
+              )
+              localStorage.setItem('sjes_table_student_master', JSON.stringify(updatedMaster))
+              localStorage.setItem('sjes_table_students', JSON.stringify(updatedMaster))
+            }
+          }
         } catch (e) {
           console.error('Failed to save escort extra cache:', e)
         }
@@ -619,7 +790,7 @@ export default function IDCardStudio({
           module: 'escort_card',
         })
 
-        setToast('Escort Card record saved to database')
+        setToast('✓ Escort Card & Parent Photo records saved successfully!')
       } else if (cardType === 'student') {
         const record = {
           student_id: selected.id,
@@ -704,7 +875,14 @@ export default function IDCardStudio({
 
   return (
     <div className="studio">
-      <section className="studio-panel">
+      <section
+        className="studio-panel"
+        style={{
+          maxHeight: 'calc(100vh - 110px)',
+          overflowY: 'auto',
+          paddingRight: '12px',
+        }}
+      >
         <span className="overline">ID CARD GENERATOR & STUDIO</span>
         <h2>
           {cardType === 'escort'
@@ -743,9 +921,7 @@ export default function IDCardStudio({
               gap: '4px',
               padding: '0 4px',
             }}
-            onClick={() => {
-              setCardType('student')
-            }}
+            onClick={() => setCardType('student')}
           >
             <GraduationCap size={14} />
             Student ID
@@ -767,9 +943,7 @@ export default function IDCardStudio({
               gap: '4px',
               padding: '0 4px',
             }}
-            onClick={() => {
-              setCardType('employee')
-            }}
+            onClick={() => setCardType('employee')}
           >
             <UserCheck size={14} />
             Staff ID
@@ -791,9 +965,7 @@ export default function IDCardStudio({
               gap: '4px',
               padding: '0 4px',
             }}
-            onClick={() => {
-              setCardType('escort')
-            }}
+            onClick={() => setCardType('escort')}
           >
             <Users size={14} />
             Escort Card
@@ -828,250 +1000,627 @@ export default function IDCardStudio({
               marginTop: '10px',
             }}
           >
-            {/* 1. Student Details Group */}
+            {/* Quick Section Switcher Pills */}
             <div
               style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: '9px',
-                padding: '10px',
+                display: 'flex',
+                gap: '4px',
+                background: '#f1f5f9',
+                padding: '3px',
+                borderRadius: '8px',
               }}
             >
-              <span
+              <button
+                type="button"
+                onClick={() => setEscortActiveTab('all')}
                 style={{
-                  fontSize: '11px',
+                  flex: 1,
+                  height: '28px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '10px',
                   fontWeight: 800,
-                  color: '#1e3a8a',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  marginBottom: '8px',
+                  cursor: 'pointer',
+                  background: escortActiveTab === 'all' ? '#fff' : 'transparent',
+                  color: escortActiveTab === 'all' ? '#0f172a' : '#64748b',
+                  boxShadow:
+                    escortActiveTab === 'all'
+                      ? '0 1px 3px rgba(0,0,0,0.1)'
+                      : 'none',
                 }}
               >
-                <GraduationCap size={13} color="#2563eb" />
-                STUDENT DETAILS
-              </span>
+                All (3)
+              </button>
+              <button
+                type="button"
+                onClick={() => setEscortActiveTab('student')}
+                style={{
+                  flex: 1,
+                  height: '28px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  background:
+                    escortActiveTab === 'student' ? '#fff' : 'transparent',
+                  color:
+                    escortActiveTab === 'student' ? '#1d4ed8' : '#64748b',
+                  boxShadow:
+                    escortActiveTab === 'student'
+                      ? '0 1px 3px rgba(0,0,0,0.1)'
+                      : 'none',
+                }}
+              >
+                🎓 Student
+              </button>
+              <button
+                type="button"
+                onClick={() => setEscortActiveTab('father')}
+                style={{
+                  flex: 1,
+                  height: '28px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  background:
+                    escortActiveTab === 'father' ? '#fff' : 'transparent',
+                  color:
+                    escortActiveTab === 'father' ? '#0284c7' : '#64748b',
+                  boxShadow:
+                    escortActiveTab === 'father'
+                      ? '0 1px 3px rgba(0,0,0,0.1)'
+                      : 'none',
+                }}
+              >
+                👨 Father
+              </button>
+              <button
+                type="button"
+                onClick={() => setEscortActiveTab('mother')}
+                style={{
+                  flex: 1,
+                  height: '28px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  background:
+                    escortActiveTab === 'mother' ? '#fff' : 'transparent',
+                  color:
+                    escortActiveTab === 'mother' ? '#be185d' : '#64748b',
+                  boxShadow:
+                    escortActiveTab === 'mother'
+                      ? '0 1px 3px rgba(0,0,0,0.1)'
+                      : 'none',
+                }}
+              >
+                👩 Mother
+              </button>
+            </div>
 
-              <label style={{ marginTop: '4px' }}>
-                STUDENT NAME:
-                <input
-                  value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
-                  placeholder="e.g. AADITRI DAS"
-                />
-              </label>
-
+            {/* 1. STUDENT DETAILS GROUP */}
+            {(escortActiveTab === 'all' || escortActiveTab === 'student') && (
               <div
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '8px',
-                  marginTop: '6px',
+                  background: '#f8fafc',
+                  border: '1.5px solid #dbeafe',
+                  borderRadius: '10px',
+                  padding: '12px',
                 }}
               >
-                <label style={{ margin: 0 }}>
-                  CLASS:
-                  <input
-                    value={className}
-                    onChange={(e) => setClassName(e.target.value)}
-                    placeholder="e.g. PG or Class I"
-                  />
-                </label>
-                <label style={{ margin: 0 }}>
-                  ROLL:
-                  <input
-                    value={rollNo}
-                    onChange={(e) => setRollNo(e.target.value)}
-                    placeholder="e.g. 4"
-                  />
-                </label>
-              </div>
-
-              <div style={{ marginTop: '8px' }}>
-                <label style={{ margin: 0 }}>
-                  Student Photo URL
-                  <input
-                    type="url"
-                    value={photoUrl}
-                    onChange={(e) => setPhotoUrl(e.target.value)}
-                    placeholder="https://..."
-                  />
-                </label>
-                <label
-                  className="photo-upload"
+                <div
                   style={{
-                    marginTop: '6px',
-                    padding: '8px',
-                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '8px',
                   }}
                 >
-                  <Upload size={14} />
-                  <span style={{ fontSize: '11px' }}>
-                    {uploadingTarget === 'student'
-                      ? 'Uploading Student Photo...'
-                      : 'Upload Student Photo'}
+                  <span
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 800,
+                      color: '#1e3a8a',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                  >
+                    <GraduationCap size={15} color="#2563eb" />
+                    STUDENT DETAILS
                   </span>
+                  {visibleStudentPhoto && (
+                    <span
+                      style={{
+                        fontSize: '9.5px',
+                        color: '#16a34a',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                      }}
+                    >
+                      <Check size={12} /> Photo Loaded
+                    </span>
+                  )}
+                </div>
+
+                <label style={{ marginTop: '2px' }}>
+                  STUDENT NAME:
                   <input
-                    type="file"
-                    accept="image/*"
-                    disabled={uploadingTarget !== null}
-                    onChange={(e) => handlePhotoUploadFor('student', e)}
+                    value={studentName}
+                    onChange={(e) => setStudentName(e.target.value)}
+                    placeholder="e.g. AADITRI DAS"
                   />
                 </label>
-              </div>
-            </div>
 
-            {/* 2. Father Details Group */}
-            <div
-              style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: '9px',
-                padding: '10px',
-              }}
-            >
-              <span
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '8px',
+                    marginTop: '6px',
+                  }}
+                >
+                  <label style={{ margin: 0 }}>
+                    CLASS:
+                    <input
+                      value={className}
+                      onChange={(e) => setClassName(e.target.value)}
+                      placeholder="e.g. PG or Class I"
+                    />
+                  </label>
+                  <label style={{ margin: 0 }}>
+                    ROLL:
+                    <input
+                      value={rollNo}
+                      onChange={(e) => setRollNo(e.target.value)}
+                      placeholder="e.g. 4"
+                    />
+                  </label>
+                </div>
+
+                {/* Student Photo URL and Uploader */}
+                <div
+                  style={{
+                    marginTop: '8px',
+                    padding: '8px',
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <label style={{ margin: 0, fontWeight: 700, fontSize: '11px' }}>
+                    Student Photo URL / Google Drive Link:
+                    <input
+                      type="url"
+                      value={photoUrl}
+                      onChange={(e) => setPhotoUrl(e.target.value)}
+                      placeholder="https://drive.google.com/... or https://..."
+                      style={{ fontSize: '12px' }}
+                    />
+                  </label>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginTop: '6px',
+                    }}
+                  >
+                    {/* Thumbnail preview */}
+                    <div
+                      style={{
+                        width: '38px',
+                        height: '44px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        background: '#f8fafc',
+                        overflow: 'hidden',
+                        display: 'grid',
+                        placeItems: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {visibleStudentPhoto ? (
+                        <img
+                          src={formatImageUrl(visibleStudentPhoto)}
+                          alt="Student thumb"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
+                          onError={handleImageError}
+                        />
+                      ) : (
+                        <GraduationCap size={16} color="#94a3b8" />
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => studentFileRef.current?.click()}
+                      disabled={uploadingTarget !== null}
+                      style={{
+                        flex: 1,
+                        height: '34px',
+                        borderRadius: '6px',
+                        border: '1px dashed #2563eb',
+                        background: '#eff6ff',
+                        color: '#1d4ed8',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <Upload size={13} />
+                      {uploadingTarget === 'student'
+                        ? 'Uploading...'
+                        : 'Upload Student Photo'}
+                    </button>
+                    <input
+                      ref={studentFileRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => handlePhotoUploadFor('student', e)}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. FATHER DETAILS GROUP */}
+            {(escortActiveTab === 'all' || escortActiveTab === 'father') && (
+              <div
                 style={{
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  color: '#0369a1',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  marginBottom: '8px',
+                  background: '#f8fafc',
+                  border: '1.5px solid #bae6fd',
+                  borderRadius: '10px',
+                  padding: '12px',
                 }}
               >
-                <User size={13} color="#0284c7" />
-                FATHER DETAILS
-              </span>
-
-              <label style={{ marginTop: '4px' }}>
-                FATHER NAME:
-                <input
-                  value={fatherName}
-                  onChange={(e) => setFatherName(e.target.value)}
-                  placeholder="e.g. ANIBRATA DAS"
-                />
-              </label>
-
-              <label style={{ marginTop: '6px' }}>
-                FATHER CONTACT:
-                <input
-                  value={fatherContact}
-                  onChange={(e) => setFatherContact(e.target.value)}
-                  placeholder="e.g. 9614296337"
-                />
-              </label>
-
-              <div style={{ marginTop: '8px' }}>
-                <label style={{ margin: 0 }}>
-                  Father Photo URL
-                  <input
-                    type="url"
-                    value={fatherPhotoUrl}
-                    onChange={(e) => setFatherPhotoUrl(e.target.value)}
-                    placeholder="https://..."
-                  />
-                </label>
-                <label
-                  className="photo-upload"
+                <div
                   style={{
-                    marginTop: '6px',
-                    padding: '8px',
-                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '8px',
                   }}
                 >
-                  <Upload size={14} />
-                  <span style={{ fontSize: '11px' }}>
-                    {uploadingTarget === 'father'
-                      ? 'Uploading Father Photo...'
-                      : 'Upload Father Photo'}
+                  <span
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 800,
+                      color: '#0369a1',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                  >
+                    <User size={15} color="#0284c7" />
+                    FATHER DETAILS
                   </span>
+                  {visibleFatherPhoto ? (
+                    <span
+                      style={{
+                        fontSize: '9.5px',
+                        color: '#16a34a',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                      }}
+                    >
+                      <Check size={12} /> Photo Loaded
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: '9.5px',
+                        color: '#d97706',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Photo Needed
+                    </span>
+                  )}
+                </div>
+
+                <label style={{ marginTop: '2px' }}>
+                  FATHER NAME:
                   <input
-                    type="file"
-                    accept="image/*"
-                    disabled={uploadingTarget !== null}
-                    onChange={(e) => handlePhotoUploadFor('father', e)}
+                    value={fatherName}
+                    onChange={(e) => setFatherName(e.target.value)}
+                    placeholder="e.g. ANIBRATA DAS"
                   />
                 </label>
-              </div>
-            </div>
 
-            {/* 3. Mother Details Group */}
-            <div
-              style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: '9px',
-                padding: '10px',
-              }}
-            >
-              <span
+                <label style={{ marginTop: '6px' }}>
+                  FATHER CONTACT:
+                  <input
+                    value={fatherContact}
+                    onChange={(e) => setFatherContact(e.target.value)}
+                    placeholder="e.g. 9614296337"
+                  />
+                </label>
+
+                {/* Father Photo URL and Uploader */}
+                <div
+                  style={{
+                    marginTop: '8px',
+                    padding: '8px',
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <label style={{ margin: 0, fontWeight: 700, fontSize: '11px' }}>
+                    Father Photo URL / Google Drive Link:
+                    <input
+                      type="url"
+                      value={fatherPhotoUrl}
+                      onChange={(e) => setFatherPhotoUrl(e.target.value)}
+                      placeholder="Paste Father photo Drive URL or image link..."
+                      style={{ fontSize: '12px' }}
+                    />
+                  </label>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginTop: '6px',
+                    }}
+                  >
+                    {/* Thumbnail preview */}
+                    <div
+                      style={{
+                        width: '38px',
+                        height: '44px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        background: '#f8fafc',
+                        overflow: 'hidden',
+                        display: 'grid',
+                        placeItems: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {visibleFatherPhoto ? (
+                        <img
+                          src={formatImageUrl(visibleFatherPhoto)}
+                          alt="Father thumb"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
+                          onError={handleImageError}
+                        />
+                      ) : (
+                        <User size={16} color="#94a3b8" />
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => fatherFileRef.current?.click()}
+                      disabled={uploadingTarget !== null}
+                      style={{
+                        flex: 1,
+                        height: '34px',
+                        borderRadius: '6px',
+                        border: '1px dashed #0284c7',
+                        background: '#f0f9ff',
+                        color: '#0369a1',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <Upload size={13} />
+                      {uploadingTarget === 'father'
+                        ? 'Uploading...'
+                        : 'Upload Father Photo'}
+                    </button>
+                    <input
+                      ref={fatherFileRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => handlePhotoUploadFor('father', e)}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. MOTHER DETAILS GROUP */}
+            {(escortActiveTab === 'all' || escortActiveTab === 'mother') && (
+              <div
                 style={{
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  color: '#9d174d',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  marginBottom: '8px',
+                  background: '#f8fafc',
+                  border: '1.5px solid #fbcfe8',
+                  borderRadius: '10px',
+                  padding: '12px',
                 }}
               >
-                <User size={13} color="#be185d" />
-                MOTHER DETAILS
-              </span>
-
-              <label style={{ marginTop: '4px' }}>
-                MOTHER NAME:
-                <input
-                  value={motherName}
-                  onChange={(e) => setMotherName(e.target.value)}
-                  placeholder="e.g. SOMA DAS"
-                />
-              </label>
-
-              <label style={{ marginTop: '6px' }}>
-                MOTHER CONTACT:
-                <input
-                  value={motherContact}
-                  onChange={(e) => setMotherContact(e.target.value)}
-                  placeholder="e.g. 9876543211"
-                />
-              </label>
-
-              <div style={{ marginTop: '8px' }}>
-                <label style={{ margin: 0 }}>
-                  Mother Photo URL
-                  <input
-                    type="url"
-                    value={motherPhotoUrl}
-                    onChange={(e) => setMotherPhotoUrl(e.target.value)}
-                    placeholder="https://..."
-                  />
-                </label>
-                <label
-                  className="photo-upload"
+                <div
                   style={{
-                    marginTop: '6px',
-                    padding: '8px',
-                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '8px',
                   }}
                 >
-                  <Upload size={14} />
-                  <span style={{ fontSize: '11px' }}>
-                    {uploadingTarget === 'mother'
-                      ? 'Uploading Mother Photo...'
-                      : 'Upload Mother Photo'}
+                  <span
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 800,
+                      color: '#9d174d',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                  >
+                    <User size={15} color="#be185d" />
+                    MOTHER DETAILS
                   </span>
+                  {visibleMotherPhoto ? (
+                    <span
+                      style={{
+                        fontSize: '9.5px',
+                        color: '#16a34a',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                      }}
+                    >
+                      <Check size={12} /> Photo Loaded
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: '9.5px',
+                        color: '#d97706',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Photo Needed
+                    </span>
+                  )}
+                </div>
+
+                <label style={{ marginTop: '2px' }}>
+                  MOTHER NAME:
                   <input
-                    type="file"
-                    accept="image/*"
-                    disabled={uploadingTarget !== null}
-                    onChange={(e) => handlePhotoUploadFor('mother', e)}
+                    value={motherName}
+                    onChange={(e) => setMotherName(e.target.value)}
+                    placeholder="e.g. SOMA DAS"
                   />
                 </label>
+
+                <label style={{ marginTop: '6px' }}>
+                  MOTHER CONTACT:
+                  <input
+                    value={motherContact}
+                    onChange={(e) => setMotherContact(e.target.value)}
+                    placeholder="e.g. 9876543211"
+                  />
+                </label>
+
+                {/* Mother Photo URL and Uploader */}
+                <div
+                  style={{
+                    marginTop: '8px',
+                    padding: '8px',
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <label style={{ margin: 0, fontWeight: 700, fontSize: '11px' }}>
+                    Mother Photo URL / Google Drive Link:
+                    <input
+                      type="url"
+                      value={motherPhotoUrl}
+                      onChange={(e) => setMotherPhotoUrl(e.target.value)}
+                      placeholder="Paste Mother photo Drive URL or image link..."
+                      style={{ fontSize: '12px' }}
+                    />
+                  </label>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginTop: '6px',
+                    }}
+                  >
+                    {/* Thumbnail preview */}
+                    <div
+                      style={{
+                        width: '38px',
+                        height: '44px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        background: '#f8fafc',
+                        overflow: 'hidden',
+                        display: 'grid',
+                        placeItems: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {visibleMotherPhoto ? (
+                        <img
+                          src={formatImageUrl(visibleMotherPhoto)}
+                          alt="Mother thumb"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
+                          onError={handleImageError}
+                        />
+                      ) : (
+                        <User size={16} color="#94a3b8" />
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => motherFileRef.current?.click()}
+                      disabled={uploadingTarget !== null}
+                      style={{
+                        flex: 1,
+                        height: '34px',
+                        borderRadius: '6px',
+                        border: '1px dashed #be185d',
+                        background: '#fdf2f8',
+                        color: '#9d174d',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <Upload size={13} />
+                      {uploadingTarget === 'mother'
+                        ? 'Uploading...'
+                        : 'Upload Mother Photo'}
+                    </button>
+                    <input
+                      ref={motherFileRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => handlePhotoUploadFor('mother', e)}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         ) : (
           /* STANDARD STUDENT / EMPLOYEE FORM FIELDS */
@@ -1133,7 +1682,7 @@ export default function IDCardStudio({
           </>
         )}
 
-        <label style={{ marginTop: '10px' }}>
+        <label style={{ marginTop: '12px' }}>
           Valid Until
           <input
             type="date"
@@ -1316,7 +1865,12 @@ export default function IDCardStudio({
             <div className="id-body-escort">
               {/* Student Section */}
               <div className="escort-student-box">
-                <div className="escort-student-photo-wrap">
+                <div
+                  className="escort-student-photo-wrap"
+                  onClick={() => studentFileRef.current?.click()}
+                  style={{ cursor: 'pointer' }}
+                  title="Click to change or upload Student photo"
+                >
                   {visibleStudentPhoto ? (
                     <img
                       src={formatImageUrl(visibleStudentPhoto)}
@@ -1374,7 +1928,12 @@ export default function IDCardStudio({
               <div className="escort-parents-grid">
                 {/* 1. Father Section */}
                 <div className="escort-parent-card">
-                  <div className="escort-parent-photo-wrap">
+                  <div
+                    className="escort-parent-photo-wrap"
+                    onClick={() => fatherFileRef.current?.click()}
+                    style={{ cursor: 'pointer' }}
+                    title="Click to upload or change Father photo"
+                  >
                     {visibleFatherPhoto ? (
                       <img
                         src={formatImageUrl(visibleFatherPhoto)}
@@ -1413,7 +1972,12 @@ export default function IDCardStudio({
 
                 {/* 2. Mother Section */}
                 <div className="escort-parent-card">
-                  <div className="escort-parent-photo-wrap">
+                  <div
+                    className="escort-parent-photo-wrap"
+                    onClick={() => motherFileRef.current?.click()}
+                    style={{ cursor: 'pointer' }}
+                    title="Click to upload or change Mother photo"
+                  >
                     {visibleMotherPhoto ? (
                       <img
                         src={formatImageUrl(visibleMotherPhoto)}
