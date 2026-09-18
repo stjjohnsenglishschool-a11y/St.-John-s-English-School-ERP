@@ -9,6 +9,30 @@ export const SUPABASE_ANON_KEY =
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+export function isUUID(str: any): boolean {
+  if (typeof str !== 'string') return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+}
+
+/**
+ * Strips synthetic frontend fields (_docId, _id) and non-UUID primary key fields that do not exist or expect UUIDs in Postgres
+ */
+export function sanitizePayload(record: Record<string, any>): Record<string, any> {
+  if (!record || typeof record !== 'object') return record
+  const clean: Record<string, any> = {}
+  for (const key of Object.keys(record)) {
+    if (key === '_docId' || key === '_id') {
+      continue
+    }
+    // If key ends with _id and is non-empty string but not a valid UUID format, remove it so Postgres auto-generates UUID
+    if (key.endsWith('_id') && record[key] && typeof record[key] === 'string' && !isUUID(record[key])) {
+      continue
+    }
+    clean[key] = record[key]
+  }
+  return clean
+}
+
 /**
  * Fetch all records directly from Supabase (Live Source of Truth)
  */
@@ -40,7 +64,7 @@ export async function fetchSupabaseTable<T = any>(tableName: string): Promise<T[
  */
 export async function saveSupabaseRecord(
   tableName: string,
-  record: Record<string, any>
+  rawRecord: Record<string, any>
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     // Purge local storage employee cache so stale status is never served
@@ -51,6 +75,9 @@ export async function saveSupabaseRecord(
         localStorage.removeItem('sjes_table_staff')
       } catch {}
     }
+
+    // Ensure payload has no synthetic _docId / _id columns that don't exist in Supabase Postgres schema
+    const record = sanitizePayload(rawRecord)
 
     // Sync employment_status and is_active strictly for employee_master
     if (tableName === 'employee_master') {
@@ -200,14 +227,29 @@ export async function deleteSupabaseRecord(
       }
     }
 
-    // Attempt delete in Supabase across possible primary key column names
-    const deleteFields = [matchField, '_docId', 'id', 'admission_no', 'emp_code', 'department_code', 'vendor_code', 'code'].filter(
-      (v, i, a) => a.indexOf(v) === i
+    // Attempt delete in Supabase across possible primary key column names (never query _docId column)
+    const deleteFields = [
+      matchField,
+      'admission_no',
+      'student_id',
+      'emp_code',
+      'emp_id',
+      'department_code',
+      'department_id',
+      'class_id',
+      'subject_id',
+      'vendor_code',
+      'vendor_id',
+      'id',
+      'code'
+    ].filter(
+      (v, i, a) => v && v !== '_docId' && a.indexOf(v) === i
     )
 
     for (const field of deleteFields) {
       try {
-        await supabase.from(tableName).delete().eq(field, matchValue)
+        const { error } = await supabase.from(tableName).delete().eq(field, matchValue)
+        if (!error) break
       } catch {
         // try next
       }
@@ -380,15 +422,16 @@ export async function saveDocument(
       docId = `${collectionName}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`
     }
 
-    const payload = {
+    const payload = sanitizePayload({
       ...data,
       [primaryKeyName]: docId,
-      _docId: docId,
-      id: data.id || docId,
       updated_at: new Date().toISOString()
-    }
+    })
 
-    await saveSupabaseRecord(collectionName, payload)
+    const res = await saveSupabaseRecord(collectionName, payload)
+    if (!res.success) {
+      return { success: false, id: '', error: res.error || 'Failed to save record' }
+    }
     return { success: true, id: String(docId) }
   } catch (err: any) {
     console.error(`Error saving record to table ${collectionName}:`, err)
@@ -413,13 +456,11 @@ export async function saveBatchDocuments(
         docId = `${collectionName}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`
       }
 
-      return {
+      return sanitizePayload({
         ...item,
         [primaryKeyName]: docId,
-        _docId: docId,
-        id: item.id || docId,
         updated_at: new Date().toISOString()
-      }
+      })
     })
 
     const cacheKey = `sjes_table_${collectionName}`
@@ -431,8 +472,12 @@ export async function saveBatchDocuments(
       }
     }
 
-    await supabase.from(collectionName).upsert(sanitizedItems)
-    return { success: true, count: sanitizedItems.length }
+    const { data, error } = await supabase.from(collectionName).upsert(sanitizedItems).select()
+    if (error) {
+      console.error(`Batch save error for table ${collectionName}:`, error.message)
+      return { success: false, count: 0, error: error.message }
+    }
+    return { success: true, count: data?.length || sanitizedItems.length }
   } catch (err: any) {
     console.error(`Batch save error for table ${collectionName}:`, err)
     return { success: false, count: 0, error: err?.message || 'Failed to batch save' }
@@ -448,10 +493,9 @@ export async function deleteDocument(
   additionalInfo?: Record<string, any>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await deleteSupabaseRecord(collectionName, '_docId', docId)
     await deleteSupabaseRecord(collectionName, 'id', docId)
     if (additionalInfo) {
-      const pk = additionalInfo.emp_code || additionalInfo.admission_no || additionalInfo.department_code || additionalInfo.vendor_code || additionalInfo.code
+      const pk = additionalInfo.emp_code || additionalInfo.admission_no || additionalInfo.department_code || additionalInfo.vendor_code || additionalInfo.code || additionalInfo.student_id || additionalInfo.emp_id || additionalInfo.department_id
       if (pk) {
         await deleteSupabaseRecord(collectionName, 'code', pk)
       }

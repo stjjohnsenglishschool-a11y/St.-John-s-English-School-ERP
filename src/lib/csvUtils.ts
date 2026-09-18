@@ -278,11 +278,20 @@ export function sanitizeRecordForTable(
     if (!payload.student_id || String(payload.student_id).trim() === '') {
       payload.student_id = String(payload.admission_no)
     }
+    if (!payload.class_name || String(payload.class_name).trim() === '') {
+      payload.class_name = 'CLASS I'
+    }
+    if (!payload.section || String(payload.section).trim() === '') {
+      payload.section = 'A'
+    }
     if (!payload.academic_year) {
       payload.academic_year = getCurrentAcademicYear()
     }
     if (!payload.full_name && (payload.first_name || payload.last_name)) {
       payload.full_name = [payload.first_name, payload.middle_name, payload.last_name].filter(Boolean).join(' ')
+    }
+    if (!payload.full_name) {
+      payload.full_name = `Student ${payload.admission_no}`
     }
     if (payload.is_active === undefined) payload.is_active = true
     if (!payload.student_status) payload.student_status = 'Active'
@@ -401,12 +410,15 @@ export function sanitizeRecordForTable(
     }
   }
 
-  // Universal fallback for primary key & _docId across any table
+  // Universal fallback for primary key across any table
   const pkField = mod.primaryKey || 'id'
   if (!payload[pkField] || String(payload[pkField]).trim() === '') {
     payload[pkField] = `${mod.table.slice(0, 4).toUpperCase()}-${Date.now().toString().slice(-5)}-${rowIndex + 1}`
   }
-  payload._docId = String(payload[pkField])
+
+  // Ensure no non-existent Postgres column properties are sent to Supabase
+  delete payload._docId
+  delete payload._id
 
   return payload
 }
