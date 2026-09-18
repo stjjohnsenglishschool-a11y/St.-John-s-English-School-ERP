@@ -1944,7 +1944,7 @@ export default function IDCardStudio({
                       />
                     ) : (
                       <div className="escort-photo-placeholder parent-placeholder">
-                        <User size={20} />
+                        <User size={22} />
                         <span>FATHER</span>
                         <span>PHOTO</span>
                       </div>
@@ -1963,10 +1963,17 @@ export default function IDCardStudio({
                     </div>
                     <div className="escort-detail-item">
                       <span className="escort-field-lbl">FATHER CONTACT:</span>
-                      <b className="escort-parent-contact" title={fatherContact}>
-                        {fatherContact || 'NOT PROVIDED'}
-                      </b>
+                      <div className="escort-contact-pill">
+                        <b className="escort-parent-contact" title={fatherContact}>
+                          {fatherContact || 'NOT PROVIDED'}
+                        </b>
+                      </div>
                     </div>
+                  </div>
+
+                  <div className="escort-auth-status">
+                    <Check size={10} strokeWidth={3} />
+                    <span>AUTHORIZED ESCORT</span>
                   </div>
                 </div>
 
@@ -1988,7 +1995,7 @@ export default function IDCardStudio({
                       />
                     ) : (
                       <div className="escort-photo-placeholder parent-placeholder">
-                        <User size={20} />
+                        <User size={22} />
                         <span>MOTHER</span>
                         <span>PHOTO</span>
                       </div>
@@ -2007,12 +2014,25 @@ export default function IDCardStudio({
                     </div>
                     <div className="escort-detail-item">
                       <span className="escort-field-lbl">MOTHER CONTACT:</span>
-                      <b className="escort-parent-contact" title={motherContact}>
-                        {motherContact || 'NOT PROVIDED'}
-                      </b>
+                      <div className="escort-contact-pill mother">
+                        <b className="escort-parent-contact" title={motherContact}>
+                          {motherContact || 'NOT PROVIDED'}
+                        </b>
+                      </div>
                     </div>
                   </div>
+
+                  <div className="escort-auth-status mother">
+                    <Check size={10} strokeWidth={3} />
+                    <span>AUTHORIZED ESCORT</span>
+                  </div>
                 </div>
+              </div>
+
+              {/* Escort Handover & Security Note Strip */}
+              <div className="escort-security-strip">
+                <ShieldCheck size={11} className="escort-shield-icon" />
+                <span>Must be presented at gate during student dispersal · Non-transferable</span>
               </div>
             </div>
 
