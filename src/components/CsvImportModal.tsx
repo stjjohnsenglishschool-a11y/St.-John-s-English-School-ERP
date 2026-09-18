@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Table,
 } from 'lucide-react'
-import { supabase, logActivity } from '../lib/supabase'
+import { supabase, logActivity, resilientUpsert, sanitizePayload } from '../lib/supabase'
 import { Module, moduleName } from '../modules'
 import {
   parseCsvText,
@@ -114,9 +114,8 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
 
         if (Object.keys(rowObj).length > 0) {
           const sanitized = sanitizeRecordForTable(rowObj, mod, rowIndex)
-          delete (sanitized as any)._docId
-          delete (sanitized as any)._id
-          payloads.push(sanitized)
+          const clean = sanitizePayload(sanitized, mod.table)
+          payloads.push(clean)
         }
       })
 
@@ -126,10 +125,10 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
 
       setProgressText(`Saving ${payloads.length} records...`)
 
-      // 2. Try fast batch upsert with safety timeout
-      const insertTask = supabase.from(mod.table).upsert(payloads).select()
+      // 2. Try fast resilient batch upsert with safety timeout
+      const insertTask = resilientUpsert(mod.table, payloads)
       const safetyTimeout = new Promise<{ data: any; error: any }>((resolve) =>
-        setTimeout(() => resolve({ data: payloads, error: null }), 6000)
+        setTimeout(() => resolve({ data: payloads, error: null }), 10000)
       )
 
       const { data, error: batchError } = await Promise.race([insertTask, safetyTimeout])
@@ -140,19 +139,19 @@ export default function CsvImportModal({ mod, onClose, onSuccess }: CsvImportMod
         successCount = payloads.length
         insertedRecords.push(...((data && Array.isArray(data) && data.length > 0) ? data : payloads))
       } else {
-        // Fallback: If batch fails, try row by row with responsive progress text
+        // Fallback: If batch fails, try row by row with resilient upsert
         console.warn('Batch import warning, switching to row-by-row fallback:', batchError?.message)
         
         for (let i = 0; i < payloads.length; i++) {
           setProgressText(`Importing row ${i + 1} of ${payloads.length}...`)
           const item = payloads[i]
-          const { error: rowError } = await supabase.from(mod.table).upsert([item])
+          const { error: rowError } = await resilientUpsert(mod.table, [item])
           if (!rowError) {
             successCount++
             insertedRecords.push(item)
           } else {
             failCount++
-            const rowIdentifier = item.admission_no || item.emp_code || item.department_code || Object.values(item)[0] || `Row #${i + 2}`
+            const rowIdentifier = (item as any).admission_no || (item as any).emp_code || (item as any).department_code || Object.values(item)[0] || `Row #${i + 2}`
             errors.push(`Row ${i + 2} (${rowIdentifier}): ${rowError?.message || 'Import error'}`)
           }
         }

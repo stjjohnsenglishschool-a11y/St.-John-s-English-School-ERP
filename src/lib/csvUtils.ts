@@ -275,9 +275,6 @@ export function sanitizeRecordForTable(
     if (!payload.admission_no || String(payload.admission_no).trim() === '') {
       payload.admission_no = `ADM-${Date.now().toString().slice(-4)}${rowIndex + 1}`
     }
-    if (!payload.student_id || String(payload.student_id).trim() === '') {
-      payload.student_id = String(payload.admission_no)
-    }
     if (!payload.class_name || String(payload.class_name).trim() === '') {
       payload.class_name = 'CLASS I'
     }
@@ -295,14 +292,14 @@ export function sanitizeRecordForTable(
     }
     if (payload.is_active === undefined) payload.is_active = true
     if (!payload.student_status) payload.student_status = 'Active'
+    // Ensure father_photo_url & mother_photo_url are stripped since they do not exist in Postgres
+    delete payload.father_photo_url
+    delete payload.mother_photo_url
   }
 
   if (mod.table === 'employee_master') {
     if (!payload.emp_code || String(payload.emp_code).trim() === '') {
       payload.emp_code = `EMP-${Date.now().toString().slice(-4)}${rowIndex + 1}`
-    }
-    if (!payload.emp_id || String(payload.emp_id).trim() === '') {
-      payload.emp_id = String(payload.emp_code)
     }
     if (!payload.first_name && (payload.full_name || payload.name || payload.employee_name || payload.staff_name || payload.teacher_name)) {
       const combined = String(payload.full_name || payload.name || payload.employee_name || payload.staff_name || payload.teacher_name).trim()
@@ -323,13 +320,13 @@ export function sanitizeRecordForTable(
     if (!payload.employment_status) payload.employment_status = 'Active'
     if (!payload.employee_category) payload.employee_category = 'Teaching Staff'
     if (!payload.department) payload.department = 'Academics'
+    delete payload.resignation_date
+    delete payload.last_working_date
   }
 
   if (mod.table === 'user_master') {
-    if (!payload.user_id || String(payload.user_id).trim() === '') {
-      payload.user_id = `USR-${Date.now().toString().slice(-4)}${rowIndex + 1}`
-    }
     if (payload.is_active === undefined) payload.is_active = true
+    delete payload.allowed_modules
   }
 
   if (mod.table === 'notice_automation') {
@@ -410,15 +407,27 @@ export function sanitizeRecordForTable(
     }
   }
 
-  // Universal fallback for primary key across any table
+  // Universal fallback for primary key across any table (only if not a UUID column)
   const pkField = mod.primaryKey || 'id'
-  if (!payload[pkField] || String(payload[pkField]).trim() === '') {
-    payload[pkField] = `${mod.table.slice(0, 4).toUpperCase()}-${Date.now().toString().slice(-5)}-${rowIndex + 1}`
+  if (!pkField.endsWith('_id') && pkField !== 'id') {
+    if (!payload[pkField] || String(payload[pkField]).trim() === '') {
+      payload[pkField] = `${mod.table.slice(0, 4).toUpperCase()}-${Date.now().toString().slice(-5)}-${rowIndex + 1}`
+    }
   }
 
   // Ensure no non-existent Postgres column properties are sent to Supabase
   delete payload._docId
   delete payload._id
+
+  // Remove any non-UUID value in a column ending with _id or named id
+  for (const k of Object.keys(payload)) {
+    if ((k.endsWith('_id') || k === 'id') && payload[k] && typeof payload[k] === 'string') {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload[k])
+      if (!isUuid) {
+        delete payload[k]
+      }
+    }
+  }
 
   return payload
 }
