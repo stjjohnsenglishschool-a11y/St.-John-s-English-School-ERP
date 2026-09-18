@@ -87,6 +87,15 @@ export const TABLE_KNOWN_COLUMNS: Record<string, string[]> = {
   ],
   notice_automation: [
     'notice_id', 'title', 'message', 'send_via', 'scheduled_at', 'status', 'created_by', 'created_at'
+  ],
+  fees_structure: [
+    'fee_struct_id', 'class_id', 'class_name', 'fee_type', 'amount', 'frequency',
+    'due_day', 'academic_year', 'remarks', 'description', 'is_active', 'created_at', 'updated_at'
+  ],
+  fees_collection: [
+    'fee_id', 'student_id', 'admission_no', 'student_name', 'class_name', 'academic_year',
+    'fee_type', 'amount_due', 'amount_paid', 'payment_date', 'payment_mode', 'receipt_number',
+    'status', 'remarks', 'created_at', 'updated_at'
   ]
 }
 
@@ -114,6 +123,31 @@ export function sanitizePayload(record: Record<string, any>, tableName?: string)
     if (record.mother_name) docParsed.mother_name = record.mother_name
     if (record.mother_mobile) docParsed.mother_mobile = record.mother_mobile
     clean.document_url = JSON.stringify(docParsed)
+  }
+
+  // Special preservation for fees_collection metadata (due_month, fine, concession, etc.) packed into remarks
+  if (tableName === 'fees_collection') {
+    let feeMeta: Record<string, any> = {}
+    const existingRemarks = record.remarks
+    if (existingRemarks && typeof existingRemarks === 'string' && existingRemarks.trim().startsWith('{')) {
+      try {
+        feeMeta = JSON.parse(existingRemarks)
+      } catch {}
+    } else if (existingRemarks && typeof existingRemarks === 'string') {
+      feeMeta.notes = existingRemarks
+    }
+    if (record.due_month !== undefined) feeMeta.due_month = record.due_month
+    if (record.fees_amount !== undefined) feeMeta.fees_amount = record.fees_amount
+    if (record.fine_amount !== undefined) feeMeta.fine_amount = record.fine_amount
+    if (record.fine_waived !== undefined) feeMeta.fine_waived = record.fine_waived
+    if (record.waive_approved_by_principal !== undefined) feeMeta.waive_approved_by_principal = record.waive_approved_by_principal
+    if (record.fine_waive_reason !== undefined) feeMeta.fine_waive_reason = record.fine_waive_reason
+    if (record.approved_by !== undefined) feeMeta.approved_by = record.approved_by
+    if (record.section !== undefined) feeMeta.section = record.section
+    if (record.roll_no !== undefined) feeMeta.roll_no = record.roll_no
+    if (Object.keys(feeMeta).length > 0) {
+      clean.remarks = JSON.stringify(feeMeta)
+    }
   }
 
   for (const key of Object.keys(record)) {
@@ -518,8 +552,9 @@ export const uploadToFirebaseStorage = uploadToSupabaseStorage
  * Fetch all documents from a Supabase collection/table with local caching fallback
  */
 export async function fetchCollectionData<T = any>(collectionName: string): Promise<T[]> {
-  const unpackStudentRow = (row: any) => {
-    if (collectionName === 'student_master' && row) {
+  const unpackRow = (row: any) => {
+    if (!row) return row
+    if (collectionName === 'student_master') {
       if (row.document_url && typeof row.document_url === 'string' && row.document_url.trim().startsWith('{')) {
         try {
           const doc = JSON.parse(row.document_url)
@@ -536,13 +571,35 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
         } catch {}
       }
     }
+    if (collectionName === 'fees_collection') {
+      if (row.remarks && typeof row.remarks === 'string' && row.remarks.trim().startsWith('{')) {
+        try {
+          const meta = JSON.parse(row.remarks)
+          if (meta.due_month !== undefined && !row.due_month) row.due_month = meta.due_month
+          if (meta.fees_amount !== undefined && row.fees_amount === undefined) row.fees_amount = meta.fees_amount
+          if (meta.fine_amount !== undefined && row.fine_amount === undefined) row.fine_amount = meta.fine_amount
+          if (meta.fine_waived !== undefined && row.fine_waived === undefined) row.fine_waived = meta.fine_waived
+          if (meta.waive_approved_by_principal !== undefined && row.waive_approved_by_principal === undefined) row.waive_approved_by_principal = meta.waive_approved_by_principal
+          if (meta.fine_waive_reason !== undefined && !row.fine_waive_reason) row.fine_waive_reason = meta.fine_waive_reason
+          if (meta.approved_by !== undefined && !row.approved_by) row.approved_by = meta.approved_by
+          if (meta.section !== undefined && !row.section) row.section = meta.section
+          if (meta.roll_no !== undefined && !row.roll_no) row.roll_no = meta.roll_no
+        } catch {}
+      }
+    }
     return row
   }
 
   try {
     const supaData = await fetchSupabaseTable<T>(collectionName)
     if (supaData && Array.isArray(supaData)) {
-      return (collectionName === 'student_master' ? supaData.map(unpackStudentRow) : supaData) as T[]
+      const unpacked = supaData.map(unpackRow) as T[]
+      if (typeof window !== 'undefined' && window.localStorage && unpacked.length > 0) {
+        try {
+          localStorage.setItem(`sjes_table_${collectionName}`, JSON.stringify(unpacked))
+        } catch {}
+      }
+      return unpacked
     }
   } catch (err) {
     console.warn(`Supabase fetch error for ${collectionName}:`, err)
@@ -564,7 +621,7 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
         if (cached) {
           const parsed = JSON.parse(cached)
           if (Array.isArray(parsed)) {
-            cachedResults = (collectionName === 'student_master' ? parsed.map(unpackStudentRow) : parsed) as T[]
+            cachedResults = parsed.map(unpackRow) as T[]
             break
           }
         }
@@ -574,8 +631,40 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
     }
   }
 
+  // If fees_structure is empty, seed with authoritative class-wise school fee chart
+  if (cachedResults.length === 0 && collectionName === 'fees_structure') {
+    cachedResults = DEFAULT_FEE_STRUCTURES as unknown as T[]
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.setItem('sjes_table_fees_structure', JSON.stringify(cachedResults))
+      } catch {}
+    }
+  }
+
   return cachedResults
 }
+
+export const DEFAULT_FEE_STRUCTURES = [
+  { fee_struct_id: 'fs_pg_tuition', class_name: 'PG', fee_type: 'Monthly Tuition Fee', amount: 800, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Playgroup monthly tuition' },
+  { fee_struct_id: 'fs_nur_tuition', class_name: 'NURSERY', fee_type: 'Monthly Tuition Fee', amount: 900, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Nursery monthly tuition' },
+  { fee_struct_id: 'fs_lkg_tuition', class_name: 'LKG', fee_type: 'Monthly Tuition Fee', amount: 1000, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'LKG monthly tuition' },
+  { fee_struct_id: 'fs_ukg_tuition', class_name: 'UKG', fee_type: 'Monthly Tuition Fee', amount: 1000, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'UKG monthly tuition' },
+  { fee_struct_id: 'fs_c1_tuition', class_name: 'CLASS I', fee_type: 'Monthly Tuition Fee', amount: 1200, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Primary Class I tuition' },
+  { fee_struct_id: 'fs_c2_tuition', class_name: 'CLASS II', fee_type: 'Monthly Tuition Fee', amount: 1200, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Primary Class II tuition' },
+  { fee_struct_id: 'fs_c3_tuition', class_name: 'CLASS III', fee_type: 'Monthly Tuition Fee', amount: 1300, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Class III tuition' },
+  { fee_struct_id: 'fs_c4_tuition', class_name: 'CLASS IV', fee_type: 'Monthly Tuition Fee', amount: 1300, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Class IV tuition' },
+  { fee_struct_id: 'fs_c5_tuition', class_name: 'CLASS V', fee_type: 'Monthly Tuition Fee', amount: 1400, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Class V tuition' },
+  { fee_struct_id: 'fs_c6_tuition', class_name: 'CLASS VI', fee_type: 'Monthly Tuition Fee', amount: 1500, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Middle School Class VI tuition' },
+  { fee_struct_id: 'fs_c7_tuition', class_name: 'CLASS VII', fee_type: 'Monthly Tuition Fee', amount: 1500, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Middle School Class VII tuition' },
+  { fee_struct_id: 'fs_c8_tuition', class_name: 'CLASS VIII', fee_type: 'Monthly Tuition Fee', amount: 1600, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Middle School Class VIII tuition' },
+  { fee_struct_id: 'fs_c9_tuition', class_name: 'CLASS IX', fee_type: 'Monthly Tuition Fee', amount: 1800, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Secondary Class IX tuition' },
+  { fee_struct_id: 'fs_c10_tuition', class_name: 'CLASS X', fee_type: 'Monthly Tuition Fee', amount: 2000, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Board Exam Class X tuition' },
+  { fee_struct_id: 'fs_all_adm', class_name: 'UKG', fee_type: 'Admission Fee', amount: 5000, frequency: 'One-Time', due_day: 10, academic_year: '2026-27', remarks: 'One-time admission charge' },
+  { fee_struct_id: 'fs_all_ann', class_name: 'UKG', fee_type: 'Annual / Session Fee', amount: 2500, frequency: 'Annually', due_day: 10, academic_year: '2026-27', remarks: 'Annual development & session charge' },
+  { fee_struct_id: 'fs_all_exam', class_name: 'UKG', fee_type: 'Examination Fee', amount: 600, frequency: 'Half-Yearly', due_day: 10, academic_year: '2026-27', remarks: 'Exam fee per term' },
+  { fee_struct_id: 'fs_all_comp', class_name: 'UKG', fee_type: 'Computer / Smart Class Fee', amount: 300, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Smart class & computer lab' },
+  { fee_struct_id: 'fs_all_trans', class_name: 'UKG', fee_type: 'Transport Fee', amount: 800, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'School bus transport charge' },
+]
 
 /**
  * Save or update a document in Supabase table
@@ -604,8 +693,54 @@ export async function saveDocument(
 
     const res = await saveSupabaseRecord(collectionName, payload)
     if (!res.success) {
+      // Fallback for tables not yet provisioned in Supabase schema (e.g. fees_structure before migration)
+      if (
+        typeof window !== 'undefined' &&
+        window.localStorage &&
+        (res.error?.includes('schema cache') ||
+          res.error?.includes('does not exist') ||
+          res.error?.includes('Could not find the table'))
+      ) {
+        const cacheKey = `sjes_table_${collectionName}`
+        let list: any[] = []
+        try {
+          const raw = localStorage.getItem(cacheKey)
+          if (raw) list = JSON.parse(raw)
+        } catch {}
+        const idVal = docId || `${collectionName}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+        const recordToCache = {
+          ...data,
+          [primaryKeyName]: idVal,
+          _docId: idVal,
+          created_at: data.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+        const idx = list.findIndex((x) => x[primaryKeyName] === idVal || x._docId === idVal)
+        if (idx >= 0) list[idx] = recordToCache
+        else list.unshift(recordToCache)
+        localStorage.setItem(cacheKey, JSON.stringify(list))
+        return { success: true, id: String(idVal) }
+      }
       return { success: false, id: '', error: res.error || 'Failed to save record' }
     }
+
+    // Keep localStorage cache in sync for instant responsive updates
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cacheKey = `sjes_table_${collectionName}`
+        const raw = localStorage.getItem(cacheKey)
+        const list: any[] = raw ? JSON.parse(raw) : []
+        const savedRecord = { ...data, ...(res.data || {}) }
+        const idVal = savedRecord[primaryKeyName] || docId
+        if (idVal) {
+          const idx = list.findIndex((x) => x[primaryKeyName] === idVal || x._docId === idVal)
+          if (idx >= 0) list[idx] = savedRecord
+          else list.unshift(savedRecord)
+          localStorage.setItem(cacheKey, JSON.stringify(list))
+        }
+      } catch {}
+    }
+
     return { success: true, id: String(res.data?.[primaryKeyName] || docId || '') }
   } catch (err: any) {
     console.error(`Error saving record to table ${collectionName}:`, err)

@@ -95,14 +95,14 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
             user_name: 'admin',
             user_full_name: 'System Admin',
             role: 'admin',
-            allowed_modules: ['school_master', 'department_master', 'class_master', 'subject_master', 'vendor_master', 'student_master', 'employee_master', 'user_master', 'student_attendance', 'employee_attendance', 'fees_collection', 'expense_master', 'income_master', 'salary_slip', 'leave_application', 'leave_balance', 'warning_letter', 'offer_letter', 'employee_document', 'asset_master', 'inventory_master', 'teacher_idcard', 'student_idcard', 'escort_card', 'assignments_master', 'notice_automation', 'userlog_master'],
+            allowed_modules: ['school_master', 'department_master', 'class_master', 'subject_master', 'fees_structure', 'vendor_master', 'student_master', 'employee_master', 'user_master', 'student_attendance', 'employee_attendance', 'fees_collection', 'expense_master', 'income_master', 'salary_slip', 'leave_application', 'leave_balance', 'warning_letter', 'offer_letter', 'employee_document', 'asset_master', 'inventory_master', 'teacher_idcard', 'student_idcard', 'escort_card', 'assignments_master', 'notice_automation', 'userlog_master'],
           }
         } else if (login.toLowerCase() === 'principal') {
           matchedUser = {
             user_name: 'principal',
             user_full_name: 'John Stevens',
             role: 'principal',
-            allowed_modules: ['school_master', 'department_master', 'class_master', 'student_master', 'employee_master', 'student_attendance', 'employee_attendance', 'fees_collection', 'notice_automation'],
+            allowed_modules: ['school_master', 'department_master', 'class_master', 'fees_structure', 'student_master', 'employee_master', 'student_attendance', 'employee_attendance', 'fees_collection', 'notice_automation'],
           }
         } else if (login.toLowerCase() === 'schakraborty' || login.toLowerCase().includes('teacher')) {
           matchedUser = {

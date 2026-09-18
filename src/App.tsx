@@ -67,6 +67,7 @@ import DepartmentMasterStudio from "./components/DepartmentMasterStudio";
 import StudentAttendanceStudio from "./components/StudentAttendanceStudio";
 import EmployeeAttendanceStudio from "./components/EmployeeAttendanceStudio";
 import FeeReceiptModal from "./components/FeeReceiptModal";
+import FeeCollectionModal from "./components/FeeCollectionModal";
 import SalarySlipModal from "./components/SalarySlipModal";
 import LeaveApprovalModal from "./components/LeaveApprovalModal";
 import LetterPrintModal from "./components/LetterPrintModal";
@@ -1645,6 +1646,30 @@ function DataTable({
                       />
                       {String(r[c] ?? (c === "is_active" ? "Active" : "—"))}
                     </span>
+                  ) : c === "fine_amount" && mod.table === "fees_collection" ? (
+                    (() => {
+                      const isWaived = Boolean(r.fine_waived && r.waive_approved_by_principal);
+                      const fine = Number(r[c] || 0);
+                      if (isWaived) {
+                        return (
+                          <span style={{ color: "#15803d", fontWeight: 700, fontSize: "12px", background: "#f0fdf4", padding: "2px 8px", borderRadius: "6px", border: "1px solid #bbf7d0", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                            ✓ ₹0 (Waived)
+                          </span>
+                        );
+                      }
+                      if (fine > 0) {
+                        return (
+                          <span style={{ color: "#9a3412", fontWeight: 700, fontSize: "12px", background: "#fff7ed", padding: "2px 8px", borderRadius: "6px", border: "1px solid #ffedd5" }}>
+                            ₹{fine.toLocaleString("en-IN")}
+                          </span>
+                        );
+                      }
+                      return <span style={{ color: "#166534", fontSize: "12px", fontWeight: 600 }}>₹0</span>;
+                    })()
+                  ) : c === "due_month" ? (
+                    <span style={{ background: "#eff6ff", color: "#1d4ed8", padding: "2px 8px", borderRadius: "6px", fontSize: "12px", fontWeight: 600, border: "1px solid #bfdbfe", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                      📅 {String(r[c] || "—")}
+                    </span>
                   ) : c.includes("amount") ||
                     c.includes("salary") ||
                     c.includes("price") ||
@@ -1823,6 +1848,21 @@ function RecordModal({
     )
   );
 
+  // If table is fees_collection, use the specialized FeeCollectionModal
+  if (mod.table === "fees_collection") {
+    return (
+      <FeeCollectionModal
+        isOpen={true}
+        mode={mode}
+        initialData={row || values}
+        onClose={close}
+        onSave={async (data) => {
+          save(data);
+        }}
+      />
+    );
+  }
+
   // Business logic auto calculations
   const updateField = (key: string, v: unknown) => {
     setValues((prev) => {
@@ -1869,14 +1909,26 @@ function RecordModal({
         next.net_salary = Math.max(0, gross - deductions);
       }
 
-      // Fees collection status auto update
+      // Fees collection fine & due calculation
+      // Formula: Amount due = fees Ammount + fine - amount paid
       if (mod.table === "fees_collection") {
-        const due = Number(key === "amount_due" ? v : next.amount_due) || 0;
+        const feesAmt = Number(key === "fees_amount" ? v : next.fees_amount) || 0;
+        const fineAmt = Number(key === "fine_amount" ? v : next.fine_amount) || 0;
+        const fineWaived = Boolean(key === "fine_waived" ? v : next.fine_waived);
+        const approved = Boolean(key === "waive_approved_by_principal" ? v : next.waive_approved_by_principal);
         const paid = Number(key === "amount_paid" ? v : next.amount_paid) || 0;
-        if (due > 0 && paid >= due) {
+
+        const effectiveFine = (fineWaived && approved) ? 0 : fineAmt;
+        const total = feesAmt + effectiveFine;
+        const due = Math.max(0, total - paid);
+        next.amount_due = due;
+
+        if (due === 0 && paid > 0) {
           next.status = "paid";
-        } else if (paid > 0 && paid < due) {
+        } else if (paid > 0 && due > 0) {
           next.status = "partial";
+        } else {
+          next.status = "pending";
         }
       }
 

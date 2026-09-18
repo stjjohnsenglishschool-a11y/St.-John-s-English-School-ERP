@@ -12,8 +12,14 @@ export default function FeeReceiptModal({ receipt, onClose }: FeeReceiptProps) {
   };
 
   const amountPaid = Number(receipt.amount_paid || 0);
-  const amountDue = Number(receipt.amount_due || 0);
-  const balance = Math.max(0, amountDue - amountPaid);
+  const feesAmount = Number(receipt.fees_amount ?? receipt.amount_due ?? 0);
+  const fineAmount = Number(receipt.fine_amount ?? 0);
+  const isFineWaived = Boolean(receipt.fine_waived && receipt.waive_approved_by_principal);
+  const effectiveFine = isFineWaived ? 0 : fineAmount;
+  const totalBilled = feesAmount + effectiveFine;
+  const amountDue = Number(receipt.amount_due ?? Math.max(0, totalBilled - amountPaid));
+  const balance = Math.max(0, amountDue);
+  const dueMonth = String(receipt.due_month || "");
 
   return (
     <div
@@ -268,6 +274,11 @@ export default function FeeReceiptModal({ receipt, onClose }: FeeReceiptProps) {
                 <td style={{ padding: "12px 14px" }}>1</td>
                 <td style={{ padding: "12px 14px" }}>
                   <b>{String(receipt.fee_type || "Tuition Fee")}</b>
+                  {dueMonth ? (
+                    <div style={{ fontSize: "11px", color: "#1e40af", fontWeight: 600 }}>
+                      Billing Month: {dueMonth}
+                    </div>
+                  ) : null}
                   {receipt.remarks ? (
                     <div style={{ fontSize: "11px", color: "#64748b" }}>
                       {String(receipt.remarks)}
@@ -275,7 +286,7 @@ export default function FeeReceiptModal({ receipt, onClose }: FeeReceiptProps) {
                   ) : null}
                 </td>
                 <td style={{ padding: "12px 14px", textAlign: "right" }}>
-                  ₹{amountDue.toLocaleString("en-IN")}
+                  ₹{feesAmount.toLocaleString("en-IN")}
                 </td>
                 <td
                   style={{
@@ -285,11 +296,58 @@ export default function FeeReceiptModal({ receipt, onClose }: FeeReceiptProps) {
                     color: "#059669",
                   }}
                 >
+                  ₹{Math.min(feesAmount, amountPaid).toLocaleString("en-IN")}
+                </td>
+              </tr>
+              {fineAmount > 0 && (
+                <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                  <td style={{ padding: "12px 14px" }}>2</td>
+                  <td style={{ padding: "12px 14px" }}>
+                    <b>Late Fine / Delay Surcharge</b>
+                    {isFineWaived ? (
+                      <div style={{ fontSize: "11px", color: "#15803d", fontWeight: 600 }}>
+                        ✓ 100% Concession Waived by Principal ({receipt.fine_waive_reason || "Approved"})
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: "11px", color: "#b45309" }}>
+                        Assessed for payment after 10th of {dueMonth || "month"}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ padding: "12px 14px", textAlign: "right" }}>
+                    {isFineWaived ? (
+                      <span style={{ color: "#15803d" }}>₹0 (Waived)</span>
+                    ) : (
+                      `₹${fineAmount.toLocaleString("en-IN")}`
+                    )}
+                  </td>
+                  <td
+                    style={{
+                      padding: "12px 14px",
+                      textAlign: "right",
+                      fontWeight: 700,
+                      color: isFineWaived ? "#15803d" : "#059669",
+                    }}
+                  >
+                    {isFineWaived
+                      ? "₹0"
+                      : `₹${Math.max(0, amountPaid - feesAmount).toLocaleString("en-IN")}`}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: "#f8fafc", fontWeight: 700 }}>
+                <td colSpan={2} style={{ padding: "10px 14px", textAlign: "right" }}>
+                  Total Billable Amount (Fee + Fine):
+                </td>
+                <td style={{ padding: "10px 14px", textAlign: "right" }}>
+                  ₹{totalBilled.toLocaleString("en-IN")}
+                </td>
+                <td style={{ padding: "10px 14px", textAlign: "right", color: "#059669" }}>
                   ₹{amountPaid.toLocaleString("en-IN")}
                 </td>
               </tr>
-            </tbody>
-            <tfoot>
               <tr style={{ borderTop: "2px solid #0f3661", fontWeight: 800 }}>
                 <td
                   colSpan={3}
@@ -314,7 +372,7 @@ export default function FeeReceiptModal({ receipt, onClose }: FeeReceiptProps) {
                     colSpan={3}
                     style={{ padding: "8px 14px", textAlign: "right" }}
                   >
-                    Remaining Balance Due:
+                    Remaining Balance Due (Amount Due):
                   </td>
                   <td style={{ padding: "8px 14px", textAlign: "right" }}>
                     ₹{balance.toLocaleString("en-IN")}
