@@ -1564,13 +1564,12 @@ function PageHeader({
   total: number;
 }) {
   return (
-    <section className="page-head">
-      <div>
-        <span className="overline">{mod?.group?.toUpperCase()} WORKSPACE</span>
-        <h1>{moduleName(mod.table)}</h1>
-        <p>
-          {mod?.description} · {total} records in database
-        </p>
+    <section className="page-head" style={{ marginBottom: "12px" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "12px" }}>
+        <h1 style={{ margin: 0 }}>{moduleName(mod.table)}</h1>
+        <span style={{ fontSize: "13px", color: "#64748b", fontWeight: 600 }}>
+          {total} records
+        </span>
       </div>
     </section>
   );
@@ -1999,16 +1998,64 @@ function RecordModal({
         next.net_salary = Math.max(0, gross - deductions);
       }
 
-      // Fees collection fine & due calculation
-      // Formula: Amount due = fees Ammount + fine - amount paid
+      // Fees collection fine & due calculation:
+      // - 50rs fine if payment is after the 10th of the month
+      // - 100rs if it crosses to the next month
+      // - 'Fine Waived' checkbox requires 'Principal Approval' field to be filled before it applies
       if (mod.table === "fees_collection") {
         const feesAmt = Number(key === "fees_amount" ? v : next.fees_amount) || 0;
-        const fineAmt = Number(key === "fine_amount" ? v : next.fine_amount) || 0;
-        const fineWaived = Boolean(key === "fine_waived" ? v : next.fine_waived);
-        const approved = Boolean(key === "waive_approved_by_principal" ? v : next.waive_approved_by_principal);
         const paid = Number(key === "amount_paid" ? v : next.amount_paid) || 0;
+        const pDateStr = String(key === "payment_date" ? v : next.payment_date || "");
+        const dMonthStr = String(key === "due_month" ? v : next.due_month || "");
+        const acadYear = String(next.academic_year || getCurrentAcademicYear());
 
-        const effectiveFine = (fineWaived && approved) ? 0 : fineAmt;
+        let computedFine = 0;
+        if (pDateStr && dMonthStr) {
+          const pDate = new Date(pDateStr);
+          if (!isNaN(pDate.getTime())) {
+            const payYear = pDate.getFullYear();
+            const payMonthIdx = pDate.getMonth();
+            const payDay = pDate.getDate();
+
+            const monthMap: Record<string, number> = {
+              January: 0, February: 1, March: 2, April: 3,
+              May: 4, June: 5, July: 6, August: 7,
+              September: 8, October: 9, November: 10, December: 11,
+            };
+            const dueMonthIdx = monthMap[dMonthStr];
+            if (dueMonthIdx !== undefined) {
+              const parts = acadYear.split("-");
+              const baseYear = parseInt(parts[0], 10) || payYear;
+              const dueYear = dueMonthIdx >= 3 ? baseYear : baseYear + 1;
+              const payMonthCode = payYear * 12 + payMonthIdx;
+              const dueMonthCode = dueYear * 12 + dueMonthIdx;
+
+              if (payMonthCode < dueMonthCode) {
+                computedFine = 0;
+              } else if (payMonthCode === dueMonthCode) {
+                computedFine = payDay <= 10 ? 0 : 50;
+              } else {
+                computedFine = 100;
+              }
+            }
+          }
+        }
+
+        const fineAmt = key === "fine_amount" ? (Number(v) || 0) : (computedFine || Number(next.fine_amount) || 0);
+        next.fine_amount = fineAmt;
+
+        const fineWaived = Boolean(key === "fine_waived" ? v : next.fine_waived);
+        const approvalText = String(
+          key === "principal_approval"
+            ? v
+            : next.principal_approval || next.waive_approved_by_principal || ""
+        ).trim();
+        const hasApproval = approvalText.length > 0 && approvalText.toLowerCase() !== "false";
+
+        // Fine Waived requires Principal Approval field to be filled
+        const effectiveFine = (fineWaived && hasApproval) ? 0 : fineAmt;
+        next.waive_approved_by_principal = Boolean(fineWaived && hasApproval);
+
         const total = feesAmt + effectiveFine;
         const due = Math.max(0, total - paid);
         next.amount_due = due;
@@ -2409,6 +2456,99 @@ function FormField({
     );
   }
 
+  const dynamicOptions = useMemo(() => {
+    if (field.key === "income_type") {
+      try {
+        const cached = localStorage.getItem("sjes_table_income_head_master");
+        if (cached) {
+          const heads = JSON.parse(cached);
+          if (Array.isArray(heads) && heads.length > 0) {
+            const names = heads.map((h: any) => h.head_name).filter(Boolean);
+            return Array.from(new Set([...(field.options || []), ...names]));
+          }
+        }
+      } catch {}
+    }
+    if (field.key === "income_category") {
+      try {
+        const cached = localStorage.getItem("sjes_table_income_head_master");
+        if (cached) {
+          const heads = JSON.parse(cached);
+          if (Array.isArray(heads) && heads.length > 0) {
+            const cats = heads.map((h: any) => h.head_category).filter(Boolean);
+            return Array.from(new Set([...(field.options || []), ...cats]));
+          }
+        }
+      } catch {}
+    }
+    return field.options || [];
+  }, [field.key, field.options]);
+
+  // Fine Waived checkbox
+  if (field.key === "fine_waived") {
+    const isChecked = Boolean(value);
+    return (
+      <div
+        style={{
+          gridColumn: "1 / -1",
+          background: isChecked ? "#f0fdf4" : "#f8fafc",
+          border: `1.5px solid ${isChecked ? "#86efac" : "#e2e8f0"}`,
+          borderRadius: "8px",
+          padding: "12px 14px",
+          margin: "4px 0",
+        }}
+      >
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            cursor: disabled ? "default" : "pointer",
+            fontWeight: 800,
+            fontSize: "13px",
+            color: isChecked ? "#15803d" : "#334155",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={isChecked}
+            disabled={disabled}
+            onChange={(e) => change(e.target.checked)}
+            style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#16a34a" }}
+          />
+          <span>Fine Waived (Requires Principal Approval)</span>
+        </label>
+        {isChecked && (
+          <div style={{ marginTop: "6px", fontSize: "11px", color: "#15803d", fontWeight: 600 }}>
+            ⚠ Note: You must fill the 'Principal Approval' field to apply this fine waiver.
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Principal Approval text field
+  if (field.key === "principal_approval") {
+    return (
+      <label className="full">
+        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          {field.label}
+          <b style={{ color: "#dc2626" }}>* (Required to waive fine)</b>
+        </span>
+        <input
+          disabled={disabled}
+          type="text"
+          placeholder="Enter Principal approval details (e.g. Fr. Principal Approval #842)"
+          value={String(value ?? "")}
+          onChange={(e) => change(e.target.value)}
+        />
+        <span style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+          Required before 'Fine Waived' can be applied.
+        </span>
+      </label>
+    );
+  }
+
   // Password Input Field with Eye Toggle
   if (field.key === "password") {
     return (
@@ -2567,7 +2707,7 @@ function FormField({
           onChange={(e) => change(e.target.value)}
         >
           <option value="">Select option...</option>
-          {field.options?.map((x) => (
+          {dynamicOptions.map((x) => (
             <option key={x} value={x}>
               {x}
             </option>

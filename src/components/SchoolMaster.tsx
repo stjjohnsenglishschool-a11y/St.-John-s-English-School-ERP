@@ -12,8 +12,11 @@ import {
   School,
   Award,
   Calendar,
+  DollarSign,
+  Layers,
 } from "lucide-react";
 import { logActivity, supabase } from "../lib/supabase";
+import IncomeHeadsMasterSection from "./IncomeHeadsMasterSection";
 
 interface SchoolProfile {
   school_id?: string;
@@ -67,6 +70,7 @@ export default function SchoolMaster({
 
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState<"profile" | "income_heads">("profile");
 
   useEffect(() => {
     if (!supabase) return;
@@ -186,44 +190,127 @@ export default function SchoolMaster({
   };
 
   return (
-    <div style={{ display: "grid", gap: "20px" }}>
-      <section className="page-head">
-        <div>
-          <span className="overline">INSTITUTIONAL MASTER SETUP</span>
-          <h1>School Master & Profile</h1>
-          <p>
-            Official school registration details, contact credentials, and
-            institutional affiliation.
-          </p>
+    <div style={{ display: "grid", gap: "16px" }}>
+      <section className="page-head" style={{ marginBottom: "4px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              borderRadius: "10px",
+              background: "var(--blue, #2563eb)",
+              color: "#ffffff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 2px 4px rgba(37,99,235,0.2)",
+            }}
+          >
+            <School size={22} />
+          </div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>
+              School Master Setup
+            </h1>
+          </div>
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
-          {!isEditing ? (
-            <button
-              onClick={() => setIsEditing(true)}
-              style={{
-                background: "var(--blue)",
-                color: "#fff",
-                border: "none",
-              }}
-            >
-              Edit School Profile
-            </button>
-          ) : (
-            <button
-              onClick={() => setIsEditing(false)}
-              style={{
-                background: "#fff",
-                color: "var(--muted)",
-                border: "1px solid var(--line)",
-              }}
-            >
-              Cancel
-            </button>
+          {activeTab === "profile" && (
+            !isEditing ? (
+              <button
+                onClick={() => setIsEditing(true)}
+                style={{
+                  background: "var(--blue)",
+                  color: "#fff",
+                  border: "none",
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                Edit School Profile
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsEditing(false)}
+                style={{
+                  background: "#fff",
+                  color: "var(--muted)",
+                  border: "1px solid var(--line)",
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+            )
           )}
         </div>
       </section>
 
-      <form onSubmit={handleSave}>
+      {/* Navigation Tabs */}
+      <div
+        style={{
+          display: "flex",
+          borderBottom: "1px solid var(--line)",
+          gap: "8px",
+          marginBottom: "8px",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setActiveTab("profile")}
+          style={{
+            padding: "10px 18px",
+            border: "none",
+            borderBottom:
+              activeTab === "profile" ? "2.5px solid var(--blue, #2563eb)" : "2.5px solid transparent",
+            background: "transparent",
+            color: activeTab === "profile" ? "var(--blue, #2563eb)" : "#64748b",
+            fontWeight: 800,
+            fontSize: "13px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <Building2 size={16} />
+          School Profile
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("income_heads")}
+          style={{
+            padding: "10px 18px",
+            border: "none",
+            borderBottom:
+              activeTab === "income_heads" ? "2.5px solid var(--blue, #2563eb)" : "2.5px solid transparent",
+            background: "transparent",
+            color: activeTab === "income_heads" ? "var(--blue, #2563eb)" : "#64748b",
+            fontWeight: 800,
+            fontSize: "13px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <Layers size={16} />
+          Income Heads & Types
+        </button>
+      </div>
+
+      {activeTab === "income_heads" ? (
+        <IncomeHeadsMasterSection setToast={setToast} />
+      ) : (
+        <form onSubmit={handleSave}>
         <div
           style={{
             display: "grid",
@@ -653,7 +740,8 @@ export default function SchoolMaster({
             )}
           </div>
         </div>
-      </form>
+        </form>
+      )}
     </div>
   );
 }

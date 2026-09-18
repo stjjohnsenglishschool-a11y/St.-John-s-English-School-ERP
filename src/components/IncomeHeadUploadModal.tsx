@@ -32,7 +32,7 @@ interface IncomeHeadUploadModalProps {
   existingCount?: number
 }
 
-const OFFICIAL_PRESETS: IncomeHeadItem[] = [
+export const OFFICIAL_PRESETS: IncomeHeadItem[] = [
   // Fee Income
   { head_category: 'Fee Income', head_name: 'Examination Fee', head_code: 'INC-FEE-EXAM', default_amount: 500, frequency: 'As Needed', is_active: true, description: 'Term examination & assessment fees' },
   { head_category: 'Fee Income', head_name: 'Computer Fee', head_code: 'INC-FEE-COMP', default_amount: 300, frequency: 'Monthly', is_active: true, description: 'IT lab usage & practicals' },

@@ -148,6 +148,7 @@ export function sanitizePayload(record: Record<string, any>, tableName?: string)
     if (record.fees_amount !== undefined) feeMeta.fees_amount = record.fees_amount
     if (record.fine_amount !== undefined) feeMeta.fine_amount = record.fine_amount
     if (record.fine_waived !== undefined) feeMeta.fine_waived = record.fine_waived
+    if (record.principal_approval !== undefined) feeMeta.principal_approval = record.principal_approval
     if (record.waive_approved_by_principal !== undefined) feeMeta.waive_approved_by_principal = record.waive_approved_by_principal
     if (record.fine_waive_reason !== undefined) feeMeta.fine_waive_reason = record.fine_waive_reason
     if (record.approved_by !== undefined) feeMeta.approved_by = record.approved_by
@@ -587,6 +588,7 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
           if (meta.fees_amount !== undefined && row.fees_amount === undefined) row.fees_amount = meta.fees_amount
           if (meta.fine_amount !== undefined && row.fine_amount === undefined) row.fine_amount = meta.fine_amount
           if (meta.fine_waived !== undefined && row.fine_waived === undefined) row.fine_waived = meta.fine_waived
+          if (meta.principal_approval !== undefined && !row.principal_approval) row.principal_approval = meta.principal_approval
           if (meta.waive_approved_by_principal !== undefined && row.waive_approved_by_principal === undefined) row.waive_approved_by_principal = meta.waive_approved_by_principal
           if (meta.fine_waive_reason !== undefined && !row.fine_waive_reason) row.fine_waive_reason = meta.fine_waive_reason
           if (meta.approved_by !== undefined && !row.approved_by) row.approved_by = meta.approved_by

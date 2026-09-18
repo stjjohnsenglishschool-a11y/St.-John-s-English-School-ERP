@@ -32,6 +32,8 @@ import {
   Image as ImageIcon,
   Copy,
   Info,
+  Calculator,
+  IndianRupee,
 } from 'lucide-react'
 import { supabase, logActivity, deleteDocument, saveDocument, saveBatchDocuments, fetchCollectionData, subscribeToCollection, uploadToFirebaseStorage } from '../lib/supabase'
 import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS, CURRENT_ACADEMIC_YEAR } from '../lib/academicYear'
@@ -107,6 +109,19 @@ export default function StudentMasterStudio({
     return []
   })
   const [classes, setClasses] = useState<string[]>([])
+  const [feeStructures, setFeeStructures] = useState<any[]>(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cached = localStorage.getItem('sjes_table_fees_structure')
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          if (Array.isArray(parsed)) return parsed
+        }
+      } catch {}
+    }
+    return []
+  })
+  const [selectedFeeType, setSelectedFeeType] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterClass, setFilterClass] = useState('')
@@ -347,6 +362,27 @@ export default function StudentMasterStudio({
     return () => unsub()
   }, [])
 
+  // Fetch and subscribe to fees_structure table for dynamic due calculations
+  useEffect(() => {
+    fetchCollectionData('fees_structure').then((data) => {
+      if (Array.isArray(data) && data.length > 0) {
+        setFeeStructures(data)
+        try {
+          localStorage.setItem('sjes_table_fees_structure', JSON.stringify(data))
+        } catch {}
+      }
+    })
+    const unsub = subscribeToCollection('fees_structure', (data) => {
+      if (Array.isArray(data)) {
+        setFeeStructures(data)
+        try {
+          localStorage.setItem('sjes_table_fees_structure', JSON.stringify(data))
+        } catch {}
+      }
+    })
+    return () => unsub()
+  }, [])
+
   // Push all students to Google Sheet via Web App URL (no Google auth)
   const handleSyncToGoogleSheet = async (studentsList?: Student[]) => {
     const listToSync = studentsList || students
@@ -525,6 +561,73 @@ export default function StudentMasterStudio({
       return matchSearch && matchClass && matchSection && matchGender && matchStatus && matchYear
     })
   }, [students, search, filterClass, filterSection, filterGender, filterStatus, filterYear])
+
+  // Available fee types for the currently selected class
+  const availableFeeTypesForClass = useMemo(() => {
+    if (!filterClass) return []
+    const normClass = filterClass.trim().toUpperCase()
+    const matching = feeStructures.filter(
+      (fs) => String(fs.class_name || '').trim().toUpperCase() === normClass
+    )
+    const typesFromStruct = matching
+      .map((fs) => String(fs.fee_type || '').trim())
+      .filter(Boolean)
+    if (typesFromStruct.length > 0) {
+      return Array.from(new Set(typesFromStruct))
+    }
+    return [
+      'Monthly Tuition Fee',
+      'Admission Fee',
+      'Annual / Session Fee',
+      'Examination Fee',
+      'Computer / Smart Class Fee',
+      'Transport Fee',
+      'Activity / Sports Fee',
+      'Development Fee',
+      'Miscellaneous',
+    ]
+  }, [filterClass, feeStructures])
+
+  // Automatically select the first available fee type when a class is selected
+  useEffect(() => {
+    if (filterClass && availableFeeTypesForClass.length > 0) {
+      if (!selectedFeeType || !availableFeeTypesForClass.includes(selectedFeeType)) {
+        setSelectedFeeType(availableFeeTypesForClass[0])
+      }
+    } else if (!filterClass) {
+      setSelectedFeeType('')
+    }
+  }, [filterClass, availableFeeTypesForClass, selectedFeeType])
+
+  // Look up the specific fee structure for selected (class, feeType)
+  const selectedFeeStructure = useMemo(() => {
+    if (!filterClass || !selectedFeeType) return null
+    const normClass = filterClass.trim().toUpperCase()
+    const normType = selectedFeeType.trim().toLowerCase()
+    return (
+      feeStructures.find(
+        (fs) =>
+          String(fs.class_name || '').trim().toUpperCase() === normClass &&
+          String(fs.fee_type || '').trim().toLowerCase() === normType
+      ) || null
+    )
+  }, [filterClass, selectedFeeType, feeStructures])
+
+  const feeRatePerStudent = useMemo(() => {
+    if (selectedFeeStructure && selectedFeeStructure.amount !== undefined && selectedFeeStructure.amount !== null) {
+      return Number(selectedFeeStructure.amount) || 0
+    }
+    return 0
+  }, [selectedFeeStructure])
+
+  const studentsInSelectedClass = useMemo(() => {
+    if (!filterClass) return []
+    return students.filter((s) => s.class_name === filterClass)
+  }, [students, filterClass])
+
+  const totalClassDueAmount = useMemo(() => {
+    return studentsInSelectedClass.length * feeRatePerStudent
+  }, [studentsInSelectedClass.length, feeRatePerStudent])
 
   const totalPages = Math.ceil(filteredStudents.length / pageSize) || 1
   const paginatedStudents = useMemo(() => {
@@ -990,7 +1093,6 @@ export default function StudentMasterStudio({
             <h1>Student Master Studio</h1>
             <span className="count-badge">{filteredStudents.length} Students</span>
           </div>
-          <p>Comprehensive student registry and academic records management</p>
         </div>
         <div className="hero-actions">
           <button
@@ -1278,6 +1380,155 @@ export default function StudentMasterStudio({
         </div>
       </div>
 
+      {/* Class & Fee Structure Assessment Banner */}
+      <div
+        style={{
+          background: filterClass ? '#f0fdf4' : '#f8fafc',
+          border: `1.5px solid ${filterClass ? '#86efac' : '#e2e8f0'}`,
+          borderRadius: '12px',
+          padding: '14px 18px',
+          marginBottom: '16px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '14px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: filterClass ? '#15803d' : '#64748b',
+              color: '#fff',
+              flexShrink: 0,
+            }}
+          >
+            <Calculator size={20} />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>
+                Class Fee Structure &amp; Due Calculator
+              </span>
+              {filterClass && (
+                <span
+                  style={{
+                    background: '#dcfce7',
+                    color: '#166534',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                  }}
+                >
+                  Class: {filterClass} ({studentsInSelectedClass.length} Students)
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+              {filterClass
+                ? 'Select a Fee Type below to calculate student fee dues based on fees_structure master table'
+                : 'Select a class in the filter dropdown above or below to review students and calculate dues'}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>Filter Class:</span>
+            <select
+              value={filterClass}
+              onChange={(e) => {
+                setFilterClass(e.target.value)
+                setPage(1)
+              }}
+              style={{
+                padding: '7px 12px',
+                borderRadius: '8px',
+                border: '1.5px solid #cbd5e1',
+                fontSize: '13px',
+                fontWeight: 700,
+                background: '#fff',
+                color: '#0f172a',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="">-- Choose Class --</option>
+              {classes.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {filterClass && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#166534' }}>Fee Type:</span>
+                <select
+                  value={selectedFeeType}
+                  onChange={(e) => setSelectedFeeType(e.target.value)}
+                  style={{
+                    padding: '7px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #16a34a',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    background: '#fff',
+                    color: '#166534',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {availableFeeTypesForClass.map((ft) => (
+                    <option key={ft} value={ft}>
+                      {ft}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  background: '#ffffff',
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #bbf7d0',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                    Fee Rate
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#15803d' }}>
+                    ₹{feeRatePerStudent.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div style={{ height: '24px', width: '1px', background: '#e2e8f0' }} />
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                    Total Class Due ({studentsInSelectedClass.length} Students)
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a' }}>
+                    ₹{totalClassDueAmount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Student Data Table */}
       <div className="table-wrapper">
         <table className="data-table">
@@ -1286,25 +1537,30 @@ export default function StudentMasterStudio({
               <th style={{ width: '48px' }}>Photo</th>
               <th>Adm No</th>
               <th>Student Name</th>
-              <th>Class & Sec</th>
+              <th>Class &amp; Sec</th>
               <th>Roll</th>
-              <th>Father Details & Photo</th>
-              <th>Mother Details & Photo</th>
+              <th>Father Details &amp; Photo</th>
+              <th>Mother Details &amp; Photo</th>
               <th>Status</th>
+              {filterClass && (
+                <th style={{ color: '#166534', background: '#f0fdf4' }}>
+                  Due Amount ({selectedFeeType || 'Fee'})
+                </th>
+              )}
               <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={filterClass ? 10 : 9} style={{ textAlign: 'center', padding: '40px' }}>
                   <RefreshCw size={24} className="spin" style={{ margin: '0 auto 8px' }} />
                   <div>Loading student directory...</div>
                 </td>
               </tr>
             ) : paginatedStudents.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                <td colSpan={filterClass ? 10 : 9} style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
                   <User size={36} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
                   <div style={{ fontWeight: 600 }}>No students found matching current filters.</div>
                   <div style={{ fontSize: '13px', marginTop: '4px' }}>
@@ -1521,8 +1777,30 @@ export default function StudentMasterStudio({
                         )
                       })()}
                     </td>
+                    {filterClass && (
+                      <td style={{ background: '#fcfdfc' }}>
+                        <div style={{ fontWeight: 800, color: '#15803d', fontSize: '13px' }}>
+                          ₹{feeRatePerStudent.toLocaleString('en-IN')}
+                        </div>
+                        {selectedFeeStructure && selectedFeeStructure.frequency && (
+                          <div style={{ fontSize: '10px', color: '#64748b' }}>
+                            {selectedFeeStructure.frequency}
+                          </div>
+                        )}
+                      </td>
+                    )}
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '4px' }}>
+                        {onNavigateToFees && (
+                          <button
+                            className="action-btn"
+                            title={`Collect Fee for ${student.full_name}`}
+                            onClick={() => onNavigateToFees(student.student_id || student.admission_no || '')}
+                            style={{ color: '#16a34a' }}
+                          >
+                            <IndianRupee size={15} />
+                          </button>
+                        )}
                         <button
                           className="action-btn"
                           title="View Profile"

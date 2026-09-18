@@ -91,6 +91,7 @@ export default function FeeCollectionModal({
   const [feesAmount, setFeesAmount] = useState<number>(0);
   const [fineAmount, setFineAmount] = useState<number>(0);
   const [fineWaived, setFineWaived] = useState<boolean>(false);
+  const [principalApproval, setPrincipalApproval] = useState<string>("");
   const [waiveApprovedByPrincipal, setWaiveApprovedByPrincipal] = useState<boolean>(false);
   const [fineWaiveReason, setFineWaiveReason] = useState<string>("");
   const [approvedBy, setApprovedBy] = useState<string>("Principal");
@@ -166,7 +167,12 @@ export default function FeeCollectionModal({
       setFeesAmount(Number(initialData.fees_amount ?? initialData.amount_due ?? 0));
       setFineAmount(Number(initialData.fine_amount ?? 0));
       setFineWaived(Boolean(initialData.fine_waived));
-      setWaiveApprovedByPrincipal(Boolean(initialData.waive_approved_by_principal));
+      const initPrincipalApproval = String(
+        initialData.principal_approval ||
+        (initialData.waive_approved_by_principal ? (initialData.approved_by || "Approved by Principal") : "")
+      );
+      setPrincipalApproval(initPrincipalApproval);
+      setWaiveApprovedByPrincipal(Boolean(initPrincipalApproval.trim().length > 0));
       setFineWaiveReason(initialData.fine_waive_reason || "");
       setApprovedBy(initialData.approved_by || "Principal");
       setAmountPaid(Number(initialData.amount_paid ?? 0));
@@ -333,8 +339,8 @@ export default function FeeCollectionModal({
   }, [paymentDate, dueMonth, academicYear, mode]);
 
   // Effective fine after waiver & principal approval check:
-  // "And There Must Keep A Option For Consession Of Wave off Fine option And Its Must Be Approve By Principal"
-  const isFineWaivedAndApproved = fineWaived && waiveApprovedByPrincipal;
+  // "Also, add a checkbox for 'Fine Waived' that requires a 'Principal Approval' field to be filled before it applies."
+  const isFineWaivedAndApproved = fineWaived && Boolean(principalApproval && principalApproval.trim().length > 0);
   const effectiveFine = isFineWaivedAndApproved ? 0 : Number(fineAmount || 0);
 
   // User calculation formula:
@@ -421,7 +427,8 @@ export default function FeeCollectionModal({
         fees_amount: Number(feesAmount),
         fine_amount: Number(fineAmount),
         fine_waived: Boolean(fineWaived),
-        waive_approved_by_principal: Boolean(waiveApprovedByPrincipal),
+        principal_approval: principalApproval,
+        waive_approved_by_principal: Boolean(isFineWaivedAndApproved),
         fine_waive_reason: fineWaiveReason,
         approved_by: approvedBy,
         amount_due: Number(amountDue),
@@ -487,7 +494,7 @@ export default function FeeCollectionModal({
         {/* Header */}
         <div
           style={{
-            padding: "20px 24px",
+            padding: "16px 20px",
             background: "linear-gradient(135deg, #0f3661 0%, #1e40af 100%)",
             color: "#ffffff",
             display: "flex",
@@ -495,16 +502,11 @@ export default function FeeCollectionModal({
             justifyContent: "space-between",
           }}
         >
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <CreditCard size={20} style={{ color: "#93c5fd" }} />
-              <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 700, letterSpacing: "-0.01em" }}>
-                {mode === "create" ? "Collect Student Fees & Dues" : mode === "edit" ? "Edit Fee Record" : "View Fee Record"}
-              </h2>
-            </div>
-            <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#bfdbfe" }}>
-              Class-wise fee structure, automated late fine calculation & Principal concession workflow
-            </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <CreditCard size={20} style={{ color: "#93c5fd" }} />
+            <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 700 }}>
+              {mode === "create" ? "Collect Student Fees & Dues" : mode === "edit" ? "Edit Fee Record" : "View Fee Record"}
+            </h2>
           </div>
           <button
             onClick={onClose}
@@ -530,10 +532,10 @@ export default function FeeCollectionModal({
           onSubmit={handleSubmit}
           style={{
             overflowY: "auto",
-            padding: "24px",
+            padding: "20px",
             display: "flex",
             flexDirection: "column",
-            gap: "20px",
+            gap: "16px",
             flex: 1,
           }}
         >
@@ -542,31 +544,31 @@ export default function FeeCollectionModal({
             style={{
               background: "#f8fafc",
               border: "1px solid #e2e8f0",
-              borderRadius: "12px",
-              padding: "18px",
+              borderRadius: "10px",
+              padding: "14px 16px",
             }}
           >
             <div
               style={{
-                fontSize: "13px",
+                fontSize: "12px",
                 fontWeight: 700,
                 color: "#0f3661",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
-                marginBottom: "14px",
+                marginBottom: "10px",
                 display: "flex",
                 alignItems: "center",
                 gap: "6px",
               }}
             >
-              <User size={15} /> Student & Academic Details
+              <User size={14} /> Student Details
             </div>
 
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: "14px",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: "12px",
               }}
             >
               {/* Class Dropdown */}
@@ -577,10 +579,10 @@ export default function FeeCollectionModal({
                     fontSize: "12px",
                     fontWeight: 600,
                     color: "#334155",
-                    marginBottom: "6px",
+                    marginBottom: "4px",
                   }}
                 >
-                  Select Class <span style={{ color: "#ef4444" }}>*</span>
+                  Class <span style={{ color: "#ef4444" }}>*</span>
                 </label>
                 <select
                   value={className}
@@ -588,11 +590,11 @@ export default function FeeCollectionModal({
                   disabled={mode === "view"}
                   style={{
                     width: "100%",
-                    padding: "9px 12px",
-                    borderRadius: "8px",
+                    padding: "8px 10px",
+                    borderRadius: "6px",
                     border: "1px solid #cbd5e1",
                     background: "#ffffff",
-                    fontSize: "14px",
+                    fontSize: "13px",
                     color: "#0f172a",
                     fontWeight: 600,
                     outline: "none",
@@ -605,7 +607,7 @@ export default function FeeCollectionModal({
                     ).length;
                     return (
                       <option key={cls} value={cls}>
-                        {cls} {count > 0 ? `(${count} students)` : ""}
+                        {cls} {count > 0 ? `(${count})` : ""}
                       </option>
                     );
                   })}
@@ -620,15 +622,10 @@ export default function FeeCollectionModal({
                     fontSize: "12px",
                     fontWeight: 600,
                     color: "#334155",
-                    marginBottom: "6px",
+                    marginBottom: "4px",
                   }}
                 >
-                  Select Student Name <span style={{ color: "#ef4444" }}>*</span>
-                  {className && (
-                    <span style={{ fontSize: "11px", fontWeight: 400, color: "#64748b", marginLeft: "4px" }}>
-                      ({classStudents.length} enrolled)
-                    </span>
-                  )}
+                  Student Name <span style={{ color: "#ef4444" }}>*</span>
                 </label>
                 <select
                   value={studentId}
@@ -636,11 +633,11 @@ export default function FeeCollectionModal({
                   disabled={mode === "view" || !className}
                   style={{
                     width: "100%",
-                    padding: "9px 12px",
-                    borderRadius: "8px",
+                    padding: "8px 10px",
+                    borderRadius: "6px",
                     border: "1px solid #cbd5e1",
                     background: className ? "#ffffff" : "#f1f5f9",
-                    fontSize: "14px",
+                    fontSize: "13px",
                     color: "#0f172a",
                     fontWeight: 600,
                     outline: "none",
@@ -648,14 +645,14 @@ export default function FeeCollectionModal({
                 >
                   <option value="">
                     {!className
-                      ? "First select a Class above"
+                      ? "Select Class first"
                       : classStudents.length === 0
-                      ? "No students found in this class"
+                      ? "No students found"
                       : "-- Choose Student --"}
                   </option>
                   {classStudents.map((s) => (
                     <option key={s.student_id} value={s.student_id}>
-                      {s.full_name || s.student_name} ({s.admission_no || "No Adm No"}){" "}
+                      {s.full_name || s.student_name} {s.admission_no ? `(${s.admission_no})` : ""}{" "}
                       {s.roll_no ? `• Roll ${s.roll_no}` : ""}
                     </option>
                   ))}
@@ -670,24 +667,24 @@ export default function FeeCollectionModal({
                     fontSize: "12px",
                     fontWeight: 600,
                     color: "#334155",
-                    marginBottom: "6px",
+                    marginBottom: "4px",
                   }}
                 >
-                  Admission Number
+                  Admission No
                 </label>
                 <input
                   type="text"
                   value={admissionNo}
                   onChange={(e) => setAdmissionNo(e.target.value)}
                   readOnly={mode === "view"}
-                  placeholder="e.g. ADM-2026-001"
+                  placeholder="e.g. ADM-001"
                   style={{
                     width: "100%",
-                    padding: "9px 12px",
-                    borderRadius: "8px",
+                    padding: "8px 10px",
+                    borderRadius: "6px",
                     border: "1px solid #cbd5e1",
                     background: "#ffffff",
-                    fontSize: "14px",
+                    fontSize: "13px",
                     color: "#0f172a",
                     outline: "none",
                   }}
@@ -702,7 +699,7 @@ export default function FeeCollectionModal({
                     fontSize: "12px",
                     fontWeight: 600,
                     color: "#334155",
-                    marginBottom: "6px",
+                    marginBottom: "4px",
                   }}
                 >
                   Academic Session
@@ -714,11 +711,11 @@ export default function FeeCollectionModal({
                   readOnly={mode === "view"}
                   style={{
                     width: "100%",
-                    padding: "9px 12px",
-                    borderRadius: "8px",
+                    padding: "8px 10px",
+                    borderRadius: "6px",
                     border: "1px solid #cbd5e1",
                     background: "#ffffff",
-                    fontSize: "14px",
+                    fontSize: "13px",
                     color: "#0f172a",
                     outline: "none",
                   }}
@@ -730,10 +727,10 @@ export default function FeeCollectionModal({
             {studentName && (
               <div
                 style={{
-                  marginTop: "12px",
-                  padding: "8px 12px",
+                  marginTop: "10px",
+                  padding: "6px 10px",
                   background: "#eff6ff",
-                  borderRadius: "8px",
+                  borderRadius: "6px",
                   border: "1px solid #bfdbfe",
                   fontSize: "12px",
                   color: "#1e40af",
@@ -741,16 +738,15 @@ export default function FeeCollectionModal({
                   alignItems: "center",
                   justifyContent: "space-between",
                   flexWrap: "wrap",
-                  gap: "8px",
+                  gap: "6px",
                 }}
               >
                 <div>
-                  <strong>Student:</strong> {studentName} &nbsp;|&nbsp; <strong>Adm No:</strong> {admissionNo || "—"}{" "}
-                  &nbsp;|&nbsp; <strong>Class:</strong> {className || "—"}
+                  <strong>{studentName}</strong> | Adm: {admissionNo || "—"} | Class: {className || "—"}
                 </div>
                 {studentFeeStatus.dueMonths.length > 0 && (
                   <div style={{ color: "#b45309", fontWeight: 600 }}>
-                    ⚠️ {studentFeeStatus.dueMonths.length} Months Pending Dues
+                    ⚠️ {studentFeeStatus.dueMonths.length} Months Due
                   </div>
                 )}
               </div>
@@ -762,8 +758,8 @@ export default function FeeCollectionModal({
             style={{
               background: "#ffffff",
               border: "1px solid #e2e8f0",
-              borderRadius: "12px",
-              padding: "18px",
+              borderRadius: "10px",
+              padding: "14px 16px",
             }}
           >
             <div
@@ -771,14 +767,14 @@ export default function FeeCollectionModal({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                marginBottom: "12px",
+                marginBottom: "10px",
                 flexWrap: "wrap",
                 gap: "8px",
               }}
             >
               <div
                 style={{
-                  fontSize: "13px",
+                  fontSize: "12px",
                   fontWeight: 700,
                   color: "#0f3661",
                   textTransform: "uppercase",
@@ -788,17 +784,17 @@ export default function FeeCollectionModal({
                   gap: "6px",
                 }}
               >
-                <Calendar size={15} /> Academic Due Months & Status
+                <Calendar size={14} /> Due Month
               </div>
-              <div style={{ display: "flex", gap: "10px", fontSize: "11px", alignItems: "center" }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#15803d" }}>
-                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#22c55e" }} /> Paid
+              <div style={{ display: "flex", gap: "8px", fontSize: "11px", alignItems: "center" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", color: "#15803d" }}>
+                  <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#22c55e" }} /> Paid
                 </span>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#b45309" }}>
-                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#f59e0b" }} /> Due / Unpaid
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", color: "#b45309" }}>
+                  <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#f59e0b" }} /> Due
                 </span>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#1d4ed8" }}>
-                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#3b82f6" }} /> Selected
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", color: "#1d4ed8" }}>
+                  <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#3b82f6" }} /> Active
                 </span>
               </div>
             </div>
@@ -807,9 +803,9 @@ export default function FeeCollectionModal({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
-                gap: "8px",
-                marginBottom: "14px",
+                gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
+                gap: "6px",
+                marginBottom: "10px",
               }}
             >
               {ACADEMIC_MONTHS.map((m) => {
@@ -823,8 +819,8 @@ export default function FeeCollectionModal({
                     disabled={mode === "view"}
                     onClick={() => setDueMonth(m)}
                     style={{
-                      padding: "8px 6px",
-                      borderRadius: "8px",
+                      padding: "6px 4px",
+                      borderRadius: "6px",
                       border: isSelected
                         ? "2px solid #2563eb"
                         : isPaid
@@ -840,7 +836,7 @@ export default function FeeCollectionModal({
                         : isPaid
                         ? "#166534"
                         : "#9a3412",
-                      fontSize: "12px",
+                      fontSize: "11px",
                       fontWeight: isSelected ? 700 : 600,
                       cursor: mode === "view" ? "default" : "pointer",
                       display: "flex",
@@ -848,116 +844,74 @@ export default function FeeCollectionModal({
                       alignItems: "center",
                       gap: "2px",
                       transition: "all 0.15s ease",
-                      boxShadow: isSelected ? "0 2px 4px rgba(37, 99, 235, 0.15)" : "none",
                     }}
                   >
-                    <span>{m}</span>
-                    <span
-                      style={{
-                        fontSize: "10px",
-                        fontWeight: 700,
-                        opacity: 0.85,
-                      }}
-                    >
-                      {isPaid ? "✓ Paid" : isSelected ? "● Active" : "⚠️ Due"}
+                    <span>{m.slice(0, 3)}</span>
+                    <span style={{ fontSize: "9px", opacity: 0.85 }}>
+                      {isPaid ? "✓ Paid" : isSelected ? "● Active" : "Due"}
                     </span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Due Month Dropdown and Info */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 2fr",
-                gap: "14px",
-                alignItems: "center",
-              }}
-            >
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Selected Due Month <span style={{ color: "#ef4444" }}>*</span>
-                </label>
-                <select
-                  value={dueMonth}
-                  onChange={(e) => setDueMonth(e.target.value)}
-                  disabled={mode === "view"}
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #cbd5e1",
-                    background: "#ffffff",
-                    fontSize: "14px",
-                    color: "#0f172a",
-                    fontWeight: 700,
-                    outline: "none",
-                  }}
-                >
-                  {ACADEMIC_MONTHS.map((m) => (
-                    <option key={m} value={m}>
-                      {m} {studentFeeStatus.paidMonths.has(m) ? "(Already Paid)" : "(Due)"}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div
+            {/* Selected Due Month Dropdown (Simple & direct) */}
+            <div style={{ maxWidth: "260px" }}>
+              <select
+                value={dueMonth}
+                onChange={(e) => setDueMonth(e.target.value)}
+                disabled={mode === "view"}
                 style={{
-                  padding: "8px 12px",
-                  background: "#f8fafc",
-                  borderRadius: "8px",
-                  border: "1px dashed #cbd5e1",
-                  fontSize: "12px",
-                  color: "#475569",
-                  lineHeight: "1.4",
+                  width: "100%",
+                  padding: "7px 10px",
+                  borderRadius: "6px",
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  fontSize: "13px",
+                  color: "#0f172a",
+                  fontWeight: 600,
+                  outline: "none",
                 }}
               >
-                <strong>Dues Policy:</strong> Monthly tuition fees are payable by the <strong>10th</strong> of each
-                month. If unpaid past the 10th, late fine applies automatically.
-              </div>
+                {ACADEMIC_MONTHS.map((m) => (
+                  <option key={m} value={m}>
+                    {m} {studentFeeStatus.paidMonths.has(m) ? "(Paid)" : "(Due)"}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Section 3: Fee Type & Fees Amount (Auto-fetched from fees_structure) */}
+          {/* Section 3: Fee Details & Pricing */}
           <div
             style={{
               background: "#f8fafc",
               border: "1px solid #e2e8f0",
-              borderRadius: "12px",
-              padding: "18px",
+              borderRadius: "10px",
+              padding: "14px 16px",
             }}
           >
             <div
               style={{
-                fontSize: "13px",
+                fontSize: "12px",
                 fontWeight: 700,
                 color: "#0f3661",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
-                marginBottom: "14px",
+                marginBottom: "10px",
                 display: "flex",
                 alignItems: "center",
                 gap: "6px",
               }}
             >
-              <DollarSign size={15} /> Fee Type & Structure Pricing
+              <DollarSign size={14} /> Fee Details
             </div>
 
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1.5fr 1fr 1fr",
-                gap: "14px",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: "12px",
               }}
             >
               {/* Fee Type Dropdown */}
@@ -968,7 +922,7 @@ export default function FeeCollectionModal({
                     fontSize: "12px",
                     fontWeight: 600,
                     color: "#334155",
-                    marginBottom: "6px",
+                    marginBottom: "4px",
                   }}
                 >
                   Fee Type <span style={{ color: "#ef4444" }}>*</span>
@@ -979,11 +933,11 @@ export default function FeeCollectionModal({
                   disabled={mode === "view"}
                   style={{
                     width: "100%",
-                    padding: "9px 12px",
-                    borderRadius: "8px",
+                    padding: "8px 10px",
+                    borderRadius: "6px",
                     border: "1px solid #cbd5e1",
                     background: "#ffffff",
-                    fontSize: "14px",
+                    fontSize: "13px",
                     color: "#0f172a",
                     fontWeight: 600,
                     outline: "none",
@@ -1005,7 +959,7 @@ export default function FeeCollectionModal({
                     fontSize: "12px",
                     fontWeight: 600,
                     color: "#334155",
-                    marginBottom: "6px",
+                    marginBottom: "4px",
                   }}
                 >
                   Fees Amount (₹) <span style={{ color: "#ef4444" }}>*</span>
@@ -1024,11 +978,11 @@ export default function FeeCollectionModal({
                     readOnly={mode === "view"}
                     style={{
                       width: "100%",
-                      padding: "9px 12px 9px 24px",
-                      borderRadius: "8px",
+                      padding: "8px 10px 8px 22px",
+                      borderRadius: "6px",
                       border: "1px solid #cbd5e1",
                       background: "#ffffff",
-                      fontSize: "15px",
+                      fontSize: "14px",
                       color: "#0f172a",
                       fontWeight: 700,
                       outline: "none",
@@ -1037,11 +991,11 @@ export default function FeeCollectionModal({
                   <span
                     style={{
                       position: "absolute",
-                      left: "10px",
+                      left: "8px",
                       top: "50%",
                       transform: "translateY(-50%)",
                       color: "#64748b",
-                      fontSize: "14px",
+                      fontSize: "13px",
                       fontWeight: 700,
                     }}
                   >
@@ -1058,7 +1012,7 @@ export default function FeeCollectionModal({
                     fontSize: "12px",
                     fontWeight: 600,
                     color: "#334155",
-                    marginBottom: "6px",
+                    marginBottom: "4px",
                   }}
                 >
                   Payment Date <span style={{ color: "#ef4444" }}>*</span>
@@ -1070,54 +1024,26 @@ export default function FeeCollectionModal({
                   readOnly={mode === "view"}
                   style={{
                     width: "100%",
-                    padding: "9px 12px",
-                    borderRadius: "8px",
+                    padding: "8px 10px",
+                    borderRadius: "6px",
                     border: "1px solid #cbd5e1",
                     background: "#ffffff",
-                    fontSize: "14px",
+                    fontSize: "13px",
                     color: "#0f172a",
                     outline: "none",
                   }}
                 />
               </div>
             </div>
-
-            {/* Structure Link Note */}
-            <div
-              style={{
-                marginTop: "10px",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                fontSize: "12px",
-                color: autoFetchedFromStruct ? "#15803d" : "#475569",
-              }}
-            >
-              {autoFetchedFromStruct ? (
-                <>
-                  <CheckCircle2 size={14} style={{ color: "#16a34a" }} />
-                  <span>
-                    Auto-linked to <strong>Fees Structure</strong> ({className} • {feeType}: ₹{feesAmount})
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Info size={14} style={{ color: "#64748b" }} />
-                  <span>
-                    Rates can be managed in <strong>Master Setup &gt; Fees Structure</strong>.
-                  </span>
-                </>
-              )}
-            </div>
           </div>
 
-          {/* Section 4: Fine Column & Automated Fine Rules */}
+          {/* Section 4: Late Fine */}
           <div
             style={{
               background: "#fff7ed",
-              border: "1px solid #ffedd5",
-              borderRadius: "12px",
-              padding: "18px",
+              border: "1px solid #fed7aa",
+              borderRadius: "10px",
+              padding: "14px 16px",
             }}
           >
             <div
@@ -1125,14 +1051,14 @@ export default function FeeCollectionModal({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                marginBottom: "12px",
+                marginBottom: "10px",
                 flexWrap: "wrap",
                 gap: "8px",
               }}
             >
               <div
                 style={{
-                  fontSize: "13px",
+                  fontSize: "12px",
                   fontWeight: 700,
                   color: "#9a3412",
                   textTransform: "uppercase",
@@ -1142,102 +1068,79 @@ export default function FeeCollectionModal({
                   gap: "6px",
                 }}
               >
-                <Clock size={15} /> Late Fine Calculation Rules
+                <Clock size={14} /> Late Fine
               </div>
               <div
                 style={{
                   fontSize: "11px",
-                  background: "#fef3c7",
-                  color: "#92400e",
-                  padding: "3px 8px",
-                  borderRadius: "6px",
+                  color: fineAmount > 0 ? "#b45309" : "#15803d",
                   fontWeight: 600,
-                  border: "1px solid #fde68a",
+                  background: fineAmount > 0 ? "#fef3c7" : "#dcfce7",
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                  border: `1px solid ${fineAmount > 0 ? "#fde68a" : "#bbf7d0"}`,
                 }}
               >
-                Rule: Up to 10th: ₹0 | After 10th: ₹50 | Next Month: ₹100
+                {fineAnalysis.reason}
               </div>
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 2fr",
-                gap: "14px",
-                alignItems: "center",
-              }}
-            >
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    color: "#9a3412",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Fine Column (₹)
-                </label>
-                <div style={{ position: "relative" }}>
-                  <input
-                    type="number"
-                    min="0"
-                    step="10"
-                    value={fineAmount}
-                    onChange={(e) => setFineAmount(Number(e.target.value))}
-                    readOnly={mode === "view"}
-                    style={{
-                      width: "100%",
-                      padding: "9px 12px 9px 24px",
-                      borderRadius: "8px",
-                      border: "1px solid #fdba74",
-                      background: "#ffffff",
-                      fontSize: "15px",
-                      color: "#9a3412",
-                      fontWeight: 700,
-                      outline: "none",
-                    }}
-                  />
-                  <span
-                    style={{
-                      position: "absolute",
-                      left: "10px",
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      color: "#9a3412",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                    }}
-                  >
-                    ₹
-                  </span>
-                </div>
-              </div>
-
-              <div
+            <div style={{ maxWidth: "200px" }}>
+              <label
                 style={{
-                  padding: "10px 14px",
-                  background: "#ffffff",
-                  borderRadius: "8px",
-                  border: "1px solid #fed7aa",
+                  display: "block",
                   fontSize: "12px",
-                  color: "#7c2d12",
+                  fontWeight: 600,
+                  color: "#9a3412",
+                  marginBottom: "4px",
                 }}
               >
-                <div style={{ fontWeight: 700, marginBottom: "2px" }}>Auto-Assessed Status:</div>
-                <div>{fineAnalysis.reason}</div>
+                Fine Amount (₹)
+              </label>
+              <div style={{ position: "relative" }}>
+                <input
+                  type="number"
+                  min="0"
+                  step="10"
+                  value={fineAmount}
+                  onChange={(e) => setFineAmount(Number(e.target.value))}
+                  readOnly={mode === "view"}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px 8px 22px",
+                    borderRadius: "6px",
+                    border: "1px solid #fdba74",
+                    background: "#ffffff",
+                    fontSize: "14px",
+                    color: "#9a3412",
+                    fontWeight: 700,
+                    outline: "none",
+                  }}
+                />
+                <span
+                  style={{
+                    position: "absolute",
+                    left: "8px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "#9a3412",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                  }}
+                >
+                  ₹
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Section 5: Concession / Waive Off Fine (Approved by Principal) */}
+          {/* Section 5: Fine Concession / Waiver (Approved by Principal) */}
           <div
             style={{
               background: fineWaived ? "#f0fdf4" : "#f8fafc",
               border: fineWaived ? "1px solid #bbf7d0" : "1px solid #e2e8f0",
-              borderRadius: "12px",
-              padding: "18px",
+              borderRadius: "10px",
+              padding: "14px 16px",
               transition: "all 0.2s ease",
             }}
           >
@@ -1246,25 +1149,9 @@ export default function FeeCollectionModal({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                marginBottom: "12px",
+                marginBottom: fineWaived ? "10px" : "0",
               }}
             >
-              <div
-                style={{
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  color: fineWaived ? "#166534" : "#0f3661",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                }}
-              >
-                <ShieldCheck size={16} /> Fine Concession & Waiver Option
-              </div>
-
-              {/* Toggle Waive Off */}
               <label
                 style={{
                   display: "flex",
@@ -1273,7 +1160,7 @@ export default function FeeCollectionModal({
                   cursor: mode === "view" ? "default" : "pointer",
                   fontSize: "13px",
                   fontWeight: 700,
-                  color: fineWaived ? "#15803d" : "#475569",
+                  color: fineWaived ? "#15803d" : "#334155",
                 }}
               >
                 <input
@@ -1283,96 +1170,104 @@ export default function FeeCollectionModal({
                     if (mode === "view") return;
                     setFineWaived(e.target.checked);
                     if (e.target.checked && !fineWaiveReason) {
-                      setFineWaiveReason("Principal Approved Concession");
+                      setFineWaiveReason("Principal Approval");
                     }
                   }}
                   disabled={mode === "view"}
                   style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#16a34a" }}
                 />
-                Apply Fine Waiver / Concession
+                Fine Waiver / Concession
               </label>
+
+              {fineWaived && (
+                <span style={{ fontSize: "11px", fontWeight: 700, color: isFineWaivedAndApproved ? "#15803d" : "#b45309" }}>
+                  {isFineWaivedAndApproved ? "✓ 100% Fine Waived (₹0)" : "Pending Principal Approval (Fine remains active)"}
+                </span>
+              )}
             </div>
 
-            {fineWaived ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "10px" }}>
-                {/* Principal Approval Checkbox */}
+            {fineWaived && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {/* Principal Approval Required Field */}
                 <div
                   style={{
-                    padding: "12px 14px",
-                    background: waiveApprovedByPrincipal ? "#dcfce7" : "#fef3c7",
+                    padding: "10px 12px",
+                    background: isFineWaivedAndApproved ? "#dcfce7" : "#fff7ed",
                     borderRadius: "8px",
-                    border: waiveApprovedByPrincipal ? "1px solid #86efac" : "1px solid #fde68a",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    flexWrap: "wrap",
-                    gap: "10px",
+                    border: isFineWaivedAndApproved ? "1.5px solid #86efac" : "1.5px solid #fdba74",
                   }}
                 >
                   <label
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      cursor: mode === "view" ? "default" : "pointer",
+                      display: "block",
+                      fontSize: "11px",
                       fontWeight: 700,
-                      fontSize: "13px",
-                      color: waiveApprovedByPrincipal ? "#14532d" : "#78350f",
+                      color: isFineWaivedAndApproved ? "#14532d" : "#c2410c",
+                      marginBottom: "4px",
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={waiveApprovedByPrincipal}
-                      onChange={(e) => {
-                        if (mode === "view") return;
-                        setWaiveApprovedByPrincipal(e.target.checked);
-                      }}
-                      disabled={mode === "view"}
-                      style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#15803d" }}
-                    />
-                    <span>Approved by Principal</span>
+                    Principal Approval *
                   </label>
-
-                  <div style={{ fontSize: "12px", fontWeight: 600 }}>
-                    {waiveApprovedByPrincipal ? (
-                      <span style={{ color: "#15803d", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                        <CheckCircle2 size={14} /> 100% Fine Waived Off (₹0 Added to Bill)
-                      </span>
-                    ) : (
-                      <span style={{ color: "#b45309", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                        <AlertCircle size={14} /> Pending Principal Approval (Fine remains payable)
-                      </span>
-                    )}
+                  <input
+                    type="text"
+                    value={principalApproval}
+                    onChange={(e) => {
+                      if (mode === "view") return;
+                      const val = e.target.value;
+                      setPrincipalApproval(val);
+                      setWaiveApprovedByPrincipal(val.trim().length > 0);
+                      if (val.trim().length > 0 && !approvedBy) {
+                        setApprovedBy(val);
+                      }
+                    }}
+                    readOnly={mode === "view"}
+                    placeholder="Enter Principal approval details (e.g. Fr. Principal Approval #842)"
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      borderRadius: "6px",
+                      border: `1.5px solid ${isFineWaivedAndApproved ? "#86efac" : "#fb923c"}`,
+                      background: "#ffffff",
+                      fontSize: "12px",
+                      color: "#0f172a",
+                      fontWeight: 600,
+                      outline: "none",
+                    }}
+                  />
+                  <div style={{ fontSize: "11px", marginTop: "4px", fontWeight: 600, color: isFineWaivedAndApproved ? "#15803d" : "#c2410c" }}>
+                    {isFineWaivedAndApproved
+                      ? "✓ Principal approval verified. The late fine is waived (₹0)."
+                      : "⚠ Fine waiver will NOT apply until this Principal Approval field is filled."}
                   </div>
                 </div>
 
                 {/* Reason & Approver */}
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "12px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "10px" }}>
                   <div>
                     <label
                       style={{
                         display: "block",
-                        fontSize: "12px",
+                        fontSize: "11px",
                         fontWeight: 600,
                         color: "#334155",
-                        marginBottom: "4px",
+                        marginBottom: "3px",
                       }}
                     >
-                      Reason for Concession / Waiver
+                      Reason
                     </label>
                     <input
                       type="text"
                       value={fineWaiveReason}
                       onChange={(e) => setFineWaiveReason(e.target.value)}
                       readOnly={mode === "view"}
-                      placeholder="e.g. Approved due to illness / sibling discount / Principal order"
+                      placeholder="e.g. Approved concession"
                       style={{
                         width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: "8px",
+                        padding: "7px 10px",
+                        borderRadius: "6px",
                         border: "1px solid #cbd5e1",
                         background: "#ffffff",
-                        fontSize: "13px",
+                        fontSize: "12px",
                         color: "#0f172a",
                         outline: "none",
                       }}
@@ -1382,13 +1277,13 @@ export default function FeeCollectionModal({
                     <label
                       style={{
                         display: "block",
-                        fontSize: "12px",
+                        fontSize: "11px",
                         fontWeight: 600,
                         color: "#334155",
-                        marginBottom: "4px",
+                        marginBottom: "3px",
                       }}
                     >
-                      Approved Authority
+                      Approving Authority
                     </label>
                     <input
                       type="text"
@@ -1397,11 +1292,11 @@ export default function FeeCollectionModal({
                       readOnly={mode === "view"}
                       style={{
                         width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: "8px",
+                        padding: "7px 10px",
+                        borderRadius: "6px",
                         border: "1px solid #cbd5e1",
                         background: "#ffffff",
-                        fontSize: "13px",
+                        fontSize: "12px",
                         color: "#0f172a",
                         fontWeight: 600,
                         outline: "none",
@@ -1410,101 +1305,69 @@ export default function FeeCollectionModal({
                   </div>
                 </div>
               </div>
-            ) : (
-              <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>
-                Enable this option if the student has been granted a late fine concession or waiver by the Principal.
-              </p>
             )}
           </div>
 
-          {/* Section 6: Amount Due Mathematical Calculation Box */}
+          {/* Section 6: Payment Summary & Amount Paid */}
           <div
             style={{
               background: "linear-gradient(135deg, #0f3661 0%, #0369a1 100%)",
               color: "#ffffff",
-              borderRadius: "14px",
-              padding: "20px",
-              boxShadow: "0 10px 25px -5px rgba(15, 54, 97, 0.3)",
+              borderRadius: "10px",
+              padding: "16px",
+              boxShadow: "0 4px 12px rgba(15, 54, 97, 0.2)",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: "14px",
-                borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
-                paddingBottom: "10px",
-                flexWrap: "wrap",
-                gap: "8px",
-              }}
-            >
-              <div style={{ fontSize: "13px", fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                Formula: Amount Due = Fees Amount + Fine - Amount Paid
-              </div>
-              <div
-                style={{
-                  fontSize: "11px",
-                  background: "rgba(255, 255, 255, 0.2)",
-                  padding: "3px 8px",
-                  borderRadius: "6px",
-                  fontWeight: 700,
-                }}
-              >
-                Status: {currentStatus.toUpperCase()}
-              </div>
-            </div>
-
-            {/* Formula Terms Breakdown */}
+            {/* Terms Breakdown */}
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-                gap: "12px",
+                gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+                gap: "8px",
                 alignItems: "center",
                 textAlign: "center",
-                marginBottom: "16px",
+                marginBottom: "12px",
               }}
             >
-              <div style={{ background: "rgba(255, 255, 255, 0.1)", padding: "10px", borderRadius: "8px" }}>
-                <div style={{ fontSize: "11px", color: "#93c5fd", fontWeight: 600 }}>Fees Amount</div>
-                <div style={{ fontSize: "18px", fontWeight: 800, marginTop: "2px" }}>₹{feesAmount.toLocaleString("en-IN")}</div>
+              <div style={{ background: "rgba(255, 255, 255, 0.1)", padding: "8px", borderRadius: "6px" }}>
+                <div style={{ fontSize: "11px", color: "#93c5fd", fontWeight: 600 }}>Fees</div>
+                <div style={{ fontSize: "16px", fontWeight: 800 }}>₹{feesAmount.toLocaleString("en-IN")}</div>
               </div>
 
-              <div style={{ fontSize: "18px", fontWeight: 800, color: "#bfdbfe" }}>+</div>
+              <div style={{ fontSize: "16px", fontWeight: 800, color: "#bfdbfe" }}>+</div>
 
-              <div style={{ background: "rgba(255, 255, 255, 0.1)", padding: "10px", borderRadius: "8px" }}>
-                <div style={{ fontSize: "11px", color: "#93c5fd", fontWeight: 600 }}>Fine Column</div>
-                <div style={{ fontSize: "18px", fontWeight: 800, marginTop: "2px" }}>
+              <div style={{ background: "rgba(255, 255, 255, 0.1)", padding: "8px", borderRadius: "6px" }}>
+                <div style={{ fontSize: "11px", color: "#93c5fd", fontWeight: 600 }}>Fine</div>
+                <div style={{ fontSize: "16px", fontWeight: 800 }}>
                   {isFineWaivedAndApproved ? (
-                    <span style={{ color: "#86efac" }}>₹0 (Waived)</span>
+                    <span style={{ color: "#86efac" }}>₹0</span>
                   ) : (
                     <span>₹{fineAmount.toLocaleString("en-IN")}</span>
                   )}
                 </div>
               </div>
 
-              <div style={{ fontSize: "18px", fontWeight: 800, color: "#bfdbfe" }}>-</div>
+              <div style={{ fontSize: "16px", fontWeight: 800, color: "#bfdbfe" }}>-</div>
 
-              <div style={{ background: "rgba(255, 255, 255, 0.1)", padding: "10px", borderRadius: "8px" }}>
-                <div style={{ fontSize: "11px", color: "#93c5fd", fontWeight: 600 }}>Amount Paid</div>
-                <div style={{ fontSize: "18px", fontWeight: 800, marginTop: "2px", color: "#86efac" }}>
+              <div style={{ background: "rgba(255, 255, 255, 0.1)", padding: "8px", borderRadius: "6px" }}>
+                <div style={{ fontSize: "11px", color: "#93c5fd", fontWeight: 600 }}>Paid</div>
+                <div style={{ fontSize: "16px", fontWeight: 800, color: "#86efac" }}>
                   ₹{amountPaid.toLocaleString("en-IN")}
                 </div>
               </div>
 
-              <div style={{ fontSize: "18px", fontWeight: 800, color: "#bfdbfe" }}>=</div>
+              <div style={{ fontSize: "16px", fontWeight: 800, color: "#bfdbfe" }}>=</div>
 
               <div
                 style={{
                   background: amountDue > 0 ? "rgba(239, 68, 68, 0.3)" : "rgba(34, 197, 94, 0.3)",
-                  padding: "10px",
-                  borderRadius: "8px",
+                  padding: "8px",
+                  borderRadius: "6px",
                   border: amountDue > 0 ? "1px solid rgba(239, 68, 68, 0.5)" : "1px solid rgba(34, 197, 94, 0.5)",
                 }}
               >
-                <div style={{ fontSize: "11px", color: "#ffffff", fontWeight: 700 }}>Amount Due</div>
-                <div style={{ fontSize: "20px", fontWeight: 900, marginTop: "2px" }}>
+                <div style={{ fontSize: "11px", color: "#ffffff", fontWeight: 700 }}>Due</div>
+                <div style={{ fontSize: "18px", fontWeight: 900 }}>
                   ₹{amountDue.toLocaleString("en-IN")}
                 </div>
               </div>
@@ -1515,11 +1378,11 @@ export default function FeeCollectionModal({
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr auto",
-                gap: "12px",
+                gap: "10px",
                 alignItems: "end",
                 background: "rgba(255, 255, 255, 0.12)",
-                padding: "12px 14px",
-                borderRadius: "10px",
+                padding: "10px 12px",
+                borderRadius: "8px",
               }}
             >
               <div>
@@ -1529,10 +1392,10 @@ export default function FeeCollectionModal({
                     fontSize: "12px",
                     fontWeight: 700,
                     color: "#ffffff",
-                    marginBottom: "6px",
+                    marginBottom: "4px",
                   }}
                 >
-                  Amount Received Now (₹) <span style={{ color: "#fca5a5" }}>*</span>
+                  Amount Received (₹) <span style={{ color: "#fca5a5" }}>*</span>
                 </label>
                 <input
                   type="number"
@@ -1543,11 +1406,11 @@ export default function FeeCollectionModal({
                   readOnly={mode === "view"}
                   style={{
                     width: "100%",
-                    padding: "9px 12px",
-                    borderRadius: "8px",
+                    padding: "8px 10px",
+                    borderRadius: "6px",
                     border: "1px solid rgba(255, 255, 255, 0.3)",
                     background: "#ffffff",
-                    fontSize: "16px",
+                    fontSize: "15px",
                     color: "#0f172a",
                     fontWeight: 800,
                     outline: "none",
@@ -1556,20 +1419,19 @@ export default function FeeCollectionModal({
               </div>
 
               {mode !== "view" && (
-                <div style={{ display: "flex", gap: "8px" }}>
+                <div style={{ display: "flex", gap: "6px" }}>
                   <button
                     type="button"
                     onClick={() => setAmountPaid(totalPayable)}
                     style={{
-                      padding: "9px 16px",
-                      borderRadius: "8px",
+                      padding: "8px 14px",
+                      borderRadius: "6px",
                       background: "#22c55e",
                       color: "#ffffff",
                       border: "none",
-                      fontSize: "13px",
+                      fontSize: "12px",
                       fontWeight: 700,
                       cursor: "pointer",
-                      boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
                     }}
                   >
                     Pay Full (₹{totalPayable})
@@ -1578,12 +1440,12 @@ export default function FeeCollectionModal({
                     type="button"
                     onClick={() => setAmountPaid(0)}
                     style={{
-                      padding: "9px 12px",
-                      borderRadius: "8px",
+                      padding: "8px 10px",
+                      borderRadius: "6px",
                       background: "rgba(255, 255, 255, 0.2)",
                       color: "#ffffff",
                       border: "1px solid rgba(255, 255, 255, 0.3)",
-                      fontSize: "13px",
+                      fontSize: "12px",
                       fontWeight: 600,
                       cursor: "pointer",
                     }}
@@ -1599,8 +1461,8 @@ export default function FeeCollectionModal({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: "14px",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "12px",
             }}
           >
             {/* Payment Mode */}
@@ -1611,7 +1473,7 @@ export default function FeeCollectionModal({
                   fontSize: "12px",
                   fontWeight: 600,
                   color: "#334155",
-                  marginBottom: "6px",
+                  marginBottom: "4px",
                 }}
               >
                 Payment Mode
@@ -1622,11 +1484,11 @@ export default function FeeCollectionModal({
                 disabled={mode === "view"}
                 style={{
                   width: "100%",
-                  padding: "9px 12px",
-                  borderRadius: "8px",
+                  padding: "8px 10px",
+                  borderRadius: "6px",
                   border: "1px solid #cbd5e1",
                   background: "#ffffff",
-                  fontSize: "14px",
+                  fontSize: "13px",
                   color: "#0f172a",
                   outline: "none",
                 }}
@@ -1647,7 +1509,7 @@ export default function FeeCollectionModal({
                   fontSize: "12px",
                   fontWeight: 600,
                   color: "#334155",
-                  marginBottom: "6px",
+                  marginBottom: "4px",
                 }}
               >
                 Receipt Number
@@ -1660,8 +1522,8 @@ export default function FeeCollectionModal({
                   readOnly={mode === "view"}
                   style={{
                     flex: 1,
-                    padding: "9px 12px",
-                    borderRadius: "8px",
+                    padding: "8px 10px",
+                    borderRadius: "6px",
                     border: "1px solid #cbd5e1",
                     background: "#ffffff",
                     fontSize: "13px",
@@ -1674,17 +1536,17 @@ export default function FeeCollectionModal({
                   <button
                     type="button"
                     onClick={() => setReceiptNumber(generateReceiptNumber())}
-                    title="Generate fresh receipt number"
+                    title="Generate new receipt"
                     style={{
-                      padding: "9px 12px",
-                      borderRadius: "8px",
+                      padding: "8px 10px",
+                      borderRadius: "6px",
                       border: "1px solid #cbd5e1",
                       background: "#f1f5f9",
                       color: "#475569",
                       cursor: "pointer",
                     }}
                   >
-                    <RefreshCw size={14} />
+                    <RefreshCw size={13} />
                   </button>
                 )}
               </div>
@@ -1698,21 +1560,21 @@ export default function FeeCollectionModal({
                   fontSize: "12px",
                   fontWeight: 600,
                   color: "#334155",
-                  marginBottom: "6px",
+                  marginBottom: "4px",
                 }}
               >
-                Remarks / Collection Notes
+                Remarks
               </label>
               <input
                 type="text"
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
                 readOnly={mode === "view"}
-                placeholder="Optional notes or bank transaction reference..."
+                placeholder="Optional notes..."
                 style={{
                   width: "100%",
-                  padding: "9px 12px",
-                  borderRadius: "8px",
+                  padding: "8px 10px",
+                  borderRadius: "6px",
                   border: "1px solid #cbd5e1",
                   background: "#ffffff",
                   fontSize: "13px",
@@ -1726,25 +1588,24 @@ export default function FeeCollectionModal({
           {/* Footer Actions */}
           <div
             style={{
-              marginTop: "8px",
-              paddingTop: "16px",
+              paddingTop: "12px",
               borderTop: "1px solid #e2e8f0",
               display: "flex",
               alignItems: "center",
               justifyContent: "flex-end",
-              gap: "12px",
+              gap: "10px",
             }}
           >
             <button
               type="button"
               onClick={onClose}
               style={{
-                padding: "10px 20px",
-                borderRadius: "8px",
+                padding: "8px 16px",
+                borderRadius: "6px",
                 border: "1px solid #cbd5e1",
                 background: "#ffffff",
                 color: "#475569",
-                fontSize: "14px",
+                fontSize: "13px",
                 fontWeight: 600,
                 cursor: "pointer",
               }}
@@ -1757,28 +1618,28 @@ export default function FeeCollectionModal({
                 type="submit"
                 disabled={isSubmitting}
                 style={{
-                  padding: "10px 24px",
-                  borderRadius: "8px",
+                  padding: "8px 20px",
+                  borderRadius: "6px",
                   border: "none",
                   background: "linear-gradient(135deg, #0f3661 0%, #1e40af 100%)",
                   color: "#ffffff",
-                  fontSize: "14px",
+                  fontSize: "13px",
                   fontWeight: 700,
                   cursor: isSubmitting ? "not-allowed" : "pointer",
                   opacity: isSubmitting ? 0.7 : 1,
                   display: "flex",
                   alignItems: "center",
-                  gap: "8px",
-                  boxShadow: "0 4px 6px -1px rgba(15, 54, 97, 0.2)",
+                  gap: "6px",
+                  boxShadow: "0 2px 4px rgba(15, 54, 97, 0.2)",
                 }}
               >
                 {isSubmitting ? (
                   <>
-                    <RefreshCw size={16} className="animate-spin" /> Saving...
+                    <RefreshCw size={14} className="animate-spin" /> Saving...
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 size={16} /> Save & Generate Receipt
+                    <CheckCircle2 size={14} /> Save & Generate Receipt
                   </>
                 )}
               </button>

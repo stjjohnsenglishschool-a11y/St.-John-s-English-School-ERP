@@ -1073,6 +1073,7 @@ button.logout-action-btn svg {
   width: 324px;
   min-height: 524px;
   height: 524px;
+  max-height: 524px;
   border-radius: 14px;
   display: flex;
   flex-direction: column;
@@ -1080,33 +1081,68 @@ button.logout-action-btn svg {
   overflow: hidden;
   position: relative;
   background: #ffffff;
+  padding: 0;
+  margin: 0;
+}
+.id-card.id-card-escort > header {
+  height: 48px;
+  min-height: 48px;
+  padding: 5px 10px;
+  border-bottom: 2.5px solid #d8a940;
+  background: linear-gradient(115deg, #09233f, #174f7d);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.id-card.id-card-escort > header img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #fff;
+  object-fit: contain;
+  padding: 1.5px;
+  box-shadow: 0 0 0 1.5px rgba(216, 169, 64, 0.85);
+  flex-shrink: 0;
+}
+.id-card.id-card-escort > header b {
+  font: 800 12px/1.2 'Manrope', sans-serif;
+  letter-spacing: 0.3px;
+}
+.id-card.id-card-escort > header span {
+  color: #d2dfeb;
+  font-size: 8px;
+  font-weight: 600;
+  margin-top: 1px;
+  line-height: 1.1;
 }
 .id-type-strip.id-type-strip-escort {
   background: linear-gradient(90deg, #fef3c7, #fffbeb, #fef3c7);
   color: #92400e;
-  border-bottom: 1.5px solid #fde68a;
+  border-bottom: 1px solid #fde68a;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 12px;
+  padding: 2.5px 10px;
   flex-shrink: 0;
 }
 .id-type-strip.id-type-strip-escort span {
   font-weight: 900;
-  letter-spacing: 0.8px;
-  font-size: 9.5px;
+  letter-spacing: 0.6px;
+  font-size: 8.5px;
 }
 .id-type-strip.id-type-strip-escort small {
-  font-size: 8.5px;
-  font-weight: 700;
+  font-size: 8px;
+  font-weight: 800;
   color: #b45309;
 }
 .id-body-escort {
-  padding: 6px 9px 5px;
+  padding: 5px 8px 3px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 5px;
+  gap: 4px;
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
@@ -1114,25 +1150,25 @@ button.logout-action-btn svg {
 .escort-student-box {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 4px 6px;
   background: #f8fafc;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 9px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
   flex-shrink: 0;
 }
 .escort-student-photo-wrap {
-  width: 66px;
-  height: 78px;
-  border-radius: 7px;
-  border: 2px solid #cbd5e1;
+  width: 64px;
+  height: 74px;
+  border-radius: 6px;
+  border: 1.5px solid #cbd5e1;
   background: #edf2f7;
   overflow: hidden;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 .escort-student-photo-wrap img {
   width: 100%;
@@ -1144,40 +1180,40 @@ button.logout-action-btn svg {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   color: #94a3b8;
-  font-size: 8px;
+  font-size: 7.5px;
   font-weight: 800;
   text-align: center;
 }
 .escort-photo-placeholder.parent-placeholder {
-  font-size: 7.5px;
-  gap: 2px;
+  font-size: 7px;
+  gap: 1px;
 }
 .escort-student-info {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1.5px;
 }
 .escort-label-row {
   display: flex;
   flex-direction: column;
 }
 .escort-field-lbl {
-  font-size: 7.5px;
+  font-size: 7px;
   font-weight: 800;
   color: #64748b;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
-  line-height: 1.1;
+  line-height: 1;
 }
 .escort-student-name {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 900;
   color: #0f172a;
-  line-height: 1.2;
+  line-height: 1.15;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1185,35 +1221,35 @@ button.logout-action-btn svg {
 }
 .escort-meta-row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   margin-top: 1px;
 }
 .escort-meta-col {
   display: flex;
   align-items: baseline;
-  gap: 3px;
+  gap: 2.5px;
 }
 .escort-val-highlight {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 800;
   color: #1d4ed8;
 }
 .escort-adm-tag {
   display: inline-block;
   align-self: flex-start;
-  font-size: 8px;
+  font-size: 7.5px;
   font-weight: 700;
   color: #475569;
   background: #e2e8f0;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 0.5px 5px;
+  border-radius: 3px;
   margin-top: 1px;
 }
 .escort-section-divider {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   margin: 0;
   flex-shrink: 0;
 }
@@ -1223,13 +1259,13 @@ button.logout-action-btn svg {
   background: #cbd5e1;
 }
 .escort-divider-pill {
-  font-size: 7.5px;
+  font-size: 7px;
   font-weight: 900;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.6px;
   color: #1e3a8a;
   background: #dbeafe;
-  padding: 1.5px 8px;
-  border-radius: 4px;
+  padding: 1px 6px;
+  border-radius: 3px;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -1237,35 +1273,35 @@ button.logout-action-btn svg {
 .escort-parents-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 7px;
+  gap: 6px;
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
 }
 .escort-parent-card {
   background: #ffffff;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 9px;
-  padding: 6px 6px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  padding: 4px 4px 4px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   box-sizing: border-box;
   height: 100%;
 }
 .escort-parent-photo-wrap {
-  width: 78px;
-  height: 90px;
-  border-radius: 7px;
+  width: 90px;
+  height: 104px;
+  border-radius: 6px;
   border: 1.5px solid #cbd5e1;
   background: #f1f5f9;
   overflow: hidden;
   position: relative;
   display: grid;
   place-items: center;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
 }
 .escort-parent-photo-wrap img {
@@ -1279,10 +1315,10 @@ button.logout-action-btn svg {
   left: 0;
   right: 0;
   text-align: center;
-  font-size: 7px;
+  font-size: 6.5px;
   font-weight: 900;
-  letter-spacing: 0.6px;
-  padding: 2px 0;
+  letter-spacing: 0.5px;
+  padding: 1.5px 0;
   color: #fff;
   text-transform: uppercase;
 }
@@ -1296,19 +1332,19 @@ button.logout-action-btn svg {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 1.5px;
   text-align: left;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 .escort-detail-item {
   display: flex;
   flex-direction: column;
 }
 .escort-parent-name {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 800;
   color: #0f172a;
-  line-height: 1.25;
+  line-height: 1.15;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1316,17 +1352,17 @@ button.logout-action-btn svg {
 .escort-contact-pill {
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
-  border-radius: 4px;
-  padding: 1.5px 4px;
+  border-radius: 3px;
+  padding: 1px 3px;
   display: inline-block;
-  margin-top: 1px;
+  margin-top: 0.5px;
 }
 .escort-contact-pill.mother {
   background: #fdf2f8;
   border-color: #fbcfe8;
 }
 .escort-parent-contact {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
   color: #047857;
   letter-spacing: 0.2px;
@@ -1343,17 +1379,17 @@ button.logout-action-btn svg {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2.5px;
   font-size: 6.5px;
   font-weight: 900;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
   color: #0369a1;
   background: #e0f2fe;
   border: 1px solid #bae6fd;
-  border-radius: 4px;
-  padding: 2px 0;
+  border-radius: 3px;
+  padding: 1.5px 0;
   text-transform: uppercase;
-  margin-top: 3px;
+  margin-top: 2px;
   line-height: 1;
 }
 .escort-auth-status.mother {
@@ -1366,17 +1402,17 @@ button.logout-action-btn svg {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   background: #f8fafc;
   border: 1px dashed #cbd5e1;
-  border-radius: 5px;
-  padding: 2.5px 6px;
+  border-radius: 4px;
+  padding: 2px 4px;
   color: #475569;
-  font-size: 7px;
+  font-size: 6.5px;
   font-weight: 700;
   letter-spacing: 0.2px;
   text-align: center;
-  line-height: 1.15;
+  line-height: 1.1;
   flex-shrink: 0;
 }
 .escort-security-strip .escort-shield-icon {
@@ -1384,8 +1420,25 @@ button.logout-action-btn svg {
   flex-shrink: 0;
 }
 .id-footer-portrait.escort-footer {
-  padding: 5px 9px 6px;
+  padding: 4px 8px 4px;
   flex-shrink: 0;
+  height: 48px;
+  min-height: 48px;
+  box-sizing: border-box;
+}
+.id-footer-portrait.escort-footer .id-qr-img,
+.id-footer-portrait.escort-footer .id-qr-placeholder {
+  width: 36px;
+  height: 36px;
+}
+.id-footer-portrait.escort-footer .id-qr-box {
+  padding: 1.5px 2px;
+}
+.id-footer-portrait.escort-footer .id-signatory-wrap {
+  height: 24px;
+}
+.id-footer-portrait.escort-footer .id-signature-img {
+  height: 24px;
 }
 
 
