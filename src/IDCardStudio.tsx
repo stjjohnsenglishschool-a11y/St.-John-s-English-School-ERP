@@ -1881,7 +1881,7 @@ export default function IDCardStudio({
                     />
                   ) : (
                     <div className="escort-photo-placeholder">
-                      <GraduationCap size={24} />
+                      <GraduationCap size={28} />
                       <span>STUDENT</span>
                       <span>PHOTO</span>
                     </div>
@@ -1891,7 +1891,7 @@ export default function IDCardStudio({
                 <div className="escort-student-info">
                   <div className="escort-label-row">
                     <span className="escort-field-lbl">STUDENT NAME:</span>
-                    <b className="escort-student-name">
+                    <b className="escort-student-name" title={studentName || selected?.fullName || 'STUDENT NAME'}>
                       {studentName || selected?.fullName || 'STUDENT NAME'}
                     </b>
                   </div>
@@ -1917,7 +1917,7 @@ export default function IDCardStudio({
                 </div>
               </div>
 
-              {/* Authorized Escorts / Parents Divider */}
+              {/* Prominent Authorized Escorts Heading */}
               <div className="escort-section-divider">
                 <div className="escort-divider-line" />
                 <span className="escort-divider-pill">AUTHORIZED ESCORTS</span>
@@ -1944,7 +1944,7 @@ export default function IDCardStudio({
                       />
                     ) : (
                       <div className="escort-photo-placeholder parent-placeholder">
-                        <User size={22} />
+                        <User size={28} />
                         <span>FATHER</span>
                         <span>PHOTO</span>
                       </div>
@@ -1970,11 +1970,6 @@ export default function IDCardStudio({
                       </div>
                     </div>
                   </div>
-
-                  <div className="escort-auth-status">
-                    <Check size={10} strokeWidth={3} />
-                    <span>AUTHORIZED ESCORT</span>
-                  </div>
                 </div>
 
                 {/* 2. Mother Section */}
@@ -1995,7 +1990,7 @@ export default function IDCardStudio({
                       />
                     ) : (
                       <div className="escort-photo-placeholder parent-placeholder">
-                        <User size={22} />
+                        <User size={28} />
                         <span>MOTHER</span>
                         <span>PHOTO</span>
                       </div>
@@ -2021,18 +2016,7 @@ export default function IDCardStudio({
                       </div>
                     </div>
                   </div>
-
-                  <div className="escort-auth-status mother">
-                    <Check size={10} strokeWidth={3} />
-                    <span>AUTHORIZED ESCORT</span>
-                  </div>
                 </div>
-              </div>
-
-              {/* Escort Handover & Security Note Strip */}
-              <div className="escort-security-strip">
-                <ShieldCheck size={11} className="escort-shield-icon" />
-                <span>Must be presented at gate during student dispersal · Non-transferable</span>
               </div>
             </div>
 
@@ -2053,7 +2037,7 @@ export default function IDCardStudio({
                     />
                   ) : (
                     <div className="id-qr-placeholder">
-                      <QrCodeIcon size={20} />
+                      <QrCodeIcon size={22} />
                     </div>
                   )}
                   <span className="id-qr-tag">VERIFY</span>
@@ -2064,12 +2048,13 @@ export default function IDCardStudio({
                   <b>9674368297</b>
                   <div
                     style={{
-                      fontSize: '7.5px',
-                      color: '#64748b',
+                      fontSize: '8px',
+                      fontWeight: 700,
+                      color: '#475569',
                       marginTop: '1px',
                     }}
                   >
-                    Valid: {expiry}
+                    Valid: {expiry || '31-03-2027'}
                   </div>
                 </div>
               </div>

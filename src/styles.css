@@ -1068,7 +1068,7 @@ button.logout-action-btn svg {
   opacity: 8%;
 }
 
-/* Escort Card Specialized Styles - Full Area Space Utilization */
+/* Escort Card Specialized Styles - Full Area Space Utilization & Premium Print ID Layout */
 .id-card.id-card-escort {
   width: 324px;
   min-height: 524px;
@@ -1083,62 +1083,70 @@ button.logout-action-btn svg {
   background: #ffffff;
   padding: 0;
   margin: 0;
+  border: 1.5px solid #09233f;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
 }
 .id-card.id-card-escort > header {
-  height: 48px;
-  min-height: 48px;
-  padding: 5px 10px;
+  height: 50px;
+  min-height: 50px;
+  padding: 6px 10px;
   border-bottom: 2.5px solid #d8a940;
-  background: linear-gradient(115deg, #09233f, #174f7d);
+  background: linear-gradient(115deg, #09233f, #15456f);
   color: #fff;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   flex-shrink: 0;
 }
 .id-card.id-card-escort > header img {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: #fff;
   object-fit: contain;
   padding: 1.5px;
-  box-shadow: 0 0 0 1.5px rgba(216, 169, 64, 0.85);
+  box-shadow: 0 0 0 1.5px rgba(216, 169, 64, 0.95);
   flex-shrink: 0;
 }
 .id-card.id-card-escort > header b {
-  font: 800 12px/1.2 'Manrope', sans-serif;
+  font: 900 12.5px/1.2 'Manrope', sans-serif;
   letter-spacing: 0.3px;
+  color: #ffffff;
+  display: block;
 }
 .id-card.id-card-escort > header span {
-  color: #d2dfeb;
+  color: #dbeafe;
   font-size: 8px;
-  font-weight: 600;
+  font-weight: 700;
   margin-top: 1px;
-  line-height: 1.1;
+  line-height: 1.15;
+  display: block;
 }
 .id-type-strip.id-type-strip-escort {
-  background: linear-gradient(90deg, #fef3c7, #fffbeb, #fef3c7);
+  background: linear-gradient(90deg, #fef3c7, #fffdf5, #fef3c7);
   color: #92400e;
-  border-bottom: 1px solid #fde68a;
+  border-bottom: 1.5px solid #fde68a;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2.5px 10px;
+  padding: 3px 10px;
   flex-shrink: 0;
 }
 .id-type-strip.id-type-strip-escort span {
   font-weight: 900;
-  letter-spacing: 0.6px;
-  font-size: 8.5px;
+  letter-spacing: 0.7px;
+  font-size: 9.5px;
+  color: #92400e;
+  font-family: 'Manrope', sans-serif;
 }
 .id-type-strip.id-type-strip-escort small {
-  font-size: 8px;
-  font-weight: 800;
+  font-size: 8.5px;
+  font-weight: 900;
   color: #b45309;
+  letter-spacing: 0.3px;
 }
 .id-body-escort {
-  padding: 5px 8px 3px;
+  padding: 5px 7px 4px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1150,25 +1158,25 @@ button.logout-action-btn svg {
 .escort-student-box {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
+  gap: 10px;
+  padding: 5px 8px;
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 7px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
   flex-shrink: 0;
 }
 .escort-student-photo-wrap {
-  width: 64px;
-  height: 74px;
-  border-radius: 6px;
-  border: 1.5px solid #cbd5e1;
+  width: 82px;
+  height: 96px;
+  border-radius: 7px;
+  border: 1.5px solid #94a3b8;
   background: #edf2f7;
   overflow: hidden;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 .escort-student-photo-wrap img {
   width: 100%;
@@ -1181,119 +1189,131 @@ button.logout-action-btn svg {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  color: #94a3b8;
-  font-size: 7.5px;
-  font-weight: 800;
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 900;
   text-align: center;
 }
 .escort-photo-placeholder.parent-placeholder {
-  font-size: 7px;
-  gap: 1px;
+  font-size: 8px;
+  gap: 2px;
+  color: #64748b;
 }
 .escort-student-info {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1.5px;
+  gap: 2px;
 }
 .escort-label-row {
   display: flex;
   flex-direction: column;
 }
 .escort-field-lbl {
-  font-size: 7px;
+  font-size: 7.5px;
   font-weight: 800;
   color: #64748b;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   line-height: 1;
+  display: block;
 }
 .escort-student-name {
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 900;
-  color: #0f172a;
+  color: #09233f;
   line-height: 1.15;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: 'Manrope', sans-serif;
+  letter-spacing: 0.2px;
 }
 .escort-meta-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   margin-top: 1px;
 }
 .escort-meta-col {
   display: flex;
   align-items: baseline;
-  gap: 2.5px;
+  gap: 3px;
 }
 .escort-val-highlight {
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 900;
   color: #1d4ed8;
+  font-family: 'Manrope', sans-serif;
 }
 .escort-adm-tag {
   display: inline-block;
   align-self: flex-start;
-  font-size: 7.5px;
-  font-weight: 700;
-  color: #475569;
+  font-size: 8px;
+  font-weight: 800;
+  color: #1e293b;
   background: #e2e8f0;
-  padding: 0.5px 5px;
-  border-radius: 3px;
-  margin-top: 1px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  margin-top: 2px;
+  letter-spacing: 0.3px;
 }
+
+/* Prominent Authorized Escorts Divider / Heading */
 .escort-section-divider {
   display: flex;
   align-items: center;
-  gap: 5px;
-  margin: 0;
+  justify-content: center;
+  gap: 6px;
+  margin: 1px 0;
   flex-shrink: 0;
 }
 .escort-divider-line {
   flex: 1;
-  height: 1px;
-  background: #cbd5e1;
+  height: 1.5px;
+  background: linear-gradient(to right, rgba(216, 169, 64, 0.1), #d8a940, rgba(216, 169, 64, 0.1));
 }
 .escort-divider-pill {
-  font-size: 7px;
+  background: #09233f;
+  color: #fef08a;
+  border: 1px solid #d8a940;
+  padding: 1.5px 9px;
+  border-radius: 4px;
+  font-size: 8.5px;
   font-weight: 900;
-  letter-spacing: 0.6px;
-  color: #1e3a8a;
-  background: #dbeafe;
-  padding: 1px 6px;
-  border-radius: 3px;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
-  white-space: nowrap;
+  font-family: 'Manrope', sans-serif;
+  box-shadow: 0 1px 3px rgba(9, 35, 63, 0.2);
 }
+
 /* Parents Grid - Fills entire remaining vertical space */
 .escort-parents-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 7px;
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
 }
 .escort-parent-card {
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 7px;
-  padding: 4px 4px 4px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 4px 4px 5px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   box-sizing: border-box;
   height: 100%;
 }
 .escort-parent-photo-wrap {
-  width: 90px;
-  height: 104px;
+  width: 100%;
+  height: 138px;
   border-radius: 6px;
   border: 1.5px solid #cbd5e1;
   background: #f1f5f9;
@@ -1301,7 +1321,7 @@ button.logout-action-btn svg {
   position: relative;
   display: grid;
   place-items: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
 }
 .escort-parent-photo-wrap img {
@@ -1315,12 +1335,13 @@ button.logout-action-btn svg {
   left: 0;
   right: 0;
   text-align: center;
-  font-size: 6.5px;
+  font-size: 8px;
   font-weight: 900;
-  letter-spacing: 0.5px;
-  padding: 1.5px 0;
+  letter-spacing: 0.6px;
+  padding: 2px 0;
   color: #fff;
   text-transform: uppercase;
+  font-family: 'Manrope', sans-serif;
 }
 .escort-badge-tag.father-badge {
   background: #0284c7;
@@ -1341,19 +1362,20 @@ button.logout-action-btn svg {
   flex-direction: column;
 }
 .escort-parent-name {
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 10.5px;
+  font-weight: 900;
   color: #0f172a;
   line-height: 1.15;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: 'Manrope', sans-serif;
 }
 .escort-contact-pill {
   background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  border: 1px solid #86efac;
   border-radius: 3px;
-  padding: 1px 3px;
+  padding: 1px 4px;
   display: inline-block;
   margin-top: 0.5px;
 }
@@ -1362,8 +1384,8 @@ button.logout-action-btn svg {
   border-color: #fbcfe8;
 }
 .escort-parent-contact {
-  font-size: 9.5px;
-  font-weight: 800;
+  font-size: 10px;
+  font-weight: 900;
   color: #047857;
   letter-spacing: 0.2px;
   white-space: nowrap;
@@ -1374,56 +1396,13 @@ button.logout-action-btn svg {
 .escort-contact-pill.mother .escort-parent-contact {
   color: #9d174d;
 }
-.escort-auth-status {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2.5px;
-  font-size: 6.5px;
-  font-weight: 900;
-  letter-spacing: 0.3px;
-  color: #0369a1;
-  background: #e0f2fe;
-  border: 1px solid #bae6fd;
-  border-radius: 3px;
-  padding: 1.5px 0;
-  text-transform: uppercase;
-  margin-top: 2px;
-  line-height: 1;
-}
-.escort-auth-status.mother {
-  color: #9d174d;
-  background: #fce7f3;
-  border-color: #fbcfe8;
-}
-/* Security & Handover Strip - guarantees no dead or blank space */
-.escort-security-strip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
-  border-radius: 4px;
-  padding: 2px 4px;
-  color: #475569;
-  font-size: 6.5px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  text-align: center;
-  line-height: 1.1;
-  flex-shrink: 0;
-}
-.escort-security-strip .escort-shield-icon {
-  color: #0284c7;
-  flex-shrink: 0;
-}
 .id-footer-portrait.escort-footer {
-  padding: 4px 8px 4px;
+  padding: 3px 8px 3px;
   flex-shrink: 0;
-  height: 48px;
-  min-height: 48px;
+  height: 50px;
+  min-height: 50px;
+  background: #f8fafc;
+  border-top: 1.5px solid #e2e8f0;
   box-sizing: border-box;
 }
 .id-footer-portrait.escort-footer .id-qr-img,
@@ -1434,11 +1413,28 @@ button.logout-action-btn svg {
 .id-footer-portrait.escort-footer .id-qr-box {
   padding: 1.5px 2px;
 }
+.id-footer-portrait.escort-footer .id-emergency-text span {
+  font-size: 8px;
+  font-weight: 800;
+  color: #dc2626;
+  text-transform: uppercase;
+}
+.id-footer-portrait.escort-footer .id-emergency-text b {
+  font-size: 10.5px;
+  font-weight: 900;
+  color: #b91c1c;
+}
 .id-footer-portrait.escort-footer .id-signatory-wrap {
   height: 24px;
 }
 .id-footer-portrait.escort-footer .id-signature-img {
   height: 24px;
+}
+.id-footer-portrait.escort-footer .id-signatory-title {
+  font-size: 7.5px;
+  font-weight: 800;
+  color: #0f3661;
+  letter-spacing: 0.3px;
 }
 
 

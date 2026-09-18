@@ -598,10 +598,9 @@ export const modules: Record<string, Module> = {
       f('payment_mode', 'Payment mode', 'select', false, ['Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque']),
       f('received_from', 'Received from'),
       f('receipt_number', 'Receipt number'),
-      f('status', 'Status', 'select', false, ['received', 'pending', 'cancelled']),
       f('remarks', 'Remarks', 'textarea'),
     ],
-    columns: ['income_date', 'income_category', 'income_type', 'received_from', 'receipt_number', 'amount', 'status'],
+    columns: ['income_date', 'income_category', 'income_type', 'received_from', 'receipt_number', 'amount'],
   },
   'salary_slip': {
     title: 'salary_slip',

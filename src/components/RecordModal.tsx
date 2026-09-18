@@ -451,6 +451,8 @@ export function FormField({
   const [relationOptions, setRelationOptions] = useState<Array<Record<string, unknown>>>([]);
   const [uploading, setUploading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [studentsList, setStudentsList] = useState<Array<Record<string, unknown>>>([]);
+  const [selectedClassForPayer, setSelectedClassForPayer] = useState<string>("");
 
   useEffect(() => {
     if (field.type !== "relation" || !field.reference) return;
@@ -459,6 +461,51 @@ export function FormField({
       setRelationOptions((data || []) as unknown as Array<Record<string, unknown>>);
     });
   }, [field]);
+
+  useEffect(() => {
+    if (field.key !== "received_from") return;
+    let mounted = true;
+    fetchCollectionData("student_master").then((data) => {
+      if (mounted && Array.isArray(data)) {
+        setStudentsList(data as unknown as Array<Record<string, unknown>>);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [field.key]);
+
+  const payerClasses = useMemo(() => {
+    if (field.key !== "received_from") return [];
+    const set = new Set<string>();
+    for (const s of studentsList) {
+      const cls = s.current_class || s.class_name || s.class;
+      if (cls && typeof cls === "string") set.add(cls.trim());
+    }
+    const list = Array.from(set);
+    const standardOrder = [
+      "PG", "PLAYGROUP", "NURSERY", "LKG", "UKG",
+      "CLASS I", "CLASS II", "CLASS III", "CLASS IV", "CLASS V",
+      "CLASS VI", "CLASS VII", "CLASS VIII", "CLASS IX", "CLASS X",
+    ];
+    return list.sort((a, b) => {
+      const ia = standardOrder.indexOf(a.toUpperCase());
+      const ib = standardOrder.indexOf(b.toUpperCase());
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [field.key, studentsList]);
+
+  const payerStudents = useMemo(() => {
+    if (field.key !== "received_from") return [];
+    if (!selectedClassForPayer) return studentsList;
+    return studentsList.filter((s) => {
+      const cls = s.current_class || s.class_name || s.class;
+      return String(cls || "").trim().toUpperCase() === selectedClassForPayer.trim().toUpperCase();
+    });
+  }, [field.key, selectedClassForPayer, studentsList]);
 
   // Dynamic Options for income_type and income_category pulling from income_head_master
   const dynamicOptions = useMemo(() => {
@@ -624,6 +671,101 @@ export function FormField({
           >
             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
+        </div>
+      </label>
+    );
+  }
+
+  // Received From selector: Class dropdown -> Student Name dropdown -> Custom payer name
+  if (field.key === "received_from") {
+    return (
+      <label className="full" style={{ background: "#f8fafc", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+          <span style={{ fontWeight: 700, color: "#1e293b", fontSize: "13px" }}>
+            {field.label}
+            {field.required && <b style={{ color: "#ef4444", marginLeft: "4px" }}>*</b>}
+          </span>
+          <span style={{ fontSize: "11px", color: "#64748b" }}>
+            Select Class & Student or enter custom payer
+          </span>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "8px" }}>
+          <div>
+            <span style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#475569", marginBottom: "3px" }}>
+              1. Filter by Class:
+            </span>
+            <select
+              disabled={disabled}
+              value={selectedClassForPayer}
+              onChange={(e) => setSelectedClassForPayer(e.target.value)}
+              style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px", background: "#fff" }}
+            >
+              <option value="">-- All Classes ({payerClasses.length}) --</option>
+              {payerClasses.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <span style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#475569", marginBottom: "3px" }}>
+              2. Select Student Name:
+            </span>
+            <select
+              disabled={disabled}
+              value=""
+              onChange={(e) => {
+                const stdId = e.target.value;
+                if (!stdId) return;
+                const std = payerStudents.find(
+                  (s) => String(s.student_id || s.id || s.admission_no) === stdId
+                );
+                if (std) {
+                  const sName =
+                    (std.student_name as string) ||
+                    `${(std.first_name as string) || ""} ${(std.last_name as string) || ""}`.trim() ||
+                    (std.admission_no as string) ||
+                    "";
+                  change(sName);
+                }
+              }}
+              style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px", background: "#fff" }}
+            >
+              <option value="">-- Select Student ({payerStudents.length}) --</option>
+              {payerStudents.map((s) => {
+                const sName =
+                  (s.student_name as string) ||
+                  `${(s.first_name as string) || ""} ${(s.last_name as string) || ""}`.trim() ||
+                  "Student";
+                const roll = s.roll_no ? ` · Roll ${s.roll_no}` : "";
+                const adm = s.admission_no ? ` · Adm: ${s.admission_no}` : "";
+                const idVal = String(s.student_id || s.id || s.admission_no);
+                return (
+                  <option key={idVal} value={idVal}>
+                    {sName}{roll}{adm}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <span style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#475569", marginBottom: "3px" }}>
+            Received From (Selected Student or Custom Payer Name):
+          </span>
+          <input
+            disabled={disabled}
+            required={field.required}
+            type="text"
+            placeholder="Student name or enter custom payer"
+            value={String(value ?? "")}
+            onChange={(e) => change(e.target.value)}
+            style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px", background: "#fff" }}
+          />
         </div>
       </label>
     );
