@@ -74,11 +74,13 @@ import LetterPrintModal from "./components/LetterPrintModal";
 import StudentMasterStudio from "./components/StudentMasterStudio";
 import EmployeeMasterStudio from "./components/EmployeeMasterStudio";
 import CsvImportModal from "./components/CsvImportModal";
+import IncomeHeadUploadModal from "./components/IncomeHeadUploadModal";
 import DigitalVerificationModal, { VerificationData } from "./components/DigitalVerificationModal";
 import { downloadSampleCsv, sanitizeRecordForTable } from "./lib/csvUtils";
 import { formatImageUrl, handleImageError } from "./lib/imageUtils";
 import { getLeaveSession } from "./lib/leaveSalaryRules";
 import { fetchStaffFromWebApp, fetchStudentsFromWebApp } from "./lib/googleDriveSheets";
+import { DEFAULT_INCOME_HEADS } from "./lib/supabase";
 
 type Row = Record<string, unknown>;
 
@@ -239,6 +241,7 @@ function App() {
   const [toast, setToast] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [csvModalOpen, setCsvModalOpen] = useState(false);
+  const [incomeHeadUploadOpen, setIncomeHeadUploadOpen] = useState(false);
   const [urlVerificationData, setUrlVerificationData] = useState<VerificationData | null>(null);
 
   // Auto-detect ?verify= query param from scanned QR codes
@@ -1252,6 +1255,43 @@ function App() {
                   <Download size={15} />
                   Sample CSV
                 </button>
+                {mod.table === "income_head_master" && (
+                  <button
+                    onClick={() => setIncomeHeadUploadOpen(true)}
+                    title="Upload or load preset list of Income Categories and Heads"
+                    style={{
+                      background: "linear-gradient(135deg, #0f3661 0%, #1e4976 100%)",
+                      color: "#fff",
+                      border: "none",
+                      fontWeight: 600,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      boxShadow: "0 2px 4px rgba(15, 54, 97, 0.2)",
+                    }}
+                  >
+                    <Sparkles size={15} color="#93c5fd" />
+                    Upload / Preset Income Heads
+                  </button>
+                )}
+                {mod.table === "income_master" && (
+                  <button
+                    onClick={() => setActive("income_head_master")}
+                    title="Configure Income Heads & Categories in Master Setup"
+                    style={{
+                      background: "#eff6ff",
+                      color: "#1e40af",
+                      border: "1px solid #bfdbfe",
+                      fontWeight: 600,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <Sparkles size={15} color="#3b82f6" />
+                    Income Heads Master
+                  </button>
+                )}
                 {mod.fields.length > 0 && (
                   <button
                     onClick={() => setCsvModalOpen(true)}
@@ -1470,6 +1510,19 @@ function App() {
                 return deduped;
               });
             }
+            refresh();
+          }}
+        />
+      )}
+
+      {incomeHeadUploadOpen && (
+        <IncomeHeadUploadModal
+          isOpen={true}
+          onClose={() => setIncomeHeadUploadOpen(false)}
+          existingCount={rows.length}
+          onSuccess={(count) => {
+            setToast(`✓ Successfully imported ${count} income heads into Master Setup!`);
+            setIncomeHeadUploadOpen(false);
             refresh();
           }}
         />
@@ -1725,6 +1778,43 @@ function DataTable({
                         </div>
                       );
                     })()
+                  ) : c === "head_category" || c === "income_category" ? (
+                    (() => {
+                      const cat = String(r[c] || "");
+                      const isFee = cat.toLowerCase().includes("fee");
+                      const isUniform = cat.toLowerCase().includes("uniform");
+                      return (
+                        <span
+                          style={{
+                            background: isFee ? "#dbeafe" : isUniform ? "#fef3c7" : "#dcfce7",
+                            color: isFee ? "#1e40af" : isUniform ? "#92400e" : "#166534",
+                            padding: "2px 8px",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            display: "inline-block",
+                            border: `1px solid ${isFee ? "#bfdbfe" : isUniform ? "#fde68a" : "#bbf7d0"}`,
+                          }}
+                        >
+                          {cat || "—"}
+                        </span>
+                      );
+                    })()
+                  ) : c === "head_code" ? (
+                    <span
+                      style={{
+                        fontFamily: "monospace",
+                        background: "#f8fafc",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        fontSize: "12px",
+                        border: "1px solid #e2e8f0",
+                        color: "#475569",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {String(r[c] || "—")}
+                    </span>
                   ) : (
                     String(r[c] ?? "—")
                   )}
@@ -1949,6 +2039,34 @@ function RecordModal({
         const entitled = Number(key === "total_entitled" ? v : next.total_entitled) || 0;
         const taken = Number(key === "total_taken" ? v : next.total_taken) || 0;
         next.balance_remaining = Math.max(0, entitled - taken);
+      }
+
+      // Income head master: auto head_code generator
+      if (mod.table === "income_head_master" && key === "head_name" && mode === "create") {
+        const raw = String(v || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const cat = String(next.head_category || "Fee");
+        const prefix = cat.includes("Uniform") ? "INC-MAT" : cat.includes("Extra") ? "INC-EXT" : "INC-FEE";
+        if (raw.length > 0 && !next.head_code) {
+          next.head_code = `${prefix}-${raw.slice(0, 6)}`;
+        }
+      }
+
+      // Income master: auto category, description and default amount on selecting income_type
+      if (mod.table === "income_master" && key === "income_type") {
+        const found = DEFAULT_INCOME_HEADS.find(
+          (h) => h.head_name.toLowerCase() === String(v || "").toLowerCase()
+        );
+        if (found) {
+          if (!next.income_category || next.income_category === "Fee Income") {
+            next.income_category = found.head_category;
+          }
+          if (found.default_amount > 0 && (!next.amount || Number(next.amount) === 0)) {
+            next.amount = found.default_amount;
+          }
+          if (!next.description) {
+            next.description = found.description || found.head_name;
+          }
+        }
       }
 
       return next;

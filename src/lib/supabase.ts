@@ -96,6 +96,14 @@ export const TABLE_KNOWN_COLUMNS: Record<string, string[]> = {
     'fee_id', 'student_id', 'admission_no', 'student_name', 'class_name', 'academic_year',
     'fee_type', 'amount_due', 'amount_paid', 'payment_date', 'payment_mode', 'receipt_number',
     'status', 'remarks', 'created_at', 'updated_at'
+  ],
+  income_head_master: [
+    'head_id', 'head_category', 'head_name', 'head_code', 'default_amount', 'frequency',
+    'description', 'is_active', 'created_at', 'updated_at'
+  ],
+  income_master: [
+    'income_id', 'income_date', 'income_category', 'income_type', 'description', 'amount',
+    'payment_mode', 'received_from', 'receipt_number', 'status', 'remarks', 'created_at', 'updated_at'
   ]
 }
 
@@ -641,6 +649,16 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
     }
   }
 
+  // If income_head_master is empty, seed with school income heads and categories list
+  if (cachedResults.length === 0 && collectionName === 'income_head_master') {
+    cachedResults = DEFAULT_INCOME_HEADS as unknown as T[]
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.setItem('sjes_table_income_head_master', JSON.stringify(cachedResults))
+      } catch {}
+    }
+  }
+
   return cachedResults
 }
 
@@ -664,6 +682,53 @@ export const DEFAULT_FEE_STRUCTURES = [
   { fee_struct_id: 'fs_all_exam', class_name: 'UKG', fee_type: 'Examination Fee', amount: 600, frequency: 'Half-Yearly', due_day: 10, academic_year: '2026-27', remarks: 'Exam fee per term' },
   { fee_struct_id: 'fs_all_comp', class_name: 'UKG', fee_type: 'Computer / Smart Class Fee', amount: 300, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Smart class & computer lab' },
   { fee_struct_id: 'fs_all_trans', class_name: 'UKG', fee_type: 'Transport Fee', amount: 800, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'School bus transport charge' },
+]
+
+export const DEFAULT_INCOME_HEADS = [
+  // 1. Fee Income
+  { head_id: 'inc_head_exam', head_category: 'Fee Income', head_name: 'Examination Fee', head_code: 'INC-FEE-EXAM', default_amount: 500, frequency: 'As Needed', is_active: true, description: 'Term exam & assessment fees' },
+  { head_id: 'inc_head_comp', head_category: 'Fee Income', head_name: 'Computer Fee', head_code: 'INC-FEE-COMP', default_amount: 300, frequency: 'Monthly', is_active: true, description: 'IT lab usage & software' },
+  { head_id: 'inc_head_smart', head_category: 'Fee Income', head_name: 'Smart Class Fee', head_code: 'INC-FEE-SMART', default_amount: 250, frequency: 'Monthly', is_active: true, description: 'Interactive smart board fee' },
+  { head_id: 'inc_head_act', head_category: 'Fee Income', head_name: 'Activity Fee', head_code: 'INC-FEE-ACT', default_amount: 200, frequency: 'Quarterly', is_active: true, description: 'Co-curricular and workshop charges' },
+  { head_id: 'inc_head_sports', head_category: 'Fee Income', head_name: 'Sports Fee', head_code: 'INC-FEE-SPORT', default_amount: 350, frequency: 'Annual', is_active: true, description: 'Annual sports meet and physical education' },
+  { head_id: 'inc_head_cult', head_category: 'Fee Income', head_name: 'Cultural Activity Fee', head_code: 'INC-FEE-CULT', default_amount: 250, frequency: 'Annual', is_active: true, description: 'Festivals, debates & cultural celebrations' },
+  { head_id: 'inc_head_ann_func', head_category: 'Fee Income', head_name: 'Annual Function Fee', head_code: 'INC-FEE-ANN', default_amount: 600, frequency: 'Annual', is_active: true, description: 'Annual Day celebration & stage programs' },
+  { head_id: 'inc_head_mag', head_category: 'Fee Income', head_name: 'Magazine Fee', head_code: 'INC-FEE-MAG', default_amount: 150, frequency: 'Annual', is_active: true, description: 'School yearbook & magazine publication' },
+  { head_id: 'inc_head_id', head_category: 'Fee Income', head_name: 'Identity Card Fee', head_code: 'INC-FEE-ID', default_amount: 100, frequency: 'One-time', is_active: true, description: 'RFID / PVC ID card generation' },
+  { head_id: 'inc_head_diary', head_category: 'Fee Income', head_name: 'School Diary Fee', head_code: 'INC-FEE-DIARY', default_amount: 120, frequency: 'Annual', is_active: true, description: 'Student calendar diary & handbook' },
+  { head_id: 'inc_head_tc', head_category: 'Fee Income', head_name: 'Transfer Certificate Fee', head_code: 'INC-FEE-TC', default_amount: 250, frequency: 'One-time', is_active: true, description: 'Official TC issuance fee' },
+  { head_id: 'inc_head_mig', head_category: 'Fee Income', head_name: 'Migration Certificate Fee', head_code: 'INC-FEE-MIG', default_amount: 300, frequency: 'One-time', is_active: true, description: 'State/board migration certificate' },
+  { head_id: 'inc_head_readm', head_category: 'Fee Income', head_name: 'Re-admission Fee', head_code: 'INC-FEE-READM', default_amount: 1000, frequency: 'One-time', is_active: true, description: 'Student re-admission fee' },
+  { head_id: 'inc_head_late', head_category: 'Fee Income', head_name: 'Late Fee', head_code: 'INC-FEE-LATE', default_amount: 50, frequency: 'As Needed', is_active: true, description: 'Fee payment after due date' },
+  { head_id: 'inc_head_fine', head_category: 'Fee Income', head_name: 'Fine and Penalty', head_code: 'INC-FEE-FINE', default_amount: 100, frequency: 'As Needed', is_active: true, description: 'General penalty or overdue fine' },
+  { head_id: 'inc_head_misc_std', head_category: 'Fee Income', head_name: 'Miscellaneous Student Charges', head_code: 'INC-FEE-MISC', default_amount: 150, frequency: 'As Needed', is_active: true, description: 'Ad-hoc student charges and certifications' },
+
+  // 2. Uniform and Educational Materials
+  { head_id: 'inc_head_unif_sch', head_category: 'Uniform and Educational Materials', head_name: 'School Uniform Sales', head_code: 'INC-MAT-UNIF', default_amount: 850, frequency: 'As Needed', is_active: true, description: 'Regular school uniform set' },
+  { head_id: 'inc_head_unif_sport', head_category: 'Uniform and Educational Materials', head_name: 'Sports Uniform Sales', head_code: 'INC-MAT-SPUNIF', default_amount: 650, frequency: 'As Needed', is_active: true, description: 'House sports tracksuit / uniform' },
+  { head_id: 'inc_head_socks', head_category: 'Uniform and Educational Materials', head_name: 'Socks Sales', head_code: 'INC-MAT-SOCKS', default_amount: 80, frequency: 'As Needed', is_active: true, description: 'School uniform socks pair' },
+  { head_id: 'inc_head_books', head_category: 'Uniform and Educational Materials', head_name: 'Books Sales', head_code: 'INC-MAT-BOOKS', default_amount: 1800, frequency: 'Annual', is_active: true, description: 'Annual course syllabus textbooks set' },
+  { head_id: 'inc_head_notebooks', head_category: 'Uniform and Educational Materials', head_name: 'Notebooks Sales', head_code: 'INC-MAT-NOTES', default_amount: 500, frequency: 'As Needed', is_active: true, description: 'Branded school exercise notebooks' },
+  { head_id: 'inc_head_stat', head_category: 'Uniform and Educational Materials', head_name: 'Stationery Sales', head_code: 'INC-MAT-STAT', default_amount: 250, frequency: 'As Needed', is_active: true, description: 'Geometry box, pens, pencils, erasers' },
+  { head_id: 'inc_head_bag', head_category: 'Uniform and Educational Materials', head_name: 'School Bag Sales', head_code: 'INC-MAT-BAG', default_amount: 450, frequency: 'As Needed', is_active: true, description: 'Official school crest backpack' },
+  { head_id: 'inc_head_belt', head_category: 'Uniform and Educational Materials', head_name: 'Belt', head_code: 'INC-MAT-BELT', default_amount: 90, frequency: 'As Needed', is_active: true, description: 'School uniform buckle belt' },
+  { head_id: 'inc_head_craft', head_category: 'Uniform and Educational Materials', head_name: 'Art and Craft Materials', head_code: 'INC-MAT-CRAFT', default_amount: 300, frequency: 'As Needed', is_active: true, description: 'Drawing book, colors, clay and craft kit' },
+
+  // 3. Extra-Curricular Income
+  { head_id: 'inc_head_coach', head_category: 'Extra-Curricular Income', head_name: 'Coaching Class Fee', head_code: 'INC-EXT-COACH', default_amount: 1200, frequency: 'Monthly', is_active: true, description: 'Remedial & board exam preparation coaching' },
+  { head_id: 'inc_head_music', head_category: 'Extra-Curricular Income', head_name: 'Music Class Fee', head_code: 'INC-EXT-MUSIC', default_amount: 400, frequency: 'Monthly', is_active: true, description: 'Vocal and instrumental music training' },
+  { head_id: 'inc_head_dance', head_category: 'Extra-Curricular Income', head_name: 'Dance Class Fee', head_code: 'INC-EXT-DANCE', default_amount: 400, frequency: 'Monthly', is_active: true, description: 'Classical and contemporary dance sessions' },
+  { head_id: 'inc_head_draw', head_category: 'Extra-Curricular Income', head_name: 'Drawing Class Fee', head_code: 'INC-EXT-DRAW', default_amount: 350, frequency: 'Monthly', is_active: true, description: 'Fine arts and painting guidance' },
+  { head_id: 'inc_head_comptrn', head_category: 'Extra-Curricular Income', head_name: 'Computer Training Fee', head_code: 'INC-EXT-COMPTRN', default_amount: 600, frequency: 'Monthly', is_active: true, description: 'Advanced coding & robotics training' },
+  { head_id: 'inc_head_eng', head_category: 'Extra-Curricular Income', head_name: 'Spoken English Fee', head_code: 'INC-EXT-ENG', default_amount: 500, frequency: 'Monthly', is_active: true, description: 'Communication and personality development' },
+  { head_id: 'inc_head_abacus', head_category: 'Extra-Curricular Income', head_name: 'Abacus Class Fee', head_code: 'INC-EXT-ABACUS', default_amount: 550, frequency: 'Monthly', is_active: true, description: 'Mental arithmetic and abacus course' },
+  { head_id: 'inc_head_yoga', head_category: 'Extra-Curricular Income', head_name: 'Yoga Class Fee', head_code: 'INC-EXT-YOGA', default_amount: 300, frequency: 'Monthly', is_active: true, description: 'Wellness, breathing and yoga sessions' },
+  { head_id: 'inc_head_martial', head_category: 'Extra-Curricular Income', head_name: 'Martial Arts Fee', head_code: 'INC-EXT-MARTIAL', default_amount: 450, frequency: 'Monthly', is_active: true, description: 'Karate & Taekwondo self-defense' },
+  { head_id: 'inc_head_swim', head_category: 'Extra-Curricular Income', head_name: 'Swimming Fee', head_code: 'INC-EXT-SWIM', default_amount: 800, frequency: 'Monthly', is_active: true, description: 'Pool training & lifeguard supervision' },
+  { head_id: 'inc_head_camp', head_category: 'Extra-Curricular Income', head_name: 'Summer Camp Fee', head_code: 'INC-EXT-CAMP', default_amount: 1500, frequency: 'One-time', is_active: true, description: 'Special vacation camp activities' },
+  { head_id: 'inc_head_tour', head_category: 'Extra-Curricular Income', head_name: 'Educational Tour Fee', head_code: 'INC-EXT-TOUR', default_amount: 2000, frequency: 'One-time', is_active: true, description: 'Outstation educational trip' },
+  { head_id: 'inc_head_excur', head_category: 'Extra-Curricular Income', head_name: 'Excursion Fee', head_code: 'INC-EXT-EXCUR', default_amount: 750, frequency: 'One-time', is_active: true, description: 'Day excursion and museum/park visit' },
+  { head_id: 'inc_head_compete', head_category: 'Extra-Curricular Income', head_name: 'Competition Fee', head_code: 'INC-EXT-COMPETE', default_amount: 200, frequency: 'As Needed', is_active: true, description: 'Olympiad & inter-school registration' },
 ]
 
 /**
