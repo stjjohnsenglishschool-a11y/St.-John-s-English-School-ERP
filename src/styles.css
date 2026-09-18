@@ -1068,5 +1068,240 @@ button.logout-action-btn svg {
   opacity: 8%;
 }
 
+/* Escort Card Specialized Styles */
+.id-card.id-card-escort {
+  min-height: 524px;
+  height: auto;
+  border-radius: 14px;
+}
+.id-type-strip.id-type-strip-escort {
+  background: linear-gradient(90deg, #fef3c7, #fffbeb, #fef3c7);
+  color: #92400e;
+  border-bottom: 1.5px solid #fde68a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 14px;
+}
+.id-type-strip.id-type-strip-escort span {
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  font-size: 10px;
+}
+.id-type-strip.id-type-strip-escort small {
+  font-size: 8.5px;
+  font-weight: 700;
+  color: #b45309;
+}
+.id-body-escort {
+  padding: 8px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+}
+.escort-student-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 9px;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.04);
+}
+.escort-student-photo-wrap {
+  width: 66px;
+  height: 78px;
+  border-radius: 7px;
+  border: 2px solid #cbd5e1;
+  background: #edf2f7;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+.escort-student-photo-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.escort-photo-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #94a3b8;
+  font-size: 8px;
+  font-weight: 800;
+  text-align: center;
+}
+.escort-photo-placeholder.parent-placeholder {
+  font-size: 7.5px;
+  gap: 2px;
+}
+.escort-student-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.escort-label-row {
+  display: flex;
+  flex-direction: column;
+}
+.escort-field-lbl {
+  font-size: 8px;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.escort-student-name {
+  font-size: 13.5px;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'Manrope', sans-serif;
+}
+.escort-meta-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 1px;
+}
+.escort-meta-col {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.escort-val-highlight {
+  font-size: 12px;
+  font-weight: 800;
+  color: #1d4ed8;
+}
+.escort-adm-tag {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 8px;
+  font-weight: 700;
+  color: #475569;
+  background: #e2e8f0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-top: 1px;
+}
+.escort-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 1px 0;
+}
+.escort-divider-line {
+  flex: 1;
+  height: 1px;
+  background: #cbd5e1;
+}
+.escort-divider-pill {
+  font-size: 7.5px;
+  font-weight: 900;
+  letter-spacing: 0.9px;
+  color: #1e3a8a;
+  background: #dbeafe;
+  padding: 1.5px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.escort-parents-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.escort-parent-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 6px 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+.escort-parent-photo-wrap {
+  width: 58px;
+  height: 68px;
+  border-radius: 6px;
+  border: 1.5px solid #cbd5e1;
+  background: #f1f5f9;
+  overflow: hidden;
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin-bottom: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.escort-parent-photo-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.escort-badge-tag {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 6.5px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  padding: 1.5px 0;
+  color: #fff;
+  text-transform: uppercase;
+}
+.escort-badge-tag.father-badge {
+  background: #0284c7;
+}
+.escort-badge-tag.mother-badge {
+  background: #be185d;
+}
+.escort-parent-details {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+}
+.escort-detail-item {
+  display: flex;
+  flex-direction: column;
+}
+.escort-parent-name {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.escort-parent-contact {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #047857;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.id-footer-portrait.escort-footer {
+  padding: 6px 10px 7px;
+}
+
 
 

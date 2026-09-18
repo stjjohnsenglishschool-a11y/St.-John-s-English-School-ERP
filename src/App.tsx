@@ -1099,7 +1099,7 @@ function App() {
           <IDCardStudio
             setToast={setToast}
             onUploadCsv={() => setCsvModalOpen(true)}
-            initialType={active === "teacher_idcard" ? "employee" : "student"}
+            initialType={active === "teacher_idcard" ? "employee" : active === "escort_card" ? "escort" : "student"}
           />
         ) : (
           <>

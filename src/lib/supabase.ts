@@ -77,6 +77,14 @@ export const TABLE_KNOWN_COLUMNS: Record<string, string[]> = {
     'card_id', 'emp_id', 'employee_name', 'designation', 'department', 'mobile', 'photo_url',
     'issue_date', 'valid_until', 'is_active', 'created_at'
   ],
+  student_idcard: [
+    'card_id', 'student_id', 'student_name', 'class_name', 'roll_no', 'mobile', 'photo_url',
+    'issue_date', 'valid_until', 'is_active', 'created_at'
+  ],
+  escort_card: [
+    'card_id', 'student_name', 'class_name', 'escort_name', 'relation', 'mobile', 'photo_url',
+    'issue_date', 'valid_until', 'is_active', 'created_at'
+  ],
   notice_automation: [
     'notice_id', 'title', 'message', 'send_via', 'scheduled_at', 'status', 'created_by', 'created_at'
   ]
