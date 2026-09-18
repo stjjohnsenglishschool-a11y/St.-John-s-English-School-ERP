@@ -1087,9 +1087,9 @@ button.logout-action-btn svg {
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
 }
 .id-card.id-card-escort > header {
-  height: 50px;
-  min-height: 50px;
-  padding: 6px 10px;
+  height: 48px;
+  min-height: 48px;
+  padding: 5px 10px;
   border-bottom: 2.5px solid #d8a940;
   background: linear-gradient(115deg, #09233f, #15456f);
   color: #fff;
@@ -1146,11 +1146,10 @@ button.logout-action-btn svg {
   letter-spacing: 0.3px;
 }
 .id-body-escort {
-  padding: 5px 7px 4px;
+  padding: 6px 7px 4px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 4px;
+  gap: 5px;
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
@@ -1159,7 +1158,7 @@ button.logout-action-btn svg {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 5px 8px;
+  padding: 6px 8px;
   background: #f8fafc;
   border: 1.5px solid #e2e8f0;
   border-radius: 8px;
@@ -1167,8 +1166,8 @@ button.logout-action-btn svg {
   flex-shrink: 0;
 }
 .escort-student-photo-wrap {
-  width: 82px;
-  height: 96px;
+  width: 92px;
+  height: 106px;
   border-radius: 7px;
   border: 1.5px solid #94a3b8;
   background: #edf2f7;
@@ -1190,12 +1189,12 @@ button.logout-action-btn svg {
   justify-content: center;
   gap: 2px;
   color: #64748b;
-  font-size: 8px;
+  font-size: 8.5px;
   font-weight: 900;
   text-align: center;
 }
 .escort-photo-placeholder.parent-placeholder {
-  font-size: 8px;
+  font-size: 8.5px;
   gap: 2px;
   color: #64748b;
 }
@@ -1204,7 +1203,7 @@ button.logout-action-btn svg {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 .escort-label-row {
   display: flex;
@@ -1220,7 +1219,7 @@ button.logout-action-btn svg {
   display: block;
 }
 .escort-student-name {
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 900;
   color: #09233f;
   line-height: 1.15;
@@ -1232,7 +1231,7 @@ button.logout-action-btn svg {
 }
 .escort-meta-row {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
   margin-top: 1px;
 }
@@ -1242,7 +1241,7 @@ button.logout-action-btn svg {
   gap: 3px;
 }
 .escort-val-highlight {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
   color: #1d4ed8;
   font-family: 'Manrope', sans-serif;
@@ -1250,11 +1249,11 @@ button.logout-action-btn svg {
 .escort-adm-tag {
   display: inline-block;
   align-self: flex-start;
-  font-size: 8px;
+  font-size: 8.5px;
   font-weight: 800;
   color: #1e293b;
   background: #e2e8f0;
-  padding: 1px 6px;
+  padding: 1.5px 7px;
   border-radius: 4px;
   border: 1px solid #cbd5e1;
   margin-top: 2px;
@@ -1267,7 +1266,7 @@ button.logout-action-btn svg {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  margin: 1px 0;
+  margin: 0;
   flex-shrink: 0;
 }
 .escort-divider-line {
@@ -1289,7 +1288,7 @@ button.logout-action-btn svg {
   box-shadow: 0 1px 3px rgba(9, 35, 63, 0.2);
 }
 
-/* Parents Grid - Fills entire remaining vertical space */
+/* Parents Grid - Photos expand to completely fill available vertical area with zero gap */
 .escort-parents-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1302,18 +1301,18 @@ button.logout-action-btn svg {
   background: #ffffff;
   border: 1.5px solid #e2e8f0;
   border-radius: 8px;
-  padding: 4px 4px 5px;
+  padding: 4px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
+  gap: 3px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   box-sizing: border-box;
   height: 100%;
 }
 .escort-parent-photo-wrap {
   width: 100%;
-  height: 138px;
+  flex: 1;
+  min-height: 145px;
   border-radius: 6px;
   border: 1.5px solid #cbd5e1;
   background: #f1f5f9;
@@ -1322,7 +1321,6 @@ button.logout-action-btn svg {
   display: grid;
   place-items: center;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  flex-shrink: 0;
 }
 .escort-parent-photo-wrap img {
   width: 100%;
@@ -1355,7 +1353,7 @@ button.logout-action-btn svg {
   flex-direction: column;
   gap: 1.5px;
   text-align: left;
-  margin-top: 2px;
+  flex-shrink: 0;
 }
 .escort-detail-item {
   display: flex;
@@ -1399,8 +1397,8 @@ button.logout-action-btn svg {
 .id-footer-portrait.escort-footer {
   padding: 3px 8px 3px;
   flex-shrink: 0;
-  height: 50px;
-  min-height: 50px;
+  height: 48px;
+  min-height: 48px;
   background: #f8fafc;
   border-top: 1.5px solid #e2e8f0;
   box-sizing: border-box;
