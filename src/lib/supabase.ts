@@ -70,7 +70,7 @@ export const TABLE_KNOWN_COLUMNS: Record<string, string[]> = {
     'outstanding_amount', 'rating', 'is_active', 'created_at', 'updated_at'
   ],
   user_master: [
-    'user_id', 'user_full_name', 'user_name', 'password', 'department', 'active_module',
+    'user_id', 'user_full_name', 'user_name', 'password', 'department', 'active_module', 'allowed_modules',
     'status', 'role', 'last_login_at', 'is_active', 'created_at', 'updated_at'
   ],
   teacher_idcard: [
@@ -157,6 +157,25 @@ export function sanitizePayload(record: Record<string, any>, tableName?: string)
     if (Object.keys(feeMeta).length > 0) {
       clean.remarks = JSON.stringify(feeMeta)
     }
+  }
+
+  // Special preservation and normalization for user_master module permissions
+  if (tableName === 'user_master') {
+    const rawMod = record.allowed_modules ?? record.active_module
+    let cleanArr: string[] = []
+    if (Array.isArray(rawMod)) {
+      cleanArr = rawMod.map(String)
+    } else if (typeof rawMod === 'string' && rawMod.trim().length > 0) {
+      try {
+        const p = JSON.parse(rawMod)
+        if (Array.isArray(p)) cleanArr = p.map(String)
+        else cleanArr = rawMod.split(',').map((s) => s.trim()).filter(Boolean)
+      } catch {
+        cleanArr = rawMod.split(',').map((s) => s.trim()).filter(Boolean)
+      }
+    }
+    clean.active_module = JSON.stringify(cleanArr)
+    clean.allowed_modules = JSON.stringify(cleanArr)
   }
 
   for (const key of Object.keys(record)) {
@@ -295,7 +314,21 @@ export async function saveSupabaseRecord(
     let resData: any = null
 
     // Perform exact update query matching primary keys
-    if (record.emp_code) {
+    if (tableName === 'user_master' && record.user_name) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .update(record)
+        .eq('user_name', record.user_name)
+        .select()
+
+      if (!error && data && data.length > 0) {
+        resData = data[0]
+      } else {
+        const upsertRes = await resilientUpsert(tableName, [record])
+        if (upsertRes.error) resError = upsertRes.error.message
+        else resData = upsertRes.data?.[0]
+      }
+    } else if (record.emp_code) {
       const { data, error } = await supabase
         .from(tableName)
         .update(record)
@@ -596,6 +629,23 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
           if (meta.roll_no !== undefined && !row.roll_no) row.roll_no = meta.roll_no
         } catch {}
       }
+    }
+    if (collectionName === 'user_master') {
+      const rawMod = row.allowed_modules ?? row.active_module
+      let parsedMods: string[] = []
+      if (Array.isArray(rawMod)) {
+        parsedMods = rawMod.map(String)
+      } else if (typeof rawMod === 'string' && rawMod.trim().length > 0) {
+        try {
+          const p = JSON.parse(rawMod)
+          if (Array.isArray(p)) parsedMods = p.map(String)
+          else parsedMods = rawMod.split(',').map((s) => s.trim()).filter(Boolean)
+        } catch {
+          parsedMods = rawMod.split(',').map((s) => s.trim()).filter(Boolean)
+        }
+      }
+      row.allowed_modules = parsedMods
+      row.active_module = parsedMods
     }
     return row
   }

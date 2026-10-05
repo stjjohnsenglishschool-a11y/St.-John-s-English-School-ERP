@@ -342,10 +342,29 @@ export default function ProductionDashboard({
     : 0
   const outstanding = Math.max(0, stats.feesDue - stats.feesPaid)
 
-  // Customized KPI Cards based on Role
+  // Module permission validator
+  const isAllowed = useCallback(
+    (modKey: string) => {
+      if (isAdminOrPrincipal) return true
+      if (!allowedModules) return true
+      return allowedModules.some((m) => m.toLowerCase().trim() === modKey.toLowerCase().trim())
+    },
+    [isAdminOrPrincipal, allowedModules]
+  )
+
+  // Customized KPI Cards based on Role and Permissions
   const roleCards = useMemo(() => {
+    let cards: Array<{
+      label: string
+      value: string | number
+      note: string
+      Icon: any
+      target: string
+      tone: string
+    }> = []
+
     if (isTeacher) {
-      return [
+      cards = [
         {
           label: 'Active Students',
           value: stats.students.toLocaleString('en-IN'),
@@ -379,10 +398,8 @@ export default function ProductionDashboard({
           tone: 'amber',
         },
       ]
-    }
-
-    if (isAccounts) {
-      return [
+    } else if (isAccounts) {
+      cards = [
         {
           label: 'Fees Collected',
           value: money(stats.feesPaid),
@@ -416,10 +433,8 @@ export default function ProductionDashboard({
           tone: 'violet',
         },
       ]
-    }
-
-    if (isHr) {
-      return [
+    } else if (isHr) {
+      cards = [
         {
           label: 'Total Employees',
           value: stats.employees.toLocaleString('en-IN'),
@@ -453,44 +468,46 @@ export default function ProductionDashboard({
           tone: 'amber',
         },
       ]
+    } else {
+      // Default for Admin & Principal
+      cards = [
+        {
+          label: 'Total Students',
+          value: stats.students.toLocaleString('en-IN'),
+          note: `Active across ${stats.classes || 13} classes`,
+          Icon: GraduationCap,
+          target: 'student_master',
+          tone: 'blue',
+        },
+        {
+          label: 'Total Employees',
+          value: stats.employees.toLocaleString('en-IN'),
+          note: `${stats.teachers} teachers · ${stats.staff} staff`,
+          Icon: UsersRound,
+          target: 'employee_master',
+          tone: 'violet',
+        },
+        {
+          label: 'Present Today',
+          value: stats.present.toLocaleString('en-IN'),
+          note: `${attendanceRate}% of active students`,
+          Icon: CalendarCheck2,
+          target: 'student_attendance',
+          tone: 'green',
+        },
+        {
+          label: 'Fees Collected',
+          value: money(stats.feesPaid),
+          note: `${feeRate}% of total demand`,
+          Icon: IndianRupee,
+          target: 'fees_collection',
+          tone: 'amber',
+        },
+      ]
     }
 
-    // Default for Admin & Principal
-    return [
-      {
-        label: 'Total Students',
-        value: stats.students.toLocaleString('en-IN'),
-        note: `Active across ${stats.classes || 13} classes`,
-        Icon: GraduationCap,
-        target: 'student_master',
-        tone: 'blue',
-      },
-      {
-        label: 'Total Employees',
-        value: stats.employees.toLocaleString('en-IN'),
-        note: `${stats.teachers} teachers · ${stats.staff} staff`,
-        Icon: UsersRound,
-        target: 'employee_master',
-        tone: 'violet',
-      },
-      {
-        label: 'Present Today',
-        value: stats.present.toLocaleString('en-IN'),
-        note: `${attendanceRate}% of active students`,
-        Icon: CalendarCheck2,
-        target: 'student_attendance',
-        tone: 'green',
-      },
-      {
-        label: 'Fees Collected',
-        value: money(stats.feesPaid),
-        note: `${feeRate}% of total demand`,
-        Icon: IndianRupee,
-        target: 'fees_collection',
-        tone: 'amber',
-      },
-    ]
-  }, [isTeacher, isAccounts, isHr, stats, attendanceRate, feeRate, outstanding])
+    return cards.filter((c) => isAllowed(c.target))
+  }, [isTeacher, isAccounts, isHr, stats, attendanceRate, feeRate, outstanding, isAllowed])
 
   const showModule = (value?: string) =>
     value && modules[value] ? moduleName(value) : value || 'General'
@@ -560,46 +577,58 @@ export default function ProductionDashboard({
 
           {isTeacher ? (
             <>
-              <button onClick={() => choose('student_attendance')} style={{ background: '#0284c7', color: '#fff' }}>
-                <CalendarCheck2 />
-                Mark Attendance
-              </button>
-              <button
-                className="primary"
-                onClick={() => choose('assignments_master')}
-                style={{ background: '#16a34a', color: '#fff' }}
-              >
-                <ClipboardList />
-                Add Assignment
-              </button>
+              {isAllowed('student_attendance') && (
+                <button onClick={() => choose('student_attendance')} style={{ background: '#0284c7', color: '#fff' }}>
+                  <CalendarCheck2 />
+                  Mark Attendance
+                </button>
+              )}
+              {isAllowed('assignments_master') && (
+                <button
+                  className="primary"
+                  onClick={() => choose('assignments_master')}
+                  style={{ background: '#16a34a', color: '#fff' }}
+                >
+                  <ClipboardList />
+                  Add Assignment
+                </button>
+              )}
             </>
           ) : isAccounts ? (
             <>
-              <button onClick={() => choose('fees_collection')} style={{ background: '#16a34a', color: '#fff' }}>
-                <IndianRupee />
-                Collect Fees
-              </button>
-              <button
-                className="primary"
-                onClick={() => choose('income_master')}
-              >
-                <Plus />
-                Record Income
-              </button>
+              {isAllowed('fees_collection') && (
+                <button onClick={() => choose('fees_collection')} style={{ background: '#16a34a', color: '#fff' }}>
+                  <IndianRupee />
+                  Collect Fees
+                </button>
+              )}
+              {isAllowed('income_master') && (
+                <button
+                  className="primary"
+                  onClick={() => choose('income_master')}
+                >
+                  <Plus />
+                  Record Income
+                </button>
+              )}
             </>
           ) : isHr ? (
             <>
-              <button onClick={() => choose('employee_attendance')}>
-                <CalendarCheck2 />
-                Staff Attendance
-              </button>
-              <button
-                className="primary"
-                onClick={() => choose('leave_application')}
-              >
-                <UserCheck />
-                Review Leaves
-              </button>
+              {isAllowed('employee_attendance') && (
+                <button onClick={() => choose('employee_attendance')}>
+                  <CalendarCheck2 />
+                  Staff Attendance
+                </button>
+              )}
+              {isAllowed('leave_application') && (
+                <button
+                  className="primary"
+                  onClick={() => choose('leave_application')}
+                >
+                  <UserCheck />
+                  Review Leaves
+                </button>
+              )}
             </>
           ) : (
             // Admin & Principal
@@ -717,192 +746,206 @@ export default function ProductionDashboard({
             </header>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => choose('student_master')}
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <GraduationCap size={18} color="#0284c7" />
-                  <ChevronRight size={14} color="#94a3b8" />
-                </div>
-                <b style={{ fontSize: '13px', color: '#0f172a' }}>Student Directory</b>
-                <span style={{ fontSize: '11px', color: '#64748b' }}>View all registered students</span>
-              </button>
+              {isAllowed('student_master') && (
+                <button
+                  type="button"
+                  onClick={() => choose('student_master')}
+                  style={{
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <GraduationCap size={18} color="#0284c7" />
+                    <ChevronRight size={14} color="#94a3b8" />
+                  </div>
+                  <b style={{ fontSize: '13px', color: '#0f172a' }}>Student Directory</b>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>View all registered students</span>
+                </button>
+              )}
 
-              <button
-                type="button"
-                onClick={() => choose('student_attendance')}
-                style={{
-                  background: '#f0fdf4',
-                  border: '1px solid #bbf7d0',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <CalendarCheck2 size={18} color="#16a34a" />
-                  <ChevronRight size={14} color="#86efac" />
-                </div>
-                <b style={{ fontSize: '13px', color: '#15803d' }}>Mark Class Attendance</b>
-                <span style={{ fontSize: '11px', color: '#166534' }}>Daily class attendance register</span>
-              </button>
+              {isAllowed('student_attendance') && (
+                <button
+                  type="button"
+                  onClick={() => choose('student_attendance')}
+                  style={{
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <CalendarCheck2 size={18} color="#16a34a" />
+                    <ChevronRight size={14} color="#86efac" />
+                  </div>
+                  <b style={{ fontSize: '13px', color: '#15803d' }}>Mark Class Attendance</b>
+                  <span style={{ fontSize: '11px', color: '#166534' }}>Daily class attendance register</span>
+                </button>
+              )}
 
-              <button
-                type="button"
-                onClick={() => choose('assignments_master')}
-                style={{
-                  background: '#faf5ff',
-                  border: '1px solid #e9d5ff',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <ClipboardList size={18} color="#9333ea" />
-                  <ChevronRight size={14} color="#d8b4fe" />
-                </div>
-                <b style={{ fontSize: '13px', color: '#7e22ce' }}>Assignments & Tasks</b>
-                <span style={{ fontSize: '11px', color: '#6b21a8' }}>Upload class assignments</span>
-              </button>
+              {isAllowed('assignments_master') && (
+                <button
+                  type="button"
+                  onClick={() => choose('assignments_master')}
+                  style={{
+                    background: '#faf5ff',
+                    border: '1px solid #e9d5ff',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <ClipboardList size={18} color="#9333ea" />
+                    <ChevronRight size={14} color="#d8b4fe" />
+                  </div>
+                  <b style={{ fontSize: '13px', color: '#7e22ce' }}>Assignments & Tasks</b>
+                  <span style={{ fontSize: '11px', color: '#6b21a8' }}>Upload class assignments</span>
+                </button>
+              )}
 
-              <button
-                type="button"
-                onClick={() => choose('student_idcard')}
-                style={{
-                  background: '#eff6ff',
-                  border: '1px solid #bfdbfe',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <IdCard size={18} color="#2563eb" />
-                  <ChevronRight size={14} color="#93c5fd" />
-                </div>
-                <b style={{ fontSize: '13px', color: '#1d4ed8' }}>Student ID Cards</b>
-                <span style={{ fontSize: '11px', color: '#1e40af' }}>Print student identity cards</span>
-              </button>
+              {isAllowed('student_idcard') && (
+                <button
+                  type="button"
+                  onClick={() => choose('student_idcard')}
+                  style={{
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <IdCard size={18} color="#2563eb" />
+                    <ChevronRight size={14} color="#93c5fd" />
+                  </div>
+                  <b style={{ fontSize: '13px', color: '#1d4ed8' }}>Student ID Cards</b>
+                  <span style={{ fontSize: '11px', color: '#1e40af' }}>Print student identity cards</span>
+                </button>
+              )}
 
-              <button
-                type="button"
-                onClick={() => choose('escort_card')}
-                style={{
-                  background: '#fff7ed',
-                  border: '1px solid #fed7aa',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Users size={18} color="#ea580c" />
-                  <ChevronRight size={14} color="#fdba74" />
-                </div>
-                <b style={{ fontSize: '13px', color: '#c2410c' }}>Parent Escort Cards</b>
-                <span style={{ fontSize: '11px', color: '#9a3412' }}>Gate dispersal security cards</span>
-              </button>
+              {isAllowed('escort_card') && (
+                <button
+                  type="button"
+                  onClick={() => choose('escort_card')}
+                  style={{
+                    background: '#fff7ed',
+                    border: '1px solid #fed7aa',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Users size={18} color="#ea580c" />
+                    <ChevronRight size={14} color="#fdba74" />
+                  </div>
+                  <b style={{ fontSize: '13px', color: '#c2410c' }}>Parent Escort Cards</b>
+                  <span style={{ fontSize: '11px', color: '#9a3412' }}>Gate dispersal security cards</span>
+                </button>
+              )}
 
-              <button
-                type="button"
-                onClick={() => choose('notice_automation')}
-                style={{
-                  background: '#fefce8',
-                  border: '1px solid #fef08a',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <BellRing size={18} color="#ca8a04" />
-                  <ChevronRight size={14} color="#fde047" />
-                </div>
-                <b style={{ fontSize: '13px', color: '#a16207' }}>Class Notices</b>
-                <span style={{ fontSize: '11px', color: '#854d0e' }}>Send announcements</span>
-              </button>
+              {isAllowed('notice_automation') && (
+                <button
+                  type="button"
+                  onClick={() => choose('notice_automation')}
+                  style={{
+                    background: '#fefce8',
+                    border: '1px solid #fef08a',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <BellRing size={18} color="#ca8a04" />
+                    <ChevronRight size={14} color="#fde047" />
+                  </div>
+                  <b style={{ fontSize: '13px', color: '#a16207' }}>Class Notices</b>
+                  <span style={{ fontSize: '11px', color: '#854d0e' }}>Send announcements</span>
+                </button>
+              )}
             </div>
           </article>
         )}
 
         {/* Student Attendance Panel */}
-        <article className="dashboard-panel attendance-panel">
-          <header>
-            <div>
-              <span className="panel-icon green">
-                <CalendarCheck2 />
-              </span>
+        {isAllowed('student_attendance') && (
+          <article className="dashboard-panel attendance-panel">
+            <header>
               <div>
-                <h2>Attendance today</h2>
-                <p>Live student presence</p>
+                <span className="panel-icon green">
+                  <CalendarCheck2 />
+                </span>
+                <div>
+                  <h2>Attendance today</h2>
+                  <p>Live student presence</p>
+                </div>
+              </div>
+              <button onClick={() => choose('student_attendance')}>
+                Open register
+                <ChevronRight />
+              </button>
+            </header>
+            <div className="attendance-body">
+              <div
+                className="attendance-ring"
+                style={{
+                  background: `conic-gradient(#10a474 0 ${attendanceRate}%,#e7edf3 ${attendanceRate}% 100%)`,
+                }}
+              >
+                <div>
+                  <strong>{attendanceRate}%</strong>
+                  <span>Present</span>
+                </div>
+              </div>
+              <div className="attendance-details">
+                <div>
+                  <span>Present students</span>
+                  <b>{stats.present}</b>
+                </div>
+                <div>
+                  <span>Active students</span>
+                  <b>{stats.students}</b>
+                </div>
+                <div>
+                  <span>Not marked present</span>
+                  <b>{Math.max(0, stats.students - stats.present)}</b>
+                </div>
               </div>
             </div>
-            <button onClick={() => choose('student_attendance')}>
-              Open register
-              <ChevronRight />
-            </button>
-          </header>
-          <div className="attendance-body">
-            <div
-              className="attendance-ring"
-              style={{
-                background: `conic-gradient(#10a474 0 ${attendanceRate}%,#e7edf3 ${attendanceRate}% 100%)`,
-              }}
-            >
-              <div>
-                <strong>{attendanceRate}%</strong>
-                <span>Present</span>
-              </div>
-            </div>
-            <div className="attendance-details">
-              <div>
-                <span>Present students</span>
-                <b>{stats.present}</b>
-              </div>
-              <div>
-                <span>Active students</span>
-                <b>{stats.students}</b>
-              </div>
-              <div>
-                <span>Not marked present</span>
-                <b>{Math.max(0, stats.students - stats.present)}</b>
-              </div>
-            </div>
-          </div>
-        </article>
+          </article>
+        )}
       </section>
 
       {/* Bottom Grid: Workflows & Audit Log */}
@@ -923,54 +966,62 @@ export default function ProductionDashboard({
           <div className="attention-list">
             {isTeacher ? (
               <>
-                <button onClick={() => choose('student_attendance')}>
-                  <span className="attention-icon green">
-                    <CalendarCheck2 />
-                  </span>
-                  <span>
-                    <b>Today's Class Attendance</b>
-                    <small>{stats.present} students marked present</small>
-                  </span>
-                  <strong>{stats.present}/{stats.students}</strong>
-                  <ChevronRight />
-                </button>
-                <button onClick={() => choose('assignments_master')}>
-                  <span className="attention-icon blue">
-                    <ClipboardList />
-                  </span>
-                  <span>
-                    <b>Class Assignments</b>
-                    <small>Active student homework</small>
-                  </span>
-                  <strong>{stats.assignments}</strong>
-                  <ChevronRight />
-                </button>
-                <button onClick={() => choose('notice_automation')}>
-                  <span className="attention-icon green">
-                    <BellRing />
-                  </span>
-                  <span>
-                    <b>School Notices & Circulars</b>
-                    <small>Official circulars and announcements</small>
-                  </span>
-                  <strong>{stats.notices}</strong>
-                  <ChevronRight />
-                </button>
-                <button onClick={() => choose('student_idcard')}>
-                  <span className="attention-icon violet">
-                    <IdCard />
-                  </span>
-                  <span>
-                    <b>Student ID Card Studio</b>
-                    <small>Generate print-ready identity cards</small>
-                  </span>
-                  <strong>{stats.students}</strong>
-                  <ChevronRight />
-                </button>
+                {isAllowed('student_attendance') && (
+                  <button onClick={() => choose('student_attendance')}>
+                    <span className="attention-icon green">
+                      <CalendarCheck2 />
+                    </span>
+                    <span>
+                      <b>Today's Class Attendance</b>
+                      <small>{stats.present} students marked present</small>
+                    </span>
+                    <strong>{stats.present}/{stats.students}</strong>
+                    <ChevronRight />
+                  </button>
+                )}
+                {isAllowed('assignments_master') && (
+                  <button onClick={() => choose('assignments_master')}>
+                    <span className="attention-icon blue">
+                      <ClipboardList />
+                    </span>
+                    <span>
+                      <b>Class Assignments</b>
+                      <small>Active student homework</small>
+                    </span>
+                    <strong>{stats.assignments}</strong>
+                    <ChevronRight />
+                  </button>
+                )}
+                {isAllowed('notice_automation') && (
+                  <button onClick={() => choose('notice_automation')}>
+                    <span className="attention-icon green">
+                      <BellRing />
+                    </span>
+                    <span>
+                      <b>School Notices & Circulars</b>
+                      <small>Official circulars and announcements</small>
+                    </span>
+                    <strong>{stats.notices}</strong>
+                    <ChevronRight />
+                  </button>
+                )}
+                {isAllowed('student_idcard') && (
+                  <button onClick={() => choose('student_idcard')}>
+                    <span className="attention-icon violet">
+                      <IdCard />
+                    </span>
+                    <span>
+                      <b>Student ID Card Studio</b>
+                      <small>Generate print-ready identity cards</small>
+                    </span>
+                    <strong>{stats.students}</strong>
+                    <ChevronRight />
+                  </button>
+                )}
               </>
             ) : (
               <>
-                {!isAccounts && (
+                {!isAccounts && isAllowed('department_master') && (
                   <button onClick={() => choose('department_master')}>
                     <span className="attention-icon blue">
                       <Building />
@@ -983,7 +1034,7 @@ export default function ProductionDashboard({
                     <ChevronRight />
                   </button>
                 )}
-                {!isAccounts && (
+                {!isAccounts && isAllowed('leave_application') && (
                   <button onClick={() => choose('leave_application')}>
                     <span className="attention-icon violet">
                       <UsersRound />
@@ -996,28 +1047,32 @@ export default function ProductionDashboard({
                     <ChevronRight />
                   </button>
                 )}
-                <button onClick={() => choose('assignments_master')}>
-                  <span className="attention-icon blue">
-                    <ClipboardList />
-                  </span>
-                  <span>
-                    <b>Active assignments</b>
-                    <small>Currently assigned to classes</small>
-                  </span>
-                  <strong>{stats.assignments}</strong>
-                  <ChevronRight />
-                </button>
-                <button onClick={() => choose('notice_automation')}>
-                  <span className="attention-icon green">
-                    <BellRing />
-                  </span>
-                  <span>
-                    <b>Scheduled notices</b>
-                    <small>Queued for communication</small>
-                  </span>
-                  <strong>{stats.notices}</strong>
-                  <ChevronRight />
-                </button>
+                {isAllowed('assignments_master') && (
+                  <button onClick={() => choose('assignments_master')}>
+                    <span className="attention-icon blue">
+                      <ClipboardList />
+                    </span>
+                    <span>
+                      <b>Active assignments</b>
+                      <small>Currently assigned to classes</small>
+                    </span>
+                    <strong>{stats.assignments}</strong>
+                    <ChevronRight />
+                  </button>
+                )}
+                {isAllowed('notice_automation') && (
+                  <button onClick={() => choose('notice_automation')}>
+                    <span className="attention-icon green">
+                      <BellRing />
+                    </span>
+                    <span>
+                      <b>Scheduled notices</b>
+                      <small>Queued for communication</small>
+                    </span>
+                    <strong>{stats.notices}</strong>
+                    <ChevronRight />
+                  </button>
+                )}
               </>
             )}
           </div>

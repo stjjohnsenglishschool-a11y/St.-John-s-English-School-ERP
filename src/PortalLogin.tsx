@@ -273,7 +273,7 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
 
       // 1. Check live database user_master table in Supabase
       try {
-        const users = dbUsers.length > 0 ? dbUsers : await fetchCollectionData('user_master')
+        const users = await fetchCollectionData('user_master')
         if (users && users.length > 0) {
           const found = users.find((u: any) => {
             const uName = String(u.user_name || '').toLowerCase()
@@ -301,15 +301,17 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
               (found.role && password === `${found.role}123`)
 
             if (passMatch) {
-              const modules = parseModules(found.allowed_modules || found.active_module)
+              const rawMods = found.allowed_modules ?? found.active_module
+              const modules = parseModules(rawMods)
+              const userRoleStr = String(found.role || 'staff').toLowerCase()
               matchedUser = {
                 user_name: String(found.user_name || login),
                 user_full_name: String(found.user_full_name || found.user_name || login),
-                role: String(found.role || 'staff').toLowerCase(),
+                role: userRoleStr,
                 allowed_modules:
-                  modules.length > 0
+                  rawMods !== undefined && rawMods !== null
                     ? modules
-                    : String(found.role).toLowerCase() === 'admin'
+                    : userRoleStr === 'admin'
                     ? ALL_MODULE_KEYS
                     : ['student_master', 'student_attendance'],
                 department: found.department ? String(found.department) : undefined,

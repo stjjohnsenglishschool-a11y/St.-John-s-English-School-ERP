@@ -23,6 +23,8 @@ import {
   Edit3,
   Eye,
   EyeOff,
+  ExternalLink,
+  File,
   FileBarChart,
   FileText,
   GraduationCap,
@@ -33,6 +35,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Paperclip,
   Plus,
   Printer,
   RefreshCw,
@@ -196,6 +199,63 @@ function App() {
       // ignore
     }
   }, []);
+
+  // Live user permission sync with user_master in database
+  useEffect(() => {
+    if (!currentUser?.user_name) return;
+    const uLogin = currentUser.user_name.toLowerCase().trim();
+    const uFull = (currentUser.user_full_name || "").toLowerCase().trim();
+
+    fetchCollectionData("user_master")
+      .then((users) => {
+        if (!Array.isArray(users) || users.length === 0) return;
+        const found = users.find((u: any) => {
+          const uName = String(u.user_name || "").toLowerCase().trim();
+          const uFullName = String(u.user_full_name || "").toLowerCase().trim();
+          const uEmail = String(u.email || u.user_email || "").toLowerCase().trim();
+          return uName === uLogin || uFullName === uFull || (uFull && uFullName.includes(uFull)) || uEmail === uLogin;
+        });
+
+        if (found) {
+          const rawMods = found.allowed_modules ?? found.active_module;
+          let parsedMods: string[] = [];
+          if (Array.isArray(rawMods)) {
+            parsedMods = rawMods.map(String);
+          } else if (typeof rawMods === "string" && rawMods.trim().length > 0) {
+            try {
+              const p = JSON.parse(rawMods);
+              if (Array.isArray(p)) parsedMods = p.map(String);
+              else parsedMods = rawMods.split(",").map((s) => s.trim()).filter(Boolean);
+            } catch {
+              parsedMods = rawMods.split(",").map((s) => s.trim()).filter(Boolean);
+            }
+          }
+
+          if (rawMods !== undefined && rawMods !== null) {
+            setCurrentUser((prev) => {
+              if (!prev) return prev;
+              const isSame =
+                JSON.stringify(prev.allowed_modules || []) === JSON.stringify(parsedMods) &&
+                prev.role === String(found.role || prev.role).toLowerCase();
+              if (isSame) return prev;
+
+              const updated = {
+                ...prev,
+                user_full_name: String(found.user_full_name || prev.user_full_name),
+                role: String(found.role || prev.role).toLowerCase(),
+                allowed_modules: parsedMods,
+                department: found.department ? String(found.department) : prev.department,
+              };
+              try {
+                localStorage.setItem("sjes_logged_in_user", JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
+          }
+        }
+      })
+      .catch(() => {});
+  }, [currentUser?.user_name, currentUser?.user_full_name]);
 
   const isUserAdmin = useMemo(() => {
     if (!currentUser) return false;
@@ -777,13 +837,34 @@ function App() {
       if (mod.table === "user_master") {
         const modulesList = Array.isArray(payload.allowed_modules)
           ? payload.allowed_modules
+          : typeof payload.allowed_modules === "string"
+          ? payload.allowed_modules.split(",").map((s) => s.trim()).filter(Boolean)
           : Array.isArray(payload.active_module)
           ? payload.active_module
           : [];
         payload.allowed_modules = modulesList;
-        payload.active_module = modulesList;
+        payload.active_module = JSON.stringify(modulesList);
         if (!payload.password && !isEdit) {
           payload.password = "User@123";
+        }
+
+        const editedUsername = String(payload.user_name || "").toLowerCase().trim();
+        const currentUsername = String(currentUser?.user_name || "").toLowerCase().trim();
+        if (editedUsername && editedUsername === currentUsername) {
+          setCurrentUser((prev) => {
+            if (!prev) return prev;
+            const updated = {
+              ...prev,
+              user_full_name: String(payload.user_full_name || prev.user_full_name),
+              role: String(payload.role || prev.role).toLowerCase(),
+              allowed_modules: modulesList,
+              department: payload.department ? String(payload.department) : prev.department,
+            };
+            try {
+              localStorage.setItem("sjes_logged_in_user", JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
         }
       }
 
@@ -2237,6 +2318,51 @@ function DataTable({
                     ) : (
                       "—"
                     )
+                  ) : c === "attachment_url" || c === "attachments" ? (
+                    (() => {
+                      const raw = r[c];
+                      if (!raw) return "—";
+                      let list: string[] = [];
+                      if (Array.isArray(raw)) {
+                        list = raw;
+                      } else if (typeof raw === "string" && raw.trim().startsWith("[")) {
+                        try {
+                          const parsed = JSON.parse(raw);
+                          if (Array.isArray(parsed)) list = parsed;
+                        } catch {}
+                      } else if (typeof raw === "string" && raw.trim().length > 0) {
+                        list = raw.includes(",") ? raw.split(",").map((s) => s.trim()) : [raw.trim()];
+                      }
+                      if (list.length === 0) return "—";
+                      return (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
+                          {list.map((url, idx) => (
+                            <a
+                              key={idx}
+                              href={formatImageUrl(url)}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                background: "#eff6ff",
+                                color: "#1d4ed8",
+                                border: "1px solid #bfdbfe",
+                                borderRadius: "5px",
+                                padding: "2px 7px",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                textDecoration: "none",
+                              }}
+                            >
+                              <Paperclip size={12} color="#2563eb" />
+                              <span>{list.length > 1 ? `File ${idx + 1}` : "Attachment"}</span>
+                            </a>
+                          ))}
+                        </div>
+                      );
+                    })()
                   ) : c === "password" ? (
                     <span style={{ fontFamily: "monospace", background: "#f1f5f9", padding: "2px 8px", borderRadius: "4px", fontSize: "12px", border: "1px solid #cbd5e1", fontWeight: 600, color: "#0f172a" }}>
                       🔑 {String(r[c] || "admin123")}
@@ -3108,6 +3234,296 @@ function FormField({
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Multi-Attachment Spanned UI (for Assignments, Worksheets & Documents)
+  if (
+    field.key === "attachment_url" ||
+    field.key === "attachments" ||
+    (tableName === "assignments_master" && field.key === "attachment_url")
+  ) {
+    let attachments: Array<{ name: string; url: string; size?: string }> = [];
+    if (Array.isArray(value)) {
+      attachments = value.map((item, idx) =>
+        typeof item === "string"
+          ? {
+              name: item.startsWith("data:")
+                ? `Worksheet Document ${idx + 1}`
+                : item.split("/").pop()?.split("?")[0] || `Attachment ${idx + 1}`,
+              url: item,
+            }
+          : item
+      );
+    } else if (typeof value === "string" && value.trim().startsWith("[")) {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          attachments = parsed.map((item, idx) =>
+            typeof item === "string"
+              ? {
+                  name: item.startsWith("data:")
+                    ? `Worksheet Document ${idx + 1}`
+                    : item.split("/").pop()?.split("?")[0] || `Attachment ${idx + 1}`,
+                  url: item,
+                }
+              : item
+          );
+        }
+      } catch {}
+    } else if (typeof value === "string" && value.trim().length > 0) {
+      const parts = value.includes(",") ? value.split(",").map((s) => s.trim()) : [value.trim()];
+      attachments = parts.filter(Boolean).map((url, idx) => ({
+        name: url.startsWith("data:")
+          ? `Worksheet Document ${idx + 1}`
+          : url.split("/").pop()?.split("?")[0] || `Attachment ${idx + 1}`,
+        url,
+      }));
+    }
+
+    const handleMultipleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+      setUploading(true);
+      try {
+        const uploadedList = [...attachments];
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const publicUrl = await uploadToFirebaseStorage(
+            file,
+            "school-assignments",
+            "attachments"
+          );
+          const sizeKb = file.size ? `${Math.round(file.size / 1024)} KB` : undefined;
+          uploadedList.push({
+            name: file.name || `Worksheet ${uploadedList.length + 1}`,
+            url: publicUrl,
+            size: sizeKb,
+          });
+        }
+        change(JSON.stringify(uploadedList.map((a) => a.url)));
+      } catch {
+        // Handled
+      } finally {
+        setUploading(false);
+      }
+    };
+
+    const removeAttachment = (indexToRemove: number) => {
+      const updated = attachments.filter((_, idx) => idx !== indexToRemove);
+      change(updated.length > 0 ? JSON.stringify(updated.map((a) => a.url)) : "");
+    };
+
+    return (
+      <div className="full" style={{ gridColumn: "1 / -1", marginTop: "10px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "8px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Paperclip size={16} color="var(--navy)" />
+            <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--navy)" }}>
+              Assignment Attachments & Worksheets (Multi-File Upload)
+            </span>
+          </div>
+          <span
+            style={{
+              fontSize: "12px",
+              background: attachments.length > 0 ? "#dbeafe" : "#f1f5f9",
+              color: attachments.length > 0 ? "#1e40af" : "#64748b",
+              padding: "2px 10px",
+              borderRadius: "12px",
+              fontWeight: 700,
+            }}
+          >
+            {attachments.length} {attachments.length === 1 ? "File" : "Files"} Attached
+          </span>
+        </div>
+
+        <div
+          style={{
+            background: "#f8fafc",
+            border: "1.5px dashed #cbd5e1",
+            borderRadius: "10px",
+            padding: "14px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+          }}
+        >
+          {/* Upload Actions */}
+          {!disabled && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
+              <label
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "8px 16px",
+                  background: "var(--blue)",
+                  color: "#fff",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  cursor: uploading ? "wait" : "pointer",
+                  boxShadow: "0 2px 4px rgba(15,54,97,0.15)",
+                }}
+              >
+                <Upload size={14} />
+                <span>{uploading ? "Uploading attachments..." : "+ Upload Multiple Files / Worksheets"}</span>
+                <input
+                  type="file"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={handleMultipleUpload}
+                  disabled={uploading}
+                />
+              </label>
+
+              <span style={{ fontSize: "11px", color: "#64748b" }}>
+                Supports multiple PDFs, images, question papers & homework sheets
+              </span>
+            </div>
+          )}
+
+          {/* Uploaded Attachments List */}
+          {attachments.length > 0 ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gap: "8px",
+                marginTop: "4px",
+              }}
+            >
+              {attachments.map((att, idx) => {
+                const isImg =
+                  att.url.startsWith("data:image") ||
+                  /\.(jpg|jpeg|png|gif|webp|svg)/i.test(att.url);
+                const isPdf = att.url.toLowerCase().includes(".pdf");
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "8px",
+                      padding: "8px 12px",
+                      background: "#fff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "8px",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <span
+                        style={{
+                          padding: "6px",
+                          borderRadius: "6px",
+                          background: isImg ? "#fef3c7" : isPdf ? "#fee2e2" : "#eff6ff",
+                          color: isImg ? "#b45309" : isPdf ? "#b91c1c" : "#1d4ed8",
+                          display: "flex",
+                        }}
+                      >
+                        {isImg ? <Eye size={14} /> : isPdf ? <FileText size={14} /> : <File size={14} />}
+                      </span>
+                      <div style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                        <div
+                          style={{
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            color: "#1e293b",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            maxWidth: "180px",
+                          }}
+                          title={att.name}
+                        >
+                          {att.name}
+                        </div>
+                        {att.size && (
+                          <div style={{ fontSize: "10px", color: "#64748b" }}>
+                            {att.size}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <a
+                        href={formatImageUrl(att.url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="View / Download file"
+                        style={{
+                          padding: "4px 8px",
+                          background: "#eff6ff",
+                          border: "1px solid #bfdbfe",
+                          borderRadius: "5px",
+                          color: "#1d4ed8",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          textDecoration: "none",
+                        }}
+                      >
+                        <ExternalLink size={12} />
+                        <span>View</span>
+                      </a>
+                      {!disabled && (
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(idx)}
+                          title="Remove attachment"
+                          style={{
+                            padding: "4px 6px",
+                            background: "#fef2f2",
+                            border: "1px solid #fecaca",
+                            borderRadius: "5px",
+                            color: "#b91c1c",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                          }}
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "16px",
+                color: "#64748b",
+                fontSize: "12px",
+              }}
+            >
+              No attachments uploaded yet. Click the upload button above to add multiple worksheet files.
+            </div>
+          )}
         </div>
       </div>
     );
