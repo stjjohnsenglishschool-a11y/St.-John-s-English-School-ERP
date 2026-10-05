@@ -2,9 +2,7 @@ import { FormEvent, useState } from 'react'
 import {
   Eye,
   EyeOff,
-  GraduationCap,
   LockKeyhole,
-  ShieldCheck,
   User,
 } from 'lucide-react'
 import { logActivity, fetchCollectionData, normalizeUserModules } from './lib/supabase'
@@ -163,25 +161,11 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
             Role-based school ERP portal with fine-grained access control for
             Administrators, Principals, Teachers, Accounts, and HR staff.
           </p>
-
-          <div className="auth-features">
-            <b>
-              <GraduationCap />
-              Connected directly to Supabase Database
-            </b>
-            <b>
-              <ShieldCheck />
-              Strict Role-Based Module Security
-            </b>
-          </div>
         </aside>
 
         <form onSubmit={submit}>
           <span className="overline">SECURE ERP PORTAL</span>
           <h2>Sign in to St. John's</h2>
-          <p style={{ color: 'var(--muted)', fontSize: '13px', margin: '4px 0 16px' }}>
-            Enter your official username, email, or employee code to sign in.
-          </p>
 
           {error && <div className="auth-error">{error}</div>}
 
