@@ -171,6 +171,7 @@ function App() {
     user_full_name: string;
     role: string;
     allowed_modules: string[];
+    department?: string;
   } | null>(() => {
     try {
       const raw = localStorage.getItem("sjes_logged_in_user");
@@ -184,7 +185,9 @@ function App() {
     try {
       const raw = localStorage.getItem("sjes_logged_in_user");
       if (raw) {
-        setCurrentUser(JSON.parse(raw));
+        const parsed = JSON.parse(raw);
+        setCurrentUser(parsed);
+        if (parsed.role) setRole(label(parsed.role));
       } else {
         setCurrentUser(null);
       }
@@ -194,9 +197,9 @@ function App() {
   }, []);
 
   const isUserAdmin = useMemo(() => {
-    if (!currentUser) return true;
-    const r = (currentUser.role || "").toLowerCase();
-    const name = (currentUser.user_name || "").toLowerCase();
+    if (!currentUser) return false;
+    const r = (currentUser.role || "").toLowerCase().trim();
+    const name = (currentUser.user_name || "").toLowerCase().trim();
     return r === "admin" || r === "administrator" || name === "admin";
   }, [currentUser]);
 
@@ -538,9 +541,12 @@ function App() {
     }
     localStorage.setItem("sjes_logged_out", "true");
     localStorage.removeItem("sjes_demo_session");
+    localStorage.removeItem("sjes_logged_in_user");
     setSession(null);
+    setCurrentUser(null);
     setLoggedOut(true);
     setLoginOpen(false);
+    setActive("Overview");
     setToast("Successfully signed out of ERP.");
   };
 
@@ -555,10 +561,17 @@ function App() {
   ) {
     return (
       <PortalLogin
-        onLoginSuccess={() => {
+        onLoginSuccess={(userObj) => {
+          if (userObj) {
+            setCurrentUser(userObj);
+            setRole(label(userObj.role || "Administrator"));
+          } else {
+            syncCurrentUser();
+          }
           setLoggedOut(false);
           localStorage.setItem("sjes_demo_session", "true");
-          setToast("Welcome to St. John's ERP!");
+          setActive("Overview");
+          setToast(`Welcome ${userObj?.user_full_name || userObj?.user_name || "User"} to St. John's ERP!`);
         }}
       />
     );
@@ -1658,6 +1671,17 @@ function App() {
         <Login
           close={() => setLoginOpen(false)}
           session={session}
+          currentUser={currentUser}
+          onSwitchUser={(newUser) => {
+            setCurrentUser(newUser);
+            setRole(label(newUser.role || "Administrator"));
+            localStorage.setItem("sjes_logged_in_user", JSON.stringify(newUser));
+            localStorage.removeItem("sjes_logged_out");
+            localStorage.setItem("sjes_demo_session", "true");
+            setActive("Overview");
+            setLoginOpen(false);
+            setToast(`Switched user to ${newUser.user_full_name} (${label(newUser.role)})`);
+          }}
           setToast={setToast}
           onLogout={handleLogout}
         />
@@ -2921,41 +2945,96 @@ function FormField({
 function Login({
   close,
   session,
+  currentUser,
+  onSwitchUser,
   setToast,
   onLogout,
 }: {
   close: () => void;
   session: Session | null;
+  currentUser: {
+    user_name: string;
+    user_full_name: string;
+    role: string;
+    allowed_modules: string[];
+    department?: string;
+  } | null;
+  onSwitchUser?: (u: {
+    user_name: string;
+    user_full_name: string;
+    role: string;
+    allowed_modules: string[];
+    department?: string;
+  }) => void;
   setToast: (s: string) => void;
   onLogout: () => void;
 }) {
-  const [email, setEmail] = useState("admin@stjohns.edu");
-  const [password, setPassword] = useState("admin123");
-  const [busy, setBusy] = useState(false);
+  const userName = currentUser?.user_full_name || currentUser?.user_name || session?.user?.user_metadata?.full_name || "Administrator";
+  const userRole = currentUser?.role || "admin";
+  const userRoleLabel = label(userRole);
+  const userEmail = currentUser?.user_name ? `${currentUser.user_name}@stjohns.edu` : (session?.user?.email || "admin@stjohns.edu");
+  const moduleCount = currentUser?.allowed_modules?.length || (userRole === "admin" ? ALL_SUBMENU_MODULES.length : 0);
 
-  const userEmail = session?.user?.email || "admin@stjohns.edu";
-  const userName = session?.user?.user_metadata?.full_name || "Administrator";
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await logActivity({
-        action: "User signed in to portal",
-        module: "auth",
-      });
-      setToast("Signed in successfully");
-      close();
-    } catch (err) {
-      setToast(err instanceof Error ? err.message : "Sign-in error");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const demoPresets = [
+    {
+      roleTitle: 'Administrator',
+      name: 'System Administrator',
+      username: 'admin',
+      role: 'admin',
+      department: 'Management',
+      modules: ALL_SUBMENU_MODULES.map(m => m.key),
+      color: '#0284c7',
+    },
+    {
+      roleTitle: 'Principal',
+      name: 'John Stevens',
+      username: 'principal',
+      role: 'principal',
+      department: 'Management',
+      modules: ['school_master', 'department_master', 'class_master', 'student_master', 'employee_master', 'student_attendance', 'employee_attendance', 'fees_structure', 'fees_collection', 'income_master', 'notice_automation'],
+      color: '#7c3aed',
+    },
+    {
+      roleTitle: 'Teacher / Faculty',
+      name: 'Soma Chakraborty',
+      username: 'schakraborty',
+      role: 'teacher',
+      department: 'Teaching Staff',
+      modules: ['student_master', 'student_attendance', 'assignments_master', 'notice_automation', 'student_idcard', 'escort_card'],
+      color: '#16a34a',
+    },
+    {
+      roleTitle: 'Accounts Officer',
+      name: 'Ramesh Dutta',
+      username: 'rdutta',
+      role: 'accounts',
+      department: 'Accounts & Finance',
+      modules: ['fees_structure', 'fees_collection', 'expense_master', 'income_master', 'income_head_master', 'salary_slip', 'vendor_master'],
+      color: '#d97706',
+    },
+    {
+      roleTitle: 'HR Manager',
+      name: 'Anita Roy',
+      username: 'hr',
+      role: 'hr',
+      department: 'Administrative Office',
+      modules: ['employee_master', 'employee_attendance', 'leave_application', 'leave_balance', 'salary_slip', 'warning_letter', 'offer_letter', 'employee_document', 'teacher_idcard'],
+      color: '#db2777',
+    },
+    {
+      roleTitle: 'Front Office Staff',
+      name: 'Sunil Sen',
+      username: 'staff',
+      role: 'staff',
+      department: 'Administrative Office',
+      modules: ['student_master', 'student_attendance', 'student_idcard', 'escort_card', 'notice_automation'],
+      color: '#4f46e5',
+    },
+  ];
 
   return (
     <div className="modal-bg">
-      <div className="login" style={{ maxWidth: "440px" }}>
+      <div className="login" style={{ maxWidth: "480px" }}>
         <button
           type="button"
           className="login-close"
@@ -2964,20 +3043,20 @@ function Login({
         >
           <X />
         </button>
-        <img src={logo} alt="St. John's English School" style={{ height: "48px", objectFit: "contain" }} />
+        <img src={logo} alt="St. John's English School" style={{ height: "46px", objectFit: "contain" }} />
         <span>ST. JOHN'S ENGLISH SCHOOL ERP</span>
         
         <div
           style={{
-            margin: "16px 0 20px",
-            padding: "16px",
+            margin: "16px 0 16px",
+            padding: "14px 16px",
             background: "#f8fafc",
             borderRadius: "12px",
             border: "1px solid #e2e8f0",
             textAlign: "left",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
             <div
               style={{
                 width: "44px",
@@ -2992,53 +3071,115 @@ function Login({
                 justifyContent: "center",
               }}
             >
-              AM
+              {userName.slice(0, 2).toUpperCase()}
             </div>
             <div>
               <b style={{ fontSize: "15px", color: "#0f172a", display: "block" }}>{userName}</b>
               <span style={{ fontSize: "12px", color: "#64748b" }}>{userEmail}</span>
             </div>
           </div>
-          <div
-            style={{
-              fontSize: "12px",
-              padding: "6px 10px",
-              background: "#e0f2fe",
-              color: "#0369a1",
-              borderRadius: "6px",
-              fontWeight: 600,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-          >
-            <Shield size={14} />
-            Active Session · Administrator Role
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+            <div
+              style={{
+                fontSize: "12px",
+                padding: "4px 10px",
+                background: "#e0f2fe",
+                color: "#0369a1",
+                borderRadius: "6px",
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <Shield size={13} />
+              Role: {userRoleLabel}
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                padding: "4px 10px",
+                background: "#f0fdf4",
+                color: "#166534",
+                borderRadius: "6px",
+                fontWeight: 600,
+              }}
+            >
+              {userRole === "admin" ? "All Modules Authorized" : `${moduleCount} Permitted Modules`}
+            </div>
           </div>
         </div>
 
-        {/* Credentials Reminder Box */}
-        <div
-          style={{
-            background: "#f0fdf4",
-            border: "1px solid #bbf7d0",
-            borderRadius: "8px",
-            padding: "12px",
-            textAlign: "left",
-            fontSize: "12px",
-            color: "#166534",
-            marginBottom: "20px",
-          }}
-        >
-          <b style={{ display: "block", marginBottom: "4px", color: "#15803d" }}>
-            🔑 Administrator Login Credentials:
-          </b>
-          <div><b>Email:</b> admin@stjohns.edu</div>
-          <div><b>Username:</b> admin</div>
-          <div><b>Password:</b> admin123</div>
-        </div>
+        {/* Quick Role Switcher */}
+        {onSwitchUser && (
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "10px",
+              padding: "12px",
+              textAlign: "left",
+              marginBottom: "16px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "11px",
+                fontWeight: 700,
+                color: "#64748b",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px",
+                marginBottom: "8px",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <Users size={14} />
+              Quick Switch Role / Account
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "6px" }}>
+              {demoPresets.map((p) => {
+                const isActive = (currentUser?.role || "admin").toLowerCase() === p.role.toLowerCase() &&
+                  (currentUser?.user_name || "admin").toLowerCase() === p.username.toLowerCase();
+                return (
+                  <button
+                    key={p.username}
+                    type="button"
+                    onClick={() => {
+                      onSwitchUser({
+                        user_name: p.username,
+                        user_full_name: p.name,
+                        role: p.role,
+                        allowed_modules: p.modules,
+                        department: p.department,
+                      });
+                    }}
+                    style={{
+                      background: isActive ? "#eff6ff" : "#f8fafc",
+                      border: `1px solid ${isActive ? "#3b82f6" : "#cbd5e1"}`,
+                      borderRadius: "6px",
+                      padding: "6px 8px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      fontSize: "11px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: p.color, flexShrink: 0 }} />
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <b style={{ color: isActive ? "#1d4ed8" : "#334155" }}>{p.roleTitle}</b>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <button
             type="button"
             className="login-button"
@@ -3048,17 +3189,17 @@ function Login({
               color: "#fff",
               border: "none",
               borderRadius: "8px",
-              padding: "12px",
+              padding: "10px",
               fontWeight: 700,
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: "8px",
-              fontSize: "14px",
+              fontSize: "13px",
             }}
           >
-            <LogOut size={18} />
+            <LogOut size={16} />
             Sign Out of ERP (Logout)
           </button>
           <button
@@ -3069,10 +3210,10 @@ function Login({
               color: "#64748b",
               border: "1px solid #cbd5e1",
               borderRadius: "8px",
-              padding: "10px",
+              padding: "8px",
               fontWeight: 600,
               cursor: "pointer",
-              fontSize: "13px",
+              fontSize: "12px",
             }}
           >
             Close Window
