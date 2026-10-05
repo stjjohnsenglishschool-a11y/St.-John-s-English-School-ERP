@@ -3,6 +3,7 @@ import {
   Calendar,
   CheckCircle,
   Clock,
+  Lock,
   RefreshCw,
   Save,
   Search,
@@ -34,11 +35,20 @@ interface EmpAttendanceEntry {
   attendance_id?: string;
 }
 
+export interface EmployeeAttendanceStudioProps {
+  setToast: (msg: string) => void;
+  currentUser?: {
+    user_name: string;
+    user_full_name: string;
+    role: string;
+    department?: string;
+  } | null;
+}
+
 export default function EmployeeAttendanceStudio({
   setToast,
-}: {
-  setToast: (msg: string) => void;
-}) {
+  currentUser,
+}: EmployeeAttendanceStudioProps) {
   const [selectedDate, setSelectedDate] = useState(() =>
     new Date().toISOString().slice(0, 10)
   );
@@ -50,6 +60,14 @@ export default function EmployeeAttendanceStudio({
   const [activeTab, setActiveTab] = useState<"marker" | "history">("marker");
   const [historyRows, setHistoryRows] = useState<Record<string, unknown>[]>([]);
   const [historyFilter, setHistoryFilter] = useState("");
+
+  const roleLower = String(currentUser?.role || "").toLowerCase();
+  const canMarkAttendance =
+    roleLower === "admin" ||
+    roleLower === "administrator" ||
+    roleLower === "principal" ||
+    roleLower === "hr" ||
+    !currentUser;
 
   // Load departments
   useEffect(() => {
@@ -172,6 +190,7 @@ export default function EmployeeAttendanceStudio({
   }, [activeTab, loadBatchData, loadHistory]);
 
   const updateEntry = (index: number, patch: Partial<EmpAttendanceEntry>) => {
+    if (!canMarkAttendance) return;
     setEntries((prev) => {
       const copy = [...prev];
       copy[index] = { ...copy[index], ...patch };
@@ -180,6 +199,7 @@ export default function EmployeeAttendanceStudio({
   };
 
   const markAll = (status: EmpAttendanceEntry["status"]) => {
+    if (!canMarkAttendance) return;
     setEntries((prev) =>
       prev.map((e) => ({
         ...e,
@@ -191,6 +211,10 @@ export default function EmployeeAttendanceStudio({
   };
 
   const handleSave = async () => {
+    if (!canMarkAttendance) {
+      setToast("Permission Denied: Attendance can only be marked by Admin or HR.");
+      return;
+    }
     if (!supabase || entries.length === 0) return;
     setSaving(true);
     try {
@@ -276,6 +300,28 @@ export default function EmployeeAttendanceStudio({
         </div>
       </section>
 
+      {!canMarkAttendance && (
+        <div
+          style={{
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: "10px",
+            padding: "12px 16px",
+            color: "#1e40af",
+            fontSize: "13px",
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+          }}
+        >
+          <Lock size={18} color="#2563eb" />
+          <span>
+            <b>Read-Only Attendance Log:</b> You can view employee duty times and attendance records. Attendance marking and modification can only be performed by Administrator, Principal, or HR staff.
+          </span>
+        </div>
+      )}
+
       {activeTab === "marker" ? (
         <>
           {/* Controls */}
@@ -350,41 +396,43 @@ export default function EmployeeAttendanceStudio({
               </button>
             </div>
 
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button
-                onClick={() => markAll("present")}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: "6px",
-                  border: "1px solid #bfe9d9",
-                  background: "#effcf7",
-                  color: "#0a8b54",
-                  fontSize: "12px",
-                  fontWeight: 700,
-                }}
-              >
-                ✓ Mark All Present
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving || entries.length === 0}
-                style={{
-                  padding: "6px 16px",
-                  borderRadius: "6px",
-                  border: "none",
-                  background: "var(--blue)",
-                  color: "#fff",
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                }}
-              >
-                <Save size={14} />
-                {saving ? "Saving..." : "Save Log"}
-              </button>
-            </div>
+            {canMarkAttendance && (
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  onClick={() => markAll("present")}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    border: "1px solid #bfe9d9",
+                    background: "#effcf7",
+                    color: "#0a8b54",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                  }}
+                >
+                  ✓ Mark All Present
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || entries.length === 0}
+                  style={{
+                    padding: "6px 16px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: "var(--blue)",
+                    color: "#fff",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <Save size={14} />
+                  {saving ? "Saving..." : "Save Log"}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Metrics */}
@@ -521,7 +569,7 @@ export default function EmployeeAttendanceStudio({
                           <input
                             type="time"
                             value={entry.check_in_time}
-                            disabled={entry.status === "absent"}
+                            disabled={!canMarkAttendance || entry.status === "absent"}
                             onChange={(e) =>
                               updateEntry(idx, { check_in_time: e.target.value })
                             }
@@ -530,6 +578,7 @@ export default function EmployeeAttendanceStudio({
                               borderRadius: "4px",
                               border: "1px solid #d8e1eb",
                               fontSize: "12px",
+                              background: !canMarkAttendance ? "#f8fafc" : "#fff",
                             }}
                           />
                         </td>
@@ -537,7 +586,7 @@ export default function EmployeeAttendanceStudio({
                           <input
                             type="time"
                             value={entry.check_out_time}
-                            disabled={entry.status === "absent"}
+                            disabled={!canMarkAttendance || entry.status === "absent"}
                             onChange={(e) =>
                               updateEntry(idx, { check_out_time: e.target.value })
                             }
@@ -546,6 +595,7 @@ export default function EmployeeAttendanceStudio({
                               borderRadius: "4px",
                               border: "1px solid #d8e1eb",
                               fontSize: "12px",
+                              background: !canMarkAttendance ? "#f8fafc" : "#fff",
                             }}
                           />
                         </td>
@@ -564,6 +614,7 @@ export default function EmployeeAttendanceStudio({
                                 <button
                                   type="button"
                                   key={key}
+                                  disabled={!canMarkAttendance}
                                   onClick={() =>
                                     updateEntry(idx, {
                                       status: key,
@@ -583,7 +634,8 @@ export default function EmployeeAttendanceStudio({
                                     color: active ? borderCol : "var(--muted)",
                                     fontSize: "11px",
                                     fontWeight: active ? 800 : 500,
-                                    cursor: "pointer",
+                                    cursor: canMarkAttendance ? "pointer" : "default",
+                                    opacity: !canMarkAttendance && !active ? 0.6 : 1,
                                   }}
                                 >
                                   {lbl}
@@ -597,6 +649,7 @@ export default function EmployeeAttendanceStudio({
                             type="text"
                             placeholder="Optional note..."
                             value={entry.remarks}
+                            disabled={!canMarkAttendance}
                             onChange={(e) =>
                               updateEntry(idx, { remarks: e.target.value })
                             }
@@ -606,6 +659,7 @@ export default function EmployeeAttendanceStudio({
                               borderRadius: "4px",
                               border: "1px solid #e2e8f0",
                               fontSize: "12px",
+                              background: !canMarkAttendance ? "#f8fafc" : "#fff",
                             }}
                           />
                         </td>

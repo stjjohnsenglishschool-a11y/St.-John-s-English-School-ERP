@@ -1048,7 +1048,7 @@ function App() {
         ) : active === "student_attendance" ? (
           <StudentAttendanceStudio setToast={setToast} />
         ) : active === "employee_attendance" ? (
-          <EmployeeAttendanceStudio setToast={setToast} />
+          <EmployeeAttendanceStudio setToast={setToast} currentUser={currentUser} />
         ) : active === "student_idcard" || active === "teacher_idcard" || active === "escort_card" ? (
           <IDCardStudio
             setToast={setToast}
