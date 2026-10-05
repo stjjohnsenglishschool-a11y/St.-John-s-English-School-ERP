@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Shield, Users, LogOut } from "lucide-react";
+import { X, Shield, LogOut } from "lucide-react";
 import { ALL_SUBMENU_MODULES, label } from "../modules";
 import { Session } from "../lib/supabase";
 
@@ -31,127 +31,25 @@ export default function LoginModal({
   close,
   session,
   currentUser,
-  onSwitchUser,
-  setToast,
   onLogout,
 }: LoginModalProps) {
   const userName =
     currentUser?.user_full_name ||
     currentUser?.user_name ||
     session?.user?.user_metadata?.full_name ||
-    "Administrator";
-  const userRole = currentUser?.role || "admin";
+    "User";
+  const userRole = currentUser?.role || "staff";
   const userRoleLabel = label(userRole);
   const userEmail = currentUser?.user_name
-    ? `${currentUser.user_name}@stjohns.edu`
-    : (session?.user?.email || "admin@stjohns.edu");
+    ? `${currentUser.user_name}`
+    : (session?.user?.email || "Authenticated User");
   const moduleCount =
     currentUser?.allowed_modules?.length ||
     (userRole === "admin" ? ALL_SUBMENU_MODULES.length : 0);
 
-  const demoPresets = [
-    {
-      roleTitle: "Administrator",
-      name: "System Administrator",
-      username: "admin",
-      role: "admin",
-      department: "Management",
-      modules: ALL_SUBMENU_MODULES.map((m) => m.key),
-      color: "#0284c7",
-    },
-    {
-      roleTitle: "Principal",
-      name: "John Stevens",
-      username: "principal",
-      role: "principal",
-      department: "Management",
-      modules: [
-        "school_master",
-        "department_master",
-        "class_master",
-        "student_master",
-        "employee_master",
-        "student_attendance",
-        "employee_attendance",
-        "fees_structure",
-        "fees_collection",
-        "income_master",
-        "notice_automation",
-      ],
-      color: "#7c3aed",
-    },
-    {
-      roleTitle: "Teacher / Faculty",
-      name: "Soma Chakraborty",
-      username: "schakraborty",
-      role: "teacher",
-      department: "Teaching Staff",
-      modules: [
-        "student_master",
-        "student_attendance",
-        "assignments_master",
-        "notice_automation",
-        "student_idcard",
-        "escort_card",
-      ],
-      color: "#16a34a",
-    },
-    {
-      roleTitle: "Accounts Officer",
-      name: "Ramesh Dutta",
-      username: "rdutta",
-      role: "accounts",
-      department: "Accounts & Finance",
-      modules: [
-        "fees_structure",
-        "fees_collection",
-        "expense_master",
-        "income_master",
-        "income_head_master",
-        "salary_slip",
-        "vendor_master",
-      ],
-      color: "#d97706",
-    },
-    {
-      roleTitle: "HR Manager",
-      name: "Anita Roy",
-      username: "hr",
-      role: "hr",
-      department: "Administrative Office",
-      modules: [
-        "employee_master",
-        "employee_attendance",
-        "leave_application",
-        "leave_balance",
-        "salary_slip",
-        "warning_letter",
-        "offer_letter",
-        "employee_document",
-        "teacher_idcard",
-      ],
-      color: "#db2777",
-    },
-    {
-      roleTitle: "Front Office Staff",
-      name: "Sunil Sen",
-      username: "staff",
-      role: "staff",
-      department: "Administrative Office",
-      modules: [
-        "student_master",
-        "student_attendance",
-        "student_idcard",
-        "escort_card",
-        "notice_automation",
-      ],
-      color: "#4f46e5",
-    },
-  ];
-
   return (
     <div className="modal-bg">
-      <div className="login" style={{ maxWidth: "480px" }}>
+      <div className="login" style={{ maxWidth: "440px" }}>
         <button
           type="button"
           className="login-close"
@@ -169,8 +67,8 @@ export default function LoginModal({
 
         <div
           style={{
-            margin: "16px 0 16px",
-            padding: "14px 16px",
+            margin: "16px 0 20px",
+            padding: "16px",
             background: "#f8fafc",
             borderRadius: "12px",
             border: "1px solid #e2e8f0",
@@ -182,7 +80,7 @@ export default function LoginModal({
               display: "flex",
               alignItems: "center",
               gap: "12px",
-              marginBottom: "10px",
+              marginBottom: "12px",
             }}
           >
             <div
@@ -210,6 +108,7 @@ export default function LoginModal({
               </span>
             </div>
           </div>
+
           <div
             style={{
               display: "flex",
@@ -250,100 +149,6 @@ export default function LoginModal({
             </div>
           </div>
         </div>
-
-        {/* Quick Role Switcher */}
-        {onSwitchUser && (
-          <div
-            style={{
-              background: "#fff",
-              border: "1px solid #e2e8f0",
-              borderRadius: "10px",
-              padding: "12px",
-              textAlign: "left",
-              marginBottom: "16px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "11px",
-                fontWeight: 700,
-                color: "#64748b",
-                textTransform: "uppercase",
-                letterSpacing: "0.5px",
-                marginBottom: "8px",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-              }}
-            >
-              <Users size={14} />
-              Quick Switch Role / Account
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, 1fr)",
-                gap: "6px",
-              }}
-            >
-              {demoPresets.map((p) => {
-                const isActive =
-                  (currentUser?.role || "admin").toLowerCase() ===
-                    p.role.toLowerCase() &&
-                  (currentUser?.user_name || "admin").toLowerCase() ===
-                    p.username.toLowerCase();
-                return (
-                  <button
-                    key={p.username}
-                    type="button"
-                    onClick={() => {
-                      onSwitchUser({
-                        user_name: p.username,
-                        user_full_name: p.name,
-                        role: p.role,
-                        allowed_modules: p.modules,
-                        department: p.department,
-                      });
-                    }}
-                    style={{
-                      background: isActive ? "#eff6ff" : "#f8fafc",
-                      border: `1px solid ${isActive ? "#3b82f6" : "#cbd5e1"}`,
-                      borderRadius: "6px",
-                      padding: "6px 8px",
-                      textAlign: "left",
-                      cursor: "pointer",
-                      fontSize: "11px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: "8px",
-                        height: "8px",
-                        borderRadius: "50%",
-                        background: p.color,
-                        flexShrink: 0,
-                      }}
-                    />
-                    <div
-                      style={{
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      <b style={{ color: isActive ? "#1d4ed8" : "#334155" }}>
-                        {p.roleTitle}
-                      </b>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <button
