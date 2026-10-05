@@ -494,11 +494,26 @@ function App() {
 
       let rowsData = data || [];
       if (mod.table === "user_master" && rowsData) {
-        rowsData = rowsData.map((r: Row) => ({
-          ...r,
-          allowed_modules: r.allowed_modules || r.active_module || [],
-          active_module: r.active_module || r.allowed_modules || [],
-        }));
+        rowsData = rowsData.map((r: Row) => {
+          let modulesList: string[] = [];
+          const raw = r.allowed_modules ?? r.active_module;
+          if (Array.isArray(raw)) {
+            modulesList = raw.map(String);
+          } else if (typeof raw === "string" && raw.trim().length > 0) {
+            try {
+              const p = JSON.parse(raw);
+              if (Array.isArray(p)) modulesList = p.map(String);
+              else modulesList = raw.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
+            } catch {
+              modulesList = raw.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
+            }
+          }
+          return {
+            ...r,
+            allowed_modules: modulesList,
+            active_module: modulesList,
+          };
+        });
       }
       setRows(rowsData);
       localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(rowsData));
@@ -2622,6 +2637,24 @@ function RecordModal({
       ])
     );
 
+    if (mod.table === "user_master") {
+      const rawMods = row?.allowed_modules ?? row?.active_module;
+      let parsedArr: string[] = [];
+      if (Array.isArray(rawMods)) {
+        parsedArr = rawMods.map(String);
+      } else if (typeof rawMods === "string" && rawMods.trim().length > 0) {
+        try {
+          const p = JSON.parse(rawMods);
+          if (Array.isArray(p)) parsedArr = p.map(String);
+          else parsedArr = rawMods.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
+        } catch {
+          parsedArr = rawMods.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
+        }
+      }
+      initial.allowed_modules = parsedArr;
+      initial.active_module = parsedArr;
+    }
+
     if (mod.table === "leave_application" && mode === "create") {
       initial.status = "pending";
       initial.leave_type = initial.leave_type || "Casual Leave (CL)";
@@ -3134,11 +3167,18 @@ function FormField({
 
   // Custom Multi-Select UI for Module Permission Option
   if (field.key === "allowed_modules" || field.key === "active_module") {
-    const selectedModules: string[] = Array.isArray(value)
-      ? (value as string[])
-      : typeof value === "string" && value.length > 0
-      ? value.split(",").map((s) => s.trim())
-      : [];
+    let selectedModules: string[] = [];
+    if (Array.isArray(value)) {
+      selectedModules = value.map(String);
+    } else if (typeof value === "string" && value.trim().length > 0) {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) selectedModules = parsed.map(String);
+        else selectedModules = value.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
+      } catch {
+        selectedModules = value.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
+      }
+    }
 
     const toggleModule = (modKey: string) => {
       if (selectedModules.includes(modKey)) {

@@ -215,12 +215,26 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
     setError('')
   }
 
-  const handleDirectRoleLogin = (preset: (typeof PRESET_ROLES)[0]) => {
+  const handleDirectRoleLogin = async (preset: (typeof PRESET_ROLES)[0]) => {
+    let allowed = preset.modules
+    try {
+      const users = await fetchCollectionData('user_master')
+      if (Array.isArray(users)) {
+        const found = users.find((u: any) => {
+          const uName = String(u.user_name || '').toLowerCase()
+          return uName === preset.username.toLowerCase() || uName === preset.role.toLowerCase()
+        })
+        if (found && (found.allowed_modules !== undefined || found.active_module !== undefined)) {
+          allowed = parseModules(found.allowed_modules ?? found.active_module)
+        }
+      }
+    } catch {}
+
     const sessionObj: LoggedInUserSession = {
       user_name: preset.username,
       user_full_name: preset.name,
       role: preset.role,
-      allowed_modules: preset.modules,
+      allowed_modules: allowed,
       department: preset.department,
     }
     performLogin(sessionObj)
