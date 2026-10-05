@@ -61,7 +61,8 @@ import {
   isSupabaseConfigured,
   supabase,
   checkSupabaseTableStatus,
-  SUPABASE_FEES_STRUCTURE_SQL
+  SUPABASE_FEES_STRUCTURE_SQL,
+  normalizeUserModules
 } from "./lib/supabase";
 import { seedSupabaseDatabase } from "./lib/seedDatabase";
 import { ALL_SUBMENU_MODULES, Field, label, moduleName, modules, navGroups } from "./modules";
@@ -217,21 +218,9 @@ function App() {
         });
 
         if (found) {
-          const rawMods = found.allowed_modules ?? found.active_module;
-          let parsedMods: string[] = [];
-          if (Array.isArray(rawMods)) {
-            parsedMods = rawMods.map(String);
-          } else if (typeof rawMods === "string" && rawMods.trim().length > 0) {
-            try {
-              const p = JSON.parse(rawMods);
-              if (Array.isArray(p)) parsedMods = p.map(String);
-              else parsedMods = rawMods.split(",").map((s) => s.trim()).filter(Boolean);
-            } catch {
-              parsedMods = rawMods.split(",").map((s) => s.trim()).filter(Boolean);
-            }
-          }
+          const parsedMods = normalizeUserModules(found);
 
-          if (rawMods !== undefined && rawMods !== null) {
+          if (parsedMods !== undefined) {
             setCurrentUser((prev) => {
               if (!prev) return prev;
               const isSame =
@@ -495,19 +484,7 @@ function App() {
       let rowsData = data || [];
       if (mod.table === "user_master" && rowsData) {
         rowsData = rowsData.map((r: Row) => {
-          let modulesList: string[] = [];
-          const raw = r.allowed_modules ?? r.active_module;
-          if (Array.isArray(raw)) {
-            modulesList = raw.map(String);
-          } else if (typeof raw === "string" && raw.trim().length > 0) {
-            try {
-              const p = JSON.parse(raw);
-              if (Array.isArray(p)) modulesList = p.map(String);
-              else modulesList = raw.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
-            } catch {
-              modulesList = raw.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
-            }
-          }
+          const modulesList = normalizeUserModules(r);
           return {
             ...r,
             allowed_modules: modulesList,
@@ -580,11 +557,14 @@ function App() {
     const unsub = subscribeToCollection(mod.table, (items) => {
       let rowsData = items || [];
       if (mod.table === "user_master" && rowsData) {
-        rowsData = rowsData.map((r: Row) => ({
-          ...r,
-          allowed_modules: r.allowed_modules || r.active_module || [],
-          active_module: r.active_module || r.allowed_modules || [],
-        }));
+        rowsData = rowsData.map((r: Row) => {
+          const modulesList = normalizeUserModules(r);
+          return {
+            ...r,
+            allowed_modules: modulesList,
+            active_module: modulesList,
+          };
+        });
       }
       setRows(rowsData);
       localStorage.setItem(`sjes_table_${mod.table}`, JSON.stringify(rowsData));
@@ -2672,19 +2652,7 @@ function RecordModal({
     );
 
     if (mod.table === "user_master") {
-      const rawMods = row?.allowed_modules ?? row?.active_module;
-      let parsedArr: string[] = [];
-      if (Array.isArray(rawMods)) {
-        parsedArr = rawMods.map(String);
-      } else if (typeof rawMods === "string" && rawMods.trim().length > 0) {
-        try {
-          const p = JSON.parse(rawMods);
-          if (Array.isArray(p)) parsedArr = p.map(String);
-          else parsedArr = rawMods.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
-        } catch {
-          parsedArr = rawMods.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
-        }
-      }
+      const parsedArr = normalizeUserModules(row);
       initial.allowed_modules = parsedArr;
       initial.active_module = parsedArr;
     }

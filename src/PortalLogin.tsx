@@ -16,7 +16,7 @@ import {
   Shield,
   ArrowRight,
 } from 'lucide-react'
-import { logActivity, fetchCollectionData } from './lib/supabase'
+import { logActivity, fetchCollectionData, normalizeUserModules } from './lib/supabase'
 import { ALL_MODULE_KEYS } from './modules'
 
 const logo = 'https://res.cloudinary.com/oilisvfi/image/upload/v1786000074/logo_final_frchld.jpg'
@@ -225,7 +225,7 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
           return uName === preset.username.toLowerCase() || uName === preset.role.toLowerCase()
         })
         if (found && (found.allowed_modules !== undefined || found.active_module !== undefined)) {
-          allowed = parseModules(found.allowed_modules ?? found.active_module)
+          allowed = normalizeUserModules(found)
         }
       }
     } catch {}
@@ -315,15 +315,14 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
               (found.role && password === `${found.role}123`)
 
             if (passMatch) {
-              const rawMods = found.allowed_modules ?? found.active_module
-              const modules = parseModules(rawMods)
+              const modules = normalizeUserModules(found)
               const userRoleStr = String(found.role || 'staff').toLowerCase()
               matchedUser = {
                 user_name: String(found.user_name || login),
                 user_full_name: String(found.user_full_name || found.user_name || login),
                 role: userRoleStr,
                 allowed_modules:
-                  rawMods !== undefined && rawMods !== null
+                  modules.length > 0
                     ? modules
                     : userRoleStr === 'admin'
                     ? ALL_MODULE_KEYS

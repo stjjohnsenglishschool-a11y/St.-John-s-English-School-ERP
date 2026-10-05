@@ -27,6 +27,36 @@ export function isUUID(str: any): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
 }
 
+export function normalizeUserModules(row: any): string[] {
+  if (!row) return []
+  // Check active_module or allowed_modules
+  const raw = row.active_module ?? row.allowed_modules
+  if (Array.isArray(raw)) {
+    return raw.map(String)
+  }
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    try {
+      const p = JSON.parse(raw)
+      if (Array.isArray(p)) return p.map(String)
+      return raw.split(',').map((s) => s.replace(/["'[\]]/g, '').trim()).filter(Boolean)
+    } catch {
+      return raw.split(',').map((s) => s.replace(/["'[\]]/g, '').trim()).filter(Boolean)
+    }
+  }
+  const alt = row.allowed_modules
+  if (Array.isArray(alt)) return alt.map(String)
+  if (typeof alt === 'string' && alt.trim().length > 0) {
+    try {
+      const p = JSON.parse(alt)
+      if (Array.isArray(p)) return p.map(String)
+      return alt.split(',').map((s) => s.replace(/["'[\]]/g, '').trim()).filter(Boolean)
+    } catch {
+      return alt.split(',').map((s) => s.replace(/["'[\]]/g, '').trim()).filter(Boolean)
+    }
+  }
+  return []
+}
+
 /**
  * Exact schema columns present in Supabase PostgreSQL tables
  */
@@ -759,19 +789,7 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
       }
     }
     if (collectionName === 'user_master') {
-      const rawMod = row.allowed_modules ?? row.active_module
-      let parsedMods: string[] = []
-      if (Array.isArray(rawMod)) {
-        parsedMods = rawMod.map(String)
-      } else if (typeof rawMod === 'string' && rawMod.trim().length > 0) {
-        try {
-          const p = JSON.parse(rawMod)
-          if (Array.isArray(p)) parsedMods = p.map(String)
-          else parsedMods = rawMod.split(',').map((s) => s.trim()).filter(Boolean)
-        } catch {
-          parsedMods = rawMod.split(',').map((s) => s.trim()).filter(Boolean)
-        }
-      }
+      const parsedMods = normalizeUserModules(row)
       row.allowed_modules = parsedMods
       row.active_module = parsedMods
     }
@@ -1039,9 +1057,29 @@ export async function saveDocument(
         const raw = localStorage.getItem(cacheKey)
         const list: any[] = raw ? JSON.parse(raw) : []
         const savedRecord = { ...data, ...(res.data || {}) }
+        if (collectionName === 'user_master') {
+          const uMods = normalizeUserModules(savedRecord)
+          savedRecord.allowed_modules = uMods
+          savedRecord.active_module = uMods
+        }
         const idVal = savedRecord[primaryKeyName] || docId
-        if (idVal) {
-          const idx = list.findIndex((x) => x[primaryKeyName] === idVal || x._docId === idVal)
+        if (idVal || savedRecord.user_name) {
+          const idx = list.findIndex(
+            (x) =>
+              (idVal && (x[primaryKeyName] === idVal || x._docId === idVal)) ||
+              (collectionName === 'user_master' &&
+                x.user_name &&
+                savedRecord.user_name &&
+                String(x.user_name).toLowerCase() === String(savedRecord.user_name).toLowerCase()) ||
+              (collectionName === 'employee_master' &&
+                x.emp_code &&
+                savedRecord.emp_code &&
+                x.emp_code === savedRecord.emp_code) ||
+              (collectionName === 'student_master' &&
+                x.admission_no &&
+                savedRecord.admission_no &&
+                x.admission_no === savedRecord.admission_no)
+          )
           if (idx >= 0) list[idx] = savedRecord
           else list.unshift(savedRecord)
           localStorage.setItem(cacheKey, JSON.stringify(list))
