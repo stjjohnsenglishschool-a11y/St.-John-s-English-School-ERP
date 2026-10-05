@@ -149,15 +149,17 @@ export default function PortalLogin({ onLoginSuccess }: PortalLoginProps) {
       <div className="auth-orb one" />
       <div className="auth-orb two" />
       <section className="auth-shell">
-        <aside>
-          <img src={logo} alt="St. John's English School logo" />
-          <span>ST. JOHN'S ENGLISH SCHOOL</span>
-          <h1>
+        <aside className="auth-brand-panel">
+          <img src={logo} alt="St. John's English School logo" className="auth-school-logo" />
+          <span className="auth-school-title">ST. JOHN'S ENGLISH SCHOOL</span>
+          <h1 className="auth-main-heading">
             One school.
             <br />
-            One connected system.
+            One connected
+            <br />
+            system.
           </h1>
-          <p>
+          <p className="auth-subtext">
             Role-based school ERP portal with fine-grained access control for
             Administrators, Principals, Teachers, Accounts, and HR staff.
           </p>
