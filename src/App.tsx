@@ -929,6 +929,21 @@ function App() {
         module: mod.table,
       });
 
+      if (mod.table === "user_master") {
+        const tableKey = "sjes_table_user_master";
+        const existingStr = localStorage.getItem(tableKey);
+        let currentRows: Row[] = existingStr ? JSON.parse(existingStr) : rows;
+        const modulesList = payload.allowed_modules;
+        currentRows = currentRows.map((r) => {
+          const match =
+            (payload.user_id && r.user_id === payload.user_id) ||
+            (payload.user_name && String(r.user_name || "").toLowerCase() === String(payload.user_name).toLowerCase());
+          return match ? { ...r, ...payload, allowed_modules: modulesList, active_module: modulesList } : r;
+        });
+        localStorage.setItem(tableKey, JSON.stringify(currentRows));
+        setRows(currentRows);
+      }
+
       setModal(null);
       setToast(isEdit ? "Record updated in database" : "Record created in database");
       await refresh();
