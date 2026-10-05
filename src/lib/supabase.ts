@@ -182,6 +182,10 @@ export function sanitizePayload(record: Record<string, any>, tableName?: string)
     if (key === '_docId' || key === '_id') {
       continue
     }
+    // Prevent overwriting formatted user_master module permissions
+    if (tableName === 'user_master' && (key === 'active_module' || key === 'allowed_modules')) {
+      continue
+    }
     // If the table has known columns, filter out any column that doesn't exist in PostgreSQL
     if (knownCols && !knownCols.has(key)) {
       continue
@@ -314,19 +318,57 @@ export async function saveSupabaseRecord(
     let resData: any = null
 
     // Perform exact update query matching primary keys
-    if (tableName === 'user_master' && record.user_name) {
-      const { data, error } = await supabase
-        .from(tableName)
-        .update(record)
-        .eq('user_name', record.user_name)
-        .select()
+    if (tableName === 'user_master') {
+      let isSaved = false
 
-      if (!error && data && data.length > 0) {
-        resData = data[0]
-      } else {
-        const upsertRes = await resilientUpsert(tableName, [record])
-        if (upsertRes.error) resError = upsertRes.error.message
-        else resData = upsertRes.data?.[0]
+      // 1. Try update by user_id if valid UUID
+      if (record.user_id && isUUID(record.user_id)) {
+        const { data, error } = await supabase
+          .from(tableName)
+          .update(record)
+          .eq('user_id', record.user_id)
+          .select()
+
+        if (!error && data && data.length > 0) {
+          resData = data[0]
+          isSaved = true
+        }
+      }
+
+      // 2. Try update by user_name
+      if (!isSaved && record.user_name) {
+        const { data, error } = await supabase
+          .from(tableName)
+          .update(record)
+          .eq('user_name', record.user_name)
+          .select()
+
+        if (!error && data && data.length > 0) {
+          resData = data[0]
+          isSaved = true
+        }
+      }
+
+      // 3. If update returned 0 rows (user doesn't exist yet in Supabase), perform direct insert
+      if (!isSaved) {
+        const insertPayload = { ...record }
+        if (!insertPayload.user_id || !isUUID(insertPayload.user_id)) {
+          delete insertPayload.user_id
+        }
+        const { data: insertData, error: insertError } = await supabase
+          .from(tableName)
+          .insert([insertPayload])
+          .select()
+
+        if (!insertError && insertData && insertData.length > 0) {
+          resData = insertData[0]
+          isSaved = true
+        } else {
+          // Fallback to resilientUpsert
+          const upsertRes = await resilientUpsert(tableName, [record])
+          if (upsertRes.error) resError = upsertRes.error.message || insertError?.message
+          else resData = upsertRes.data?.[0]
+        }
       }
     } else if (record.emp_code) {
       const { data, error } = await supabase
