@@ -203,6 +203,52 @@ function App() {
     return r === "admin" || r === "administrator" || name === "admin";
   }, [currentUser]);
 
+  const userRole = (currentUser?.role || "").toLowerCase().trim();
+  const isStaffOrTeacher = !isUserAdmin && (userRole === "teacher" || userRole === "staff" || userRole === "faculty");
+  const isAdminOrPrincipalOrHr = isUserAdmin || userRole === "principal" || userRole === "hr";
+
+  // Cache employee directory to resolve current user's staff identity
+  const [employeeList, setEmployeeList] = useState<Array<Record<string, unknown>>>([]);
+
+  useEffect(() => {
+    fetchCollectionData("employee_master")
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setEmployeeList(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const currentEmployeeRecord = useMemo(() => {
+    if (!currentUser || !employeeList.length) return null;
+    const uName = (currentUser.user_full_name || "").toLowerCase().trim();
+    const uUser = (currentUser.user_name || "").toLowerCase().trim();
+
+    return (
+      employeeList.find((e: any) => {
+        const eFull = String(
+          e.full_name || `${e.first_name || ""} ${e.last_name || ""}`
+        )
+          .toLowerCase()
+          .trim();
+        const eCode = String(e.emp_code || e.emp_id || "")
+          .toLowerCase()
+          .trim();
+        const eEmail = String(e.official_email || e.personal_email || "")
+          .toLowerCase()
+          .trim();
+        return (
+          (uName && eFull === uName) ||
+          (uName && eFull.includes(uName)) ||
+          (uName && uName.includes(eFull)) ||
+          (uUser && eCode === uUser) ||
+          (uUser && eEmail.startsWith(uUser))
+        );
+      }) || null
+    );
+  }, [currentUser, employeeList]);
+
   const allowedModuleKeys = useMemo(() => {
     if (isUserAdmin) return null; // null means unrestricted full access
     const list = currentUser?.allowed_modules || [];
@@ -490,6 +536,32 @@ function App() {
 
   const filtered = useMemo(() => {
     let list = rows;
+
+    // Strict Data Privacy: If a Teacher / Staff is logged in, restrict leave applications and leave balances to their own records only
+    if (isStaffOrTeacher && mod) {
+      if (mod.table === "leave_application" || mod.table === "leave_balance") {
+        const myName = String(
+          currentEmployeeRecord?.full_name ||
+            `${currentEmployeeRecord?.first_name || ""} ${currentEmployeeRecord?.last_name || ""}`.trim() ||
+            currentUser?.user_full_name ||
+            currentUser?.user_name ||
+            ""
+        ).toLowerCase().trim();
+        const myId = String(currentEmployeeRecord?.emp_id || currentEmployeeRecord?.emp_code || "").toLowerCase().trim();
+
+        list = list.filter((r) => {
+          const rName = String(r.employee_name || "").toLowerCase().trim();
+          const rId = String(r.emp_id || r.emp_code || "").toLowerCase().trim();
+          return (
+            (myId && rId === myId) ||
+            (myName && rName === myName) ||
+            (myName && rName.includes(myName)) ||
+            (myName && myName.includes(rName))
+          );
+        });
+      }
+    }
+
     if (query.trim()) {
       const q = query.toLowerCase();
       list = list.filter((r) =>
@@ -1107,6 +1179,8 @@ function App() {
           <ProductionDashboard
             choose={choose}
             userName={currentUser?.user_full_name || currentUser?.user_name || "Administrator"}
+            userRole={currentUser?.role || (isUserAdmin ? "admin" : "teacher")}
+            allowedModules={currentUser?.allowed_modules}
           />
         ) : active === "school_master" ? (
           <SchoolMaster setToast={setToast} />
@@ -1469,7 +1543,7 @@ function App() {
                 printReceipt={(row) => setReceiptModalRow(row)}
                 printSlip={(row) => setSlipModalRow(row)}
                 printLetter={(type, row) => setLetterModal({ type, row })}
-                onReviewLeave={(row) => setApprovalModalRow(row)}
+                onReviewLeave={isAdminOrPrincipalOrHr ? (row) => setApprovalModalRow(row) : undefined}
               />
 
               {/* Pagination Controls */}
@@ -1559,6 +1633,9 @@ function App() {
           mode={modal.mode}
           mod={mod}
           row={modal.row}
+          currentUser={currentUser}
+          currentEmployeeRecord={currentEmployeeRecord}
+          isStaffOrTeacher={isStaffOrTeacher}
           close={() => setModal(null)}
           save={save}
         />
@@ -2060,17 +2137,23 @@ function RecordModal({
   mode,
   mod,
   row,
+  currentUser,
+  currentEmployeeRecord,
+  isStaffOrTeacher,
   close,
   save,
 }: {
   mode: "create" | "edit" | "view";
   mod: (typeof modules)[string];
   row?: Row;
+  currentUser?: { user_name: string; user_full_name: string; role: string; allowed_modules: string[] } | null;
+  currentEmployeeRecord?: Record<string, unknown> | null;
+  isStaffOrTeacher?: boolean;
   close: () => void;
   save: (v: Row) => void;
 }) {
-  const [values, setValues] = useState<Row>(() =>
-    Object.fromEntries(
+  const [values, setValues] = useState<Row>(() => {
+    const initial = Object.fromEntries(
       mod.fields.map((x) => [
         x.key,
         row?.[x.key] ??
@@ -2084,8 +2167,33 @@ function RecordModal({
             ? []
             : ""),
       ])
-    )
-  );
+    );
+
+    if (mod.table === "leave_application" && mode === "create") {
+      initial.status = "pending";
+      initial.leave_type = initial.leave_type || "Casual Leave (CL)";
+      const todayStr = new Date().toISOString().slice(0, 10);
+      initial.from_date = initial.from_date || todayStr;
+      initial.to_date = initial.to_date || todayStr;
+      initial.total_days = 1;
+      initial.approved_by = "";
+
+      // Auto-lock to current teacher/staff identity
+      if (isStaffOrTeacher || currentEmployeeRecord) {
+        const empId = String(currentEmployeeRecord?.emp_id || currentEmployeeRecord?.emp_code || "");
+        const empName = String(
+          currentEmployeeRecord?.full_name ||
+            `${currentEmployeeRecord?.first_name || ""} ${currentEmployeeRecord?.last_name || ""}`.trim() ||
+            currentUser?.user_full_name ||
+            ""
+        );
+        if (empId) initial.emp_id = empId;
+        if (empName) initial.employee_name = empName;
+      }
+    }
+
+    return initial;
+  });
 
   // If table is fees_collection, use the specialized FeeCollectionModal
   if (mod.table === "fees_collection") {
@@ -2411,6 +2519,11 @@ function RecordModal({
             <FormField
               key={field.key}
               field={field}
+              tableName={mod.table}
+              mode={mode}
+              currentUser={currentUser}
+              currentEmployeeRecord={currentEmployeeRecord}
+              isStaffOrTeacher={isStaffOrTeacher}
               value={values[field.key]}
               disabled={mode === "view"}
               change={(v) => updateField(field.key, v)}
@@ -2425,7 +2538,7 @@ function RecordModal({
           </button>
           {mode !== "view" && (
             <button className="save" type="submit">
-              {mode === "edit" ? "Save changes" : "Create record"}
+              {mode === "edit" ? "Save changes" : mod.table === "leave_application" ? "Submit Leave Application" : "Create record"}
             </button>
           )}
         </footer>
@@ -2436,6 +2549,11 @@ function RecordModal({
 
 function FormField({
   field,
+  tableName,
+  mode,
+  currentUser,
+  currentEmployeeRecord,
+  isStaffOrTeacher,
   value,
   disabled,
   change,
@@ -2443,6 +2561,11 @@ function FormField({
 }: {
   key?: string;
   field: Field;
+  tableName?: string;
+  mode?: "create" | "edit" | "view";
+  currentUser?: { user_name: string; user_full_name: string; role: string; allowed_modules: string[] } | null;
+  currentEmployeeRecord?: Record<string, unknown> | null;
+  isStaffOrTeacher?: boolean;
   value: unknown;
   disabled: boolean;
   change: (v: unknown) => void;
@@ -2675,6 +2798,187 @@ function FormField({
         )}
       </div>
     );
+  }
+
+  // Leave Application: Lock Applicant to Logged In Teacher/Staff
+  if (tableName === "leave_application" && field.key === "emp_id" && isStaffOrTeacher) {
+    const empName =
+      String(currentEmployeeRecord?.full_name || "") ||
+      `${String(currentEmployeeRecord?.first_name || "")} ${String(currentEmployeeRecord?.last_name || "")}`.trim() ||
+      currentUser?.user_full_name ||
+      "Staff Member";
+    const empCode = String(currentEmployeeRecord?.emp_code || currentEmployeeRecord?.emp_id || value || "");
+
+    return (
+      <label>
+        <span>
+          Applicant Employee <b>*</b>
+        </span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            padding: "9px 12px",
+            background: "#f0fdf4",
+            border: "1.5px solid #86efac",
+            borderRadius: "8px",
+            minHeight: "38px",
+            boxSizing: "border-box",
+          }}
+        >
+          <UserRoundCheck size={16} color="#16a34a" />
+          <div>
+            <b style={{ color: "#15803d", fontSize: "13px" }}>
+              {empCode ? `${empCode} — ` : ""}{empName}
+            </b>
+            <span style={{ fontSize: "11px", color: "#166534", marginLeft: "8px", fontWeight: 600 }}>
+              (Your Official Staff Account)
+            </span>
+          </div>
+        </div>
+      </label>
+    );
+  }
+
+  // Leave Application: Lock Employee Name to Logged In Teacher/Staff
+  if (tableName === "leave_application" && field.key === "employee_name" && isStaffOrTeacher) {
+    const empName =
+      String(value || "") ||
+      String(currentEmployeeRecord?.full_name || "") ||
+      `${String(currentEmployeeRecord?.first_name || "")} ${String(currentEmployeeRecord?.last_name || "")}`.trim() ||
+      currentUser?.user_full_name ||
+      "";
+
+    return (
+      <label>
+        <span>
+          {field.label} <b>*</b>
+        </span>
+        <input
+          disabled={true}
+          type="text"
+          value={empName}
+          style={{ background: "#f8fafc", color: "#334155", fontWeight: 700 }}
+        />
+      </label>
+    );
+  }
+
+  // Leave Application Status field
+  if (tableName === "leave_application" && field.key === "status") {
+    if (mode === "create") {
+      return (
+        <label>
+          <span>
+            Application Status <b>*</b>
+          </span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "9px 12px",
+              background: "#fef3c7",
+              border: "1.5px solid #fcd34d",
+              borderRadius: "8px",
+              color: "#92400e",
+              fontSize: "12px",
+              fontWeight: 700,
+              minHeight: "38px",
+              boxSizing: "border-box",
+            }}
+          >
+            <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "#f59e0b" }} />
+            <span>Pending Principal Approval (Auto-submitted)</span>
+          </div>
+        </label>
+      );
+    }
+    if (disabled) {
+      const st = String(value || "pending").toLowerCase();
+      const isApp = st === "approved";
+      const isRej = st === "rejected";
+      return (
+        <label>
+          <span>Application Status</span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "9px 12px",
+              background: isApp ? "#f0fdf4" : isRej ? "#fef2f2" : "#fef3c7",
+              border: `1.5px solid ${isApp ? "#86efac" : isRej ? "#fca5a5" : "#fcd34d"}`,
+              borderRadius: "8px",
+              color: isApp ? "#15803d" : isRej ? "#b91c1c" : "#92400e",
+              fontSize: "12px",
+              fontWeight: 800,
+              minHeight: "38px",
+              boxSizing: "border-box",
+              textTransform: "uppercase",
+            }}
+          >
+            <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: isApp ? "#16a34a" : isRej ? "#dc2626" : "#f59e0b" }} />
+            <span>{st}</span>
+          </div>
+        </label>
+      );
+    }
+  }
+
+  // Leave Application Approved By field
+  if (tableName === "leave_application" && field.key === "approved_by") {
+    if (mode === "create") {
+      return (
+        <label>
+          <span>Approved By</span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "9px 12px",
+              background: "#f8fafc",
+              border: "1px dashed #cbd5e1",
+              borderRadius: "8px",
+              color: "#64748b",
+              fontSize: "12px",
+              fontWeight: 600,
+              minHeight: "38px",
+              boxSizing: "border-box",
+            }}
+          >
+            <ShieldCheck size={16} color="#94a3b8" />
+            <span>Assigned automatically upon Principal review</span>
+          </div>
+        </label>
+      );
+    }
+    if (disabled && !value) {
+      return (
+        <label>
+          <span>Approved By</span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "9px 12px",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "8px",
+              color: "#94a3b8",
+              fontSize: "12px",
+              minHeight: "38px",
+              boxSizing: "border-box",
+            }}
+          >
+            <span>Awaiting Principal Approval</span>
+          </div>
+        </label>
+      );
+    }
   }
 
   // Principal Approval text field
