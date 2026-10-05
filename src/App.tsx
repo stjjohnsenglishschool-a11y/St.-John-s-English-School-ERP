@@ -1,6 +1,4 @@
 import {
-  ChangeEvent,
-  FormEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -8,50 +6,15 @@ import {
   useState,
 } from "react";
 import {
-  Activity,
-  AlertTriangle,
-  ArrowUpDown,
-  Bell,
-  BookOpenCheck,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  CircleHelp,
-  ClipboardCheck,
-  Cloud,
   Download,
-  Edit3,
-  Eye,
-  EyeOff,
-  ExternalLink,
-  File,
-  FileBarChart,
-  FileText,
-  GraduationCap,
-  IndianRupee,
-  LayoutDashboard,
-  Lock,
-  LogIn,
-  LogOut,
-  Menu,
-  MessageCircle,
-  Paperclip,
   Plus,
-  Printer,
-  RefreshCw,
   Search,
-  Shield,
-  ShieldCheck,
   Sparkles,
-  Trash2,
   Upload,
-  UserRoundCheck,
-  Users,
   X,
 } from "lucide-react";
 import {
   logActivity,
-  uploadToFirebaseStorage,
   fetchCollectionData,
   saveDocument,
   deleteDocument,
@@ -60,13 +23,11 @@ import {
   Session,
   isSupabaseConfigured,
   supabase,
-  checkSupabaseTableStatus,
-  SUPABASE_FEES_STRUCTURE_SQL,
   normalizeUserModules
 } from "./lib/supabase";
 import { seedSupabaseDatabase } from "./lib/seedDatabase";
-import { ALL_SUBMENU_MODULES, Field, label, moduleName, modules, navGroups } from "./modules";
-import { getCurrentAcademicYear, ACADEMIC_YEAR_OPTIONS } from "./lib/academicYear";
+import { label, moduleName, modules, navGroups } from "./modules";
+import { getCurrentAcademicYear } from "./lib/academicYear";
 import IDCardStudio from "./IDCardStudio";
 import PortalLogin from "./PortalLogin";
 import ProductionDashboard from "./ProductionDashboard";
@@ -75,7 +36,6 @@ import DepartmentMasterStudio from "./components/DepartmentMasterStudio";
 import StudentAttendanceStudio from "./components/StudentAttendanceStudio";
 import EmployeeAttendanceStudio from "./components/EmployeeAttendanceStudio";
 import FeeReceiptModal from "./components/FeeReceiptModal";
-import FeeCollectionModal from "./components/FeeCollectionModal";
 import SalarySlipModal from "./components/SalarySlipModal";
 import LeaveApprovalModal from "./components/LeaveApprovalModal";
 import LetterPrintModal from "./components/LetterPrintModal";
@@ -85,11 +45,7 @@ import CsvImportModal from "./components/CsvImportModal";
 import IncomeHeadUploadModal from "./components/IncomeHeadUploadModal";
 import DigitalVerificationModal, { VerificationData } from "./components/DigitalVerificationModal";
 import { downloadSampleCsv, sanitizeRecordForTable } from "./lib/csvUtils";
-import { formatImageUrl, handleImageError } from "./lib/imageUtils";
 import { getLeaveSession } from "./lib/leaveSalaryRules";
-import { fetchStaffFromWebApp, fetchStudentsFromWebApp } from "./lib/googleDriveSheets";
-import { DEFAULT_INCOME_HEADS } from "./lib/supabase";
-import NavGroupIcon from "./components/NavGroupIcon";
 import RecordModal from "./components/RecordModal";
 import DataTable, { PageHeader } from "./components/DataTable";
 import LoginModal from "./components/LoginModal";
@@ -97,45 +53,13 @@ import AppHeader from "./components/AppHeader";
 import AppSidebar from "./components/AppSidebar";
 import AppContextBar from "./components/AppContextBar";
 
+import { parseCsv, normaliseCsvHeader } from "./app/csvParser";
+import { FeesStructureNotice } from "./app/FeesStructureNotice";
+import { LeaveNotices } from "./app/LeaveNotices";
+import { LetterNotices } from "./app/LetterNotices";
+import { PaginationControls } from "./app/PaginationControls";
+
 type Row = Record<string, unknown>;
-
-const logo =
-  "https://res.cloudinary.com/oilisvfi/image/upload/v1786000074/logo_final_frchld.jpg";
-
-function parseCsv(text: string) {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let quoted = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index];
-    if (character === '"') {
-      if (quoted && text[index + 1] === '"') {
-        cell += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (character === "," && !quoted) {
-      row.push(cell.trim());
-      cell = "";
-    } else if ((character === "\n" || character === "\r") && !quoted) {
-      if (character === "\r" && text[index + 1] === "\n") index += 1;
-      row.push(cell.trim());
-      if (row.some(Boolean)) rows.push(row);
-      row = [];
-      cell = "";
-    } else {
-      cell += character;
-    }
-  }
-  row.push(cell.trim());
-  if (row.some(Boolean)) rows.push(row);
-  return rows;
-}
-
-const normaliseCsvHeader = (value: string) =>
-  value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 function App() {
   const [active, setActive] = useState("Overview");
@@ -312,6 +236,7 @@ function App() {
       setToast(`Module '${moduleName(active)}' is not permitted for your user account.`);
     }
   }, [active, allowedModuleKeys]);
+
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
@@ -364,16 +289,6 @@ function App() {
 
   const [feesTableExists, setFeesTableExists] = useState<boolean | null>(null);
   const [feesTableChecking, setFeesTableChecking] = useState(false);
-
-  useEffect(() => {
-    if (active === "fees_structure") {
-      setFeesTableChecking(true);
-      checkSupabaseTableStatus("fees_structure").then((res) => {
-        setFeesTableExists(res.exists);
-        setFeesTableChecking(false);
-      });
-    }
-  }, [active]);
 
   useEffect(() => {
     setAuthReady(true);
@@ -718,9 +633,6 @@ function App() {
           (mod.table === "employee_master" && (modal?.row?.emp_code || modal?.row?.emp_id)) ||
           (mod.table === "student_master" && (modal?.row?.admission_no || modal?.row?.student_id))
         );
-      const rowId =
-        modal?.row?.[mod.primaryKey] ||
-        (mod.table === "user_master" ? modal?.row?.user_name : undefined);
 
       // Build sanitized payload matching column types
       const payload: Record<string, unknown> = {};
@@ -948,28 +860,6 @@ function App() {
     }
   };
 
-  const exportCsv = () => {
-    if (!mod) return;
-    const cols = mod.columns;
-    const csv = [
-      cols.map(label),
-      ...filtered.map((r) =>
-        cols.map((c) =>
-          String(r[c] ?? "")
-            .split('"')
-            .join('""')
-        )
-      ),
-    ]
-      .map((x) => x.map((y) => `"${y}"`).join(","))
-      .join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `${mod.table}.csv`;
-    a.click();
-    setToast("CSV downloaded");
-  };
-
   const importCsv = async (file?: File) => {
     if (!file || !mod) return;
     setLoading(true);
@@ -1168,399 +1058,37 @@ function App() {
         ) : (
           <>
             {mod.table === "fees_structure" && (
-              <div
-                style={{
-                  background: feesTableExists === false ? "#fff7ed" : "#f0f9ff",
-                  border: feesTableExists === false ? "1px solid #fed7aa" : "1px solid #bae6fd",
-                  borderRadius: "10px",
-                  padding: "14px 18px",
-                  marginBottom: "16px",
-                  fontSize: "13px",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: "280px" }}>
-                  <div style={{ fontWeight: 800, color: feesTableExists === false ? "#c2410c" : "#0369a1", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <ShieldCheck size={18} color={feesTableExists === false ? "#ea580c" : "#0284c7"} />
-                    <span>Supabase Database Table: public.fees_structure</span>
-                    {feesTableChecking ? (
-                      <span style={{ fontSize: "11px", fontWeight: 600, color: "#64748b" }}>Checking live database...</span>
-                    ) : feesTableExists === false ? (
-                      <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "10px", background: "#ffedd5", color: "#9a3412" }}>
-                        Table Not Found in Supabase
-                      </span>
-                    ) : feesTableExists === true ? (
-                      <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "10px", background: "#dcfce7", color: "#166534" }}>
-                        Live in Supabase ({rows.length} records)
-                      </span>
-                    ) : null}
-                  </div>
-                  <div style={{ color: "#475569", fontSize: "12px", marginTop: "4px" }}>
-                    {feesTableExists === false
-                      ? "The table does not exist in your Supabase PostgreSQL instance yet. Execute the SQL migration below in Supabase SQL Editor to create it directly in Supabase without any local dummy code."
-                      : "Class-wise fee structures and rates are loaded directly from your live Supabase database with zero dummy data."}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(SUPABASE_FEES_STRUCTURE_SQL);
-                      setToast("Supabase fees_structure SQL copied to clipboard!");
-                    }}
-                    style={{
-                      background: "#0f3661",
-                      color: "#fff",
-                      border: "none",
-                      padding: "6px 14px",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                    }}
-                  >
-                    <FileText size={14} /> Copy Supabase SQL
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.open("https://supabase.com/dashboard/project/dbliogptcikqyzkbqnus/sql/new", "_blank");
-                    }}
-                    style={{
-                      background: "#fff",
-                      color: "#0f3661",
-                      border: "1px solid #cbd5e1",
-                      padding: "6px 12px",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Open Supabase SQL Editor
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setFeesTableChecking(true);
-                      const res = await checkSupabaseTableStatus("fees_structure");
-                      setFeesTableExists(res.exists);
-                      setFeesTableChecking(false);
-                      if (res.exists) {
-                        setToast("fees_structure verified live in Supabase!");
-                        void refresh();
-                      } else {
-                        setToast("Table still not found in Supabase. Please run the SQL in Supabase.");
-                      }
-                    }}
-                    style={{
-                      background: "#e2e8f0",
-                      color: "#334155",
-                      border: "none",
-                      padding: "6px 12px",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Check Again
-                  </button>
-                </div>
-              </div>
+              <FeesStructureNotice
+                feesTableExists={feesTableExists}
+                feesTableChecking={feesTableChecking}
+                recordCount={rows.length}
+                setToast={setToast}
+                setFeesTableChecking={setFeesTableChecking}
+                setFeesTableExists={setFeesTableExists}
+                refresh={refresh}
+              />
             )}
 
-            {mod.table === "leave_application" && (
-              <div
-                style={{
-                  background: "#f0fdf4",
-                  border: "1px solid #bbf7d0",
-                  borderRadius: "10px",
-                  padding: "12px 18px",
-                  marginBottom: "14px",
-                  fontSize: "13px",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "10px",
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 800, color: "#166534", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <ShieldCheck size={18} color="#16a34a" />
-                    <span>SJES Leave Accounting Session: {getLeaveSession().sessionName}</span>
-                  </div>
-                  <div style={{ color: "#15803d", fontSize: "12px", marginTop: "3px" }}>
-                    • 6 Months Probation (Probationary → Permanent) • 1 PL Credited on Month 7 milestone • Max 2 PL / Month • Principal approval workflow with LWP salary deduction for rejected absences
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button
-                    onClick={() => {
-                      setQuery("pending");
-                      setPage(1);
-                    }}
-                    style={{
-                      background: "#dcfce7",
-                      color: "#166534",
-                      border: "1px solid #86efac",
-                      padding: "5px 12px",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Pending Approvals ({rows.filter((r) => String(r.status || "").toLowerCase() === "pending").length})
-                  </button>
-                  <button
-                    onClick={() => {
-                      setQuery("");
-                      setPage(1);
-                    }}
-                    style={{
-                      background: "#fff",
-                      color: "#475569",
-                      border: "1px solid #cbd5e1",
-                      padding: "5px 12px",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    All Records
-                  </button>
-                </div>
-              </div>
+            {(mod.table === "leave_application" || mod.table === "leave_balance") && (
+              <LeaveNotices
+                modTable={mod.table}
+                rows={rows}
+                isStaffOrTeacher={isStaffOrTeacher}
+                setQuery={setQuery}
+                setPage={setPage}
+                setActive={setActive}
+                setModal={setModal}
+                handleAutoInitLeaveBalances={handleAutoInitLeaveBalances}
+                getCurrentAcademicYear={getCurrentAcademicYear}
+                getLeaveSession={getLeaveSession}
+              />
             )}
 
-            {mod.table === "leave_balance" && (
-              <div
-                style={{
-                  background: isStaffOrTeacher ? "#f0fdf4" : "#eff6ff",
-                  border: `1px solid ${isStaffOrTeacher ? "#bbf7d0" : "#bfdbfe"}`,
-                  borderRadius: "10px",
-                  padding: "14px 18px",
-                  marginBottom: "14px",
-                  fontSize: "13px",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontWeight: 800,
-                      color: isStaffOrTeacher ? "#166534" : "#1e40af",
-                      fontSize: "14px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <ShieldCheck size={18} color={isStaffOrTeacher ? "#16a34a" : "#2563eb"} />
-                    <span>
-                      {isStaffOrTeacher
-                        ? `My Official Leave Entitlements & Balances (${getCurrentAcademicYear()})`
-                        : `Annual Staff Leave Balance Register (${getCurrentAcademicYear()})`}
-                    </span>
-                  </div>
-                  <div style={{ color: isStaffOrTeacher ? "#15803d" : "#3b82f6", fontSize: "12px", marginTop: "3px" }}>
-                    • Casual Leave (CL: 12d) • Medical Leave (ML: 10d) • Earned Leave (PL/EL: 15d) • Remaining = Entitled − Taken
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  {isStaffOrTeacher ? (
-                    <button
-                      onClick={() => {
-                        setActive("leave_application");
-                        setModal({ mode: "create" });
-                      }}
-                      title="Apply for a new leave request"
-                      style={{
-                        background: "linear-gradient(135deg, #16a34a, #15803d)",
-                        color: "#fff",
-                        border: "none",
-                        padding: "7px 16px",
-                        borderRadius: "6px",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        boxShadow: "0 2px 4px rgba(22,163,74,0.25)",
-                      }}
-                    >
-                      <Plus size={14} />
-                      Apply for Leave
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleAutoInitLeaveBalances}
-                      title="Automatically create annual leave balances for all active staff in Employee Master"
-                      style={{
-                        background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-                        color: "#fff",
-                        border: "none",
-                        padding: "7px 14px",
-                        borderRadius: "6px",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        boxShadow: "0 2px 4px rgba(37,99,235,0.2)",
-                      }}
-                    >
-                      <Sparkles size={14} />
-                      Initialize All Staff Balances
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {mod.table === "warning_letter" && (
-              <div
-                style={{
-                  background: isStaffOrTeacher ? "#fef2f2" : "#fff7ed",
-                  border: `1px solid ${isStaffOrTeacher ? "#fecaca" : "#fed7aa"}`,
-                  borderRadius: "10px",
-                  padding: "14px 18px",
-                  marginBottom: "14px",
-                  fontSize: "13px",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontWeight: 800,
-                      color: isStaffOrTeacher ? "#991b1b" : "#9a3412",
-                      fontSize: "14px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <AlertTriangle size={18} color={isStaffOrTeacher ? "#dc2626" : "#ea580c"} />
-                    <span>
-                      {isStaffOrTeacher
-                        ? "Official Warning Letters & Notices"
-                        : "Staff Warning Letters & Memorandums"}
-                    </span>
-                  </div>
-                  <div style={{ color: isStaffOrTeacher ? "#b91c1c" : "#c2410c", fontSize: "12px", marginTop: "3px" }}>
-                    {isStaffOrTeacher
-                      ? "Official notices issued by Principal / Administration. Click 'Download / Print' to view and print your copy."
-                      : "Official disciplinary notices issued by Principal with acknowledgement records."}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {mod.table === "offer_letter" && (
-              <div
-                style={{
-                  background: isStaffOrTeacher ? "#eff6ff" : "#f0fdf4",
-                  border: `1px solid ${isStaffOrTeacher ? "#bfdbfe" : "#bbf7d0"}`,
-                  borderRadius: "10px",
-                  padding: "14px 18px",
-                  marginBottom: "14px",
-                  fontSize: "13px",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontWeight: 800,
-                      color: isStaffOrTeacher ? "#1e40af" : "#166534",
-                      fontSize: "14px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <FileText size={18} color={isStaffOrTeacher ? "#2563eb" : "#16a34a"} />
-                    <span>
-                      {isStaffOrTeacher
-                        ? "Official Employment Offer & Appointment Letters"
-                        : "Candidate Offer & Appointment Letter Register"}
-                    </span>
-                  </div>
-                  <div style={{ color: isStaffOrTeacher ? "#3b82f6" : "#15803d", fontSize: "12px", marginTop: "3px" }}>
-                    {isStaffOrTeacher
-                      ? "Official appointment and employment terms issued by Administration. Click 'Download / Print' to view your letter."
-                      : "Issue and track signed offer letters, joining dates, and employment terms."}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {mod.table === "employee_document" && (
-              <div
-                style={{
-                  background: isStaffOrTeacher ? "#f8fafc" : "#eff6ff",
-                  border: `1px solid ${isStaffOrTeacher ? "#e2e8f0" : "#bfdbfe"}`,
-                  borderRadius: "10px",
-                  padding: "14px 18px",
-                  marginBottom: "14px",
-                  fontSize: "13px",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontWeight: 800,
-                      color: isStaffOrTeacher ? "#334155" : "#1e40af",
-                      fontSize: "14px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <ShieldCheck size={18} color={isStaffOrTeacher ? "#475569" : "#2563eb"} />
-                    <span>
-                      {isStaffOrTeacher
-                        ? "My Official Staff Documents & Certificates"
-                        : "Employee Document & Verification Repository"}
-                    </span>
-                  </div>
-                  <div style={{ color: isStaffOrTeacher ? "#64748b" : "#3b82f6", fontSize: "12px", marginTop: "3px" }}>
-                    {isStaffOrTeacher
-                      ? "Official employee certificates and records verified by Administration. Click 'Download' to view any file."
-                      : "Store and verify staff KYC documents, qualification proofs, and certificates."}
-                  </div>
-                </div>
-              </div>
+            {(mod.table === "warning_letter" || mod.table === "offer_letter" || mod.table === "employee_document") && (
+              <LetterNotices
+                modTable={mod.table}
+                isStaffOrTeacher={isStaffOrTeacher}
+              />
             )}
 
             <PageHeader
@@ -1581,16 +1109,6 @@ function App() {
                     placeholder={`Filter ${moduleName(mod.table)}... (${filtered.length} records)`}
                   />
                 </div>
-                {!(
-                  isStaffOrTeacher &&
-                  [
-                    "leave_balance",
-                    "warning_letter",
-                    "offer_letter",
-                    "employee_document",
-                    "salary_slip",
-                  ].includes(mod.table)
-                )}
                 {!(
                   isStaffOrTeacher &&
                   [
@@ -1734,83 +1252,14 @@ function App() {
                 onReviewLeave={isAdminOrPrincipalOrHr ? (row) => setApprovalModalRow(row) : undefined}
               />
 
-              {/* Pagination Controls */}
-              {filtered.length > 0 && (
-                <div
-                  style={{
-                    padding: "12px 16px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    borderTop: "1px solid var(--line)",
-                    background: "#fbfcfe",
-                    fontSize: "12px",
-                    color: "var(--muted)",
-                  }}
-                >
-                  <div>
-                    Showing{" "}
-                    <b>
-                      {(page - 1) * pageSize + 1}–
-                      {Math.min(page * pageSize, filtered.length)}
-                    </b>{" "}
-                    of <b>{filtered.length}</b> records
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <label style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      Rows:
-                      <select
-                        value={pageSize}
-                        onChange={(e) => {
-                          setPageSize(Number(e.target.value));
-                          setPage(1);
-                        }}
-                        style={{
-                          padding: "2px 6px",
-                          borderRadius: "4px",
-                          border: "1px solid #d8e1eb",
-                        }}
-                      >
-                        <option value="10">10</option>
-                        <option value="25">25</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                      </select>
-                    </label>
-                    <div style={{ display: "flex", gap: "4px" }}>
-                      <button
-                        disabled={page <= 1}
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
-                        style={{
-                          padding: "4px 8px",
-                          borderRadius: "6px",
-                          border: "1px solid #d8e1eb",
-                          background: page <= 1 ? "#f5f7fa" : "#fff",
-                          cursor: page <= 1 ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      <span style={{ padding: "4px 8px", fontWeight: 700 }}>
-                        {page} / {totalPages}
-                      </span>
-                      <button
-                        disabled={page >= totalPages}
-                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                        style={{
-                          padding: "4px 8px",
-                          borderRadius: "6px",
-                          border: "1px solid #d8e1eb",
-                          background: page >= totalPages ? "#f5f7fa" : "#fff",
-                          cursor: page >= totalPages ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <PaginationControls
+                page={page}
+                pageSize={pageSize}
+                totalFiltered={filtered.length}
+                totalPages={totalPages}
+                setPage={setPage}
+                setPageSize={setPageSize}
+              />
             </section>
           </>
         )}

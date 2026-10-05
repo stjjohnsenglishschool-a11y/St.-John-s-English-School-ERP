@@ -6,17 +6,9 @@ import {
   Upload,
   UserCheck,
   GraduationCap,
-  PenTool,
-  RefreshCw,
-  QrCode as QrCodeIcon,
   ShieldCheck,
   Camera,
   Users,
-  User,
-  ExternalLink,
-  Layers,
-  Image as ImageIcon,
-  Check,
 } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
@@ -27,39 +19,22 @@ import {
   uploadToSupabaseStorage,
   resilientUpsert,
 } from './lib/supabase'
-import { formatImageUrl, handleImageError } from './lib/imageUtils'
 import {
   DEFAULT_SIGNATORY_SVG,
-  AuthorisedSignatureSvg,
 } from './lib/signatureData'
 import DigitalVerificationModal, {
   VerificationData,
 } from './components/DigitalVerificationModal'
 import QRScannerModal from './components/QRScannerModal'
 
-type Person = {
-  id: string
-  code: string
-  fullName: string
-  secondaryInfo?: string
-  dateOfBirth?: string
-  mobile?: string
-  photoUrl?: string
-  type: 'student' | 'employee'
-  designation?: string
-  department?: string
-  className?: string
-  rollNo?: string
-  fatherName?: string
-  fatherContact?: string
-  fatherPhotoUrl?: string
-  motherName?: string
-  motherContact?: string
-  motherPhotoUrl?: string
-}
+import { Person } from './id-card-studio/types'
+import { EscortFormFields } from './id-card-studio/EscortFormFields'
+import { StandardFormFields } from './id-card-studio/StandardFormFields'
+import { SignatoryCustomizer } from './id-card-studio/SignatoryCustomizer'
+import { EscortCardPreview } from './id-card-studio/EscortCardPreview'
+import { StandardCardPreview } from './id-card-studio/StandardCardPreview'
 
-const logo =
-  'https://res.cloudinary.com/oilisvfi/image/upload/v1786000074/logo_final_frchld.jpg'
+export type { Person }
 
 export default function IDCardStudio({
   setToast,
@@ -992,694 +967,53 @@ export default function IDCardStudio({
 
         {/* ESCORT CARD FORM FIELDS */}
         {cardType === 'escort' ? (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              marginTop: '10px',
-            }}
-          >
-            {/* Quick Section Switcher Pills */}
-            <div
-              style={{
-                display: 'flex',
-                gap: '4px',
-                background: '#f1f5f9',
-                padding: '3px',
-                borderRadius: '8px',
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setEscortActiveTab('all')}
-                style={{
-                  flex: 1,
-                  height: '28px',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '10px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  background: escortActiveTab === 'all' ? '#fff' : 'transparent',
-                  color: escortActiveTab === 'all' ? '#0f172a' : '#64748b',
-                  boxShadow:
-                    escortActiveTab === 'all'
-                      ? '0 1px 3px rgba(0,0,0,0.1)'
-                      : 'none',
-                }}
-              >
-                All (3)
-              </button>
-              <button
-                type="button"
-                onClick={() => setEscortActiveTab('student')}
-                style={{
-                  flex: 1,
-                  height: '28px',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '10px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  background:
-                    escortActiveTab === 'student' ? '#fff' : 'transparent',
-                  color:
-                    escortActiveTab === 'student' ? '#1d4ed8' : '#64748b',
-                  boxShadow:
-                    escortActiveTab === 'student'
-                      ? '0 1px 3px rgba(0,0,0,0.1)'
-                      : 'none',
-                }}
-              >
-                🎓 Student
-              </button>
-              <button
-                type="button"
-                onClick={() => setEscortActiveTab('father')}
-                style={{
-                  flex: 1,
-                  height: '28px',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '10px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  background:
-                    escortActiveTab === 'father' ? '#fff' : 'transparent',
-                  color:
-                    escortActiveTab === 'father' ? '#0284c7' : '#64748b',
-                  boxShadow:
-                    escortActiveTab === 'father'
-                      ? '0 1px 3px rgba(0,0,0,0.1)'
-                      : 'none',
-                }}
-              >
-                👨 Father
-              </button>
-              <button
-                type="button"
-                onClick={() => setEscortActiveTab('mother')}
-                style={{
-                  flex: 1,
-                  height: '28px',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '10px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  background:
-                    escortActiveTab === 'mother' ? '#fff' : 'transparent',
-                  color:
-                    escortActiveTab === 'mother' ? '#be185d' : '#64748b',
-                  boxShadow:
-                    escortActiveTab === 'mother'
-                      ? '0 1px 3px rgba(0,0,0,0.1)'
-                      : 'none',
-                }}
-              >
-                👩 Mother
-              </button>
-            </div>
-
-            {/* 1. STUDENT DETAILS GROUP */}
-            {(escortActiveTab === 'all' || escortActiveTab === 'student') && (
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1.5px solid #dbeafe',
-                  borderRadius: '10px',
-                  padding: '12px',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '8px',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: '11.5px',
-                      fontWeight: 800,
-                      color: '#1e3a8a',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                    }}
-                  >
-                    <GraduationCap size={15} color="#2563eb" />
-                    STUDENT DETAILS
-                  </span>
-                  {visibleStudentPhoto && (
-                    <span
-                      style={{
-                        fontSize: '9.5px',
-                        color: '#16a34a',
-                        fontWeight: 700,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                      }}
-                    >
-                      <Check size={12} /> Photo Loaded
-                    </span>
-                  )}
-                </div>
-
-                <label style={{ marginTop: '2px' }}>
-                  STUDENT NAME:
-                  <input
-                    value={studentName}
-                    onChange={(e) => setStudentName(e.target.value)}
-                    placeholder="e.g. AADITRI DAS"
-                  />
-                </label>
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '8px',
-                    marginTop: '6px',
-                  }}
-                >
-                  <label style={{ margin: 0 }}>
-                    CLASS:
-                    <input
-                      value={className}
-                      onChange={(e) => setClassName(e.target.value)}
-                      placeholder="e.g. PG or Class I"
-                    />
-                  </label>
-                  <label style={{ margin: 0 }}>
-                    ROLL:
-                    <input
-                      value={rollNo}
-                      onChange={(e) => setRollNo(e.target.value)}
-                      placeholder="e.g. 4"
-                    />
-                  </label>
-                </div>
-
-                {/* Student Photo URL and Uploader */}
-                <div
-                  style={{
-                    marginTop: '8px',
-                    padding: '8px',
-                    background: '#ffffff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                  }}
-                >
-                  <label style={{ margin: 0, fontWeight: 700, fontSize: '11px' }}>
-                    Student Photo URL / Google Drive Link:
-                    <input
-                      type="url"
-                      value={photoUrl}
-                      onChange={(e) => setPhotoUrl(e.target.value)}
-                      placeholder="https://drive.google.com/... or https://..."
-                      style={{ fontSize: '12px' }}
-                    />
-                  </label>
-
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      marginTop: '6px',
-                    }}
-                  >
-                    {/* Thumbnail preview */}
-                    <div
-                      style={{
-                        width: '38px',
-                        height: '44px',
-                        borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
-                        background: '#f8fafc',
-                        overflow: 'hidden',
-                        display: 'grid',
-                        placeItems: 'center',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {visibleStudentPhoto ? (
-                        <img
-                          src={formatImageUrl(visibleStudentPhoto)}
-                          alt="Student thumb"
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                          }}
-                          onError={handleImageError}
-                        />
-                      ) : (
-                        <GraduationCap size={16} color="#94a3b8" />
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => studentFileRef.current?.click()}
-                      disabled={uploadingTarget !== null}
-                      style={{
-                        flex: 1,
-                        height: '34px',
-                        borderRadius: '6px',
-                        border: '1px dashed #2563eb',
-                        background: '#eff6ff',
-                        color: '#1d4ed8',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      <Upload size={13} />
-                      {uploadingTarget === 'student'
-                        ? 'Uploading...'
-                        : 'Upload Student Photo'}
-                    </button>
-                    <input
-                      ref={studentFileRef}
-                      type="file"
-                      accept="image/*"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handlePhotoUploadFor('student', e)}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 2. FATHER DETAILS GROUP */}
-            {(escortActiveTab === 'all' || escortActiveTab === 'father') && (
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1.5px solid #bae6fd',
-                  borderRadius: '10px',
-                  padding: '12px',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '8px',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: '11.5px',
-                      fontWeight: 800,
-                      color: '#0369a1',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                    }}
-                  >
-                    <User size={15} color="#0284c7" />
-                    FATHER DETAILS
-                  </span>
-                  {visibleFatherPhoto ? (
-                    <span
-                      style={{
-                        fontSize: '9.5px',
-                        color: '#16a34a',
-                        fontWeight: 700,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                      }}
-                    >
-                      <Check size={12} /> Photo Loaded
-                    </span>
-                  ) : (
-                    <span
-                      style={{
-                        fontSize: '9.5px',
-                        color: '#d97706',
-                        fontWeight: 700,
-                      }}
-                    >
-                      Photo Needed
-                    </span>
-                  )}
-                </div>
-
-                <label style={{ marginTop: '2px' }}>
-                  FATHER NAME:
-                  <input
-                    value={fatherName}
-                    onChange={(e) => setFatherName(e.target.value)}
-                    placeholder="e.g. ANIBRATA DAS"
-                  />
-                </label>
-
-                <label style={{ marginTop: '6px' }}>
-                  FATHER CONTACT:
-                  <input
-                    value={fatherContact}
-                    onChange={(e) => setFatherContact(e.target.value)}
-                    placeholder="e.g. 9614296337"
-                  />
-                </label>
-
-                {/* Father Photo URL and Uploader */}
-                <div
-                  style={{
-                    marginTop: '8px',
-                    padding: '8px',
-                    background: '#ffffff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                  }}
-                >
-                  <label style={{ margin: 0, fontWeight: 700, fontSize: '11px' }}>
-                    Father Photo URL / Google Drive Link:
-                    <input
-                      type="url"
-                      value={fatherPhotoUrl}
-                      onChange={(e) => setFatherPhotoUrl(e.target.value)}
-                      placeholder="Paste Father photo Drive URL or image link..."
-                      style={{ fontSize: '12px' }}
-                    />
-                  </label>
-
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      marginTop: '6px',
-                    }}
-                  >
-                    {/* Thumbnail preview */}
-                    <div
-                      style={{
-                        width: '38px',
-                        height: '44px',
-                        borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
-                        background: '#f8fafc',
-                        overflow: 'hidden',
-                        display: 'grid',
-                        placeItems: 'center',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {visibleFatherPhoto ? (
-                        <img
-                          src={formatImageUrl(visibleFatherPhoto)}
-                          alt="Father thumb"
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                          }}
-                          onError={handleImageError}
-                        />
-                      ) : (
-                        <User size={16} color="#94a3b8" />
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => fatherFileRef.current?.click()}
-                      disabled={uploadingTarget !== null}
-                      style={{
-                        flex: 1,
-                        height: '34px',
-                        borderRadius: '6px',
-                        border: '1px dashed #0284c7',
-                        background: '#f0f9ff',
-                        color: '#0369a1',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      <Upload size={13} />
-                      {uploadingTarget === 'father'
-                        ? 'Uploading...'
-                        : 'Upload Father Photo'}
-                    </button>
-                    <input
-                      ref={fatherFileRef}
-                      type="file"
-                      accept="image/*"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handlePhotoUploadFor('father', e)}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 3. MOTHER DETAILS GROUP */}
-            {(escortActiveTab === 'all' || escortActiveTab === 'mother') && (
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1.5px solid #fbcfe8',
-                  borderRadius: '10px',
-                  padding: '12px',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '8px',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: '11.5px',
-                      fontWeight: 800,
-                      color: '#9d174d',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                    }}
-                  >
-                    <User size={15} color="#be185d" />
-                    MOTHER DETAILS
-                  </span>
-                  {visibleMotherPhoto ? (
-                    <span
-                      style={{
-                        fontSize: '9.5px',
-                        color: '#16a34a',
-                        fontWeight: 700,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                      }}
-                    >
-                      <Check size={12} /> Photo Loaded
-                    </span>
-                  ) : (
-                    <span
-                      style={{
-                        fontSize: '9.5px',
-                        color: '#d97706',
-                        fontWeight: 700,
-                      }}
-                    >
-                      Photo Needed
-                    </span>
-                  )}
-                </div>
-
-                <label style={{ marginTop: '2px' }}>
-                  MOTHER NAME:
-                  <input
-                    value={motherName}
-                    onChange={(e) => setMotherName(e.target.value)}
-                    placeholder="e.g. SOMA DAS"
-                  />
-                </label>
-
-                <label style={{ marginTop: '6px' }}>
-                  MOTHER CONTACT:
-                  <input
-                    value={motherContact}
-                    onChange={(e) => setMotherContact(e.target.value)}
-                    placeholder="e.g. 9876543211"
-                  />
-                </label>
-
-                {/* Mother Photo URL and Uploader */}
-                <div
-                  style={{
-                    marginTop: '8px',
-                    padding: '8px',
-                    background: '#ffffff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                  }}
-                >
-                  <label style={{ margin: 0, fontWeight: 700, fontSize: '11px' }}>
-                    Mother Photo URL / Google Drive Link:
-                    <input
-                      type="url"
-                      value={motherPhotoUrl}
-                      onChange={(e) => setMotherPhotoUrl(e.target.value)}
-                      placeholder="Paste Mother photo Drive URL or image link..."
-                      style={{ fontSize: '12px' }}
-                    />
-                  </label>
-
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      marginTop: '6px',
-                    }}
-                  >
-                    {/* Thumbnail preview */}
-                    <div
-                      style={{
-                        width: '38px',
-                        height: '44px',
-                        borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
-                        background: '#f8fafc',
-                        overflow: 'hidden',
-                        display: 'grid',
-                        placeItems: 'center',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {visibleMotherPhoto ? (
-                        <img
-                          src={formatImageUrl(visibleMotherPhoto)}
-                          alt="Mother thumb"
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                          }}
-                          onError={handleImageError}
-                        />
-                      ) : (
-                        <User size={16} color="#94a3b8" />
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => motherFileRef.current?.click()}
-                      disabled={uploadingTarget !== null}
-                      style={{
-                        flex: 1,
-                        height: '34px',
-                        borderRadius: '6px',
-                        border: '1px dashed #be185d',
-                        background: '#fdf2f8',
-                        color: '#9d174d',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      <Upload size={13} />
-                      {uploadingTarget === 'mother'
-                        ? 'Uploading...'
-                        : 'Upload Mother Photo'}
-                    </button>
-                    <input
-                      ref={motherFileRef}
-                      type="file"
-                      accept="image/*"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handlePhotoUploadFor('mother', e)}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <EscortFormFields
+            escortActiveTab={escortActiveTab}
+            setEscortActiveTab={setEscortActiveTab}
+            studentName={studentName}
+            setStudentName={setStudentName}
+            className={className}
+            setClassName={setClassName}
+            rollNo={rollNo}
+            setRollNo={setRollNo}
+            photoUrl={photoUrl}
+            setPhotoUrl={setPhotoUrl}
+            visibleStudentPhoto={visibleStudentPhoto}
+            fatherName={fatherName}
+            setFatherName={setFatherName}
+            fatherContact={fatherContact}
+            setFatherContact={setFatherContact}
+            fatherPhotoUrl={fatherPhotoUrl}
+            setFatherPhotoUrl={setFatherPhotoUrl}
+            visibleFatherPhoto={visibleFatherPhoto}
+            motherName={motherName}
+            setMotherName={setMotherName}
+            motherContact={motherContact}
+            setMotherContact={setMotherContact}
+            motherPhotoUrl={motherPhotoUrl}
+            setMotherPhotoUrl={setMotherPhotoUrl}
+            visibleMotherPhoto={visibleMotherPhoto}
+            uploadingTarget={uploadingTarget}
+            studentFileRef={studentFileRef}
+            fatherFileRef={fatherFileRef}
+            motherFileRef={motherFileRef}
+            handlePhotoUploadFor={handlePhotoUploadFor}
+          />
         ) : (
           /* STANDARD STUDENT / EMPLOYEE FORM FIELDS */
-          <>
-            {cardType === 'student' ? (
-              <label>
-                Class Name / Grade
-                <input
-                  value={className}
-                  onChange={(e) => setClassName(e.target.value)}
-                  placeholder="e.g. CLASS VIII"
-                />
-              </label>
-            ) : (
-              <>
-                <label>
-                  Designation
-                  <input
-                    value={designation}
-                    onChange={(e) => setDesignation(e.target.value)}
-                    placeholder="e.g. Teacher"
-                  />
-                </label>
-                <label>
-                  Department
-                  <input
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    placeholder="e.g. Teaching Staff"
-                  />
-                </label>
-              </>
-            )}
-
-            <label>
-              Photo URL
-              <input
-                type="url"
-                value={photoUrl}
-                onChange={(e) => setPhotoUrl(e.target.value)}
-                placeholder="https://..."
-              />
-            </label>
-
-            <label className="photo-upload">
-              <Upload />
-              <span>
-                {uploadingTarget === 'student'
-                  ? 'Uploading to Cloud Storage...'
-                  : 'Upload photograph or portrait'}
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                disabled={uploadingTarget !== null}
-                onChange={(e) => handlePhotoUploadFor('student', e)}
-              />
-            </label>
-          </>
+          <StandardFormFields
+            cardType={cardType}
+            className={className}
+            setClassName={setClassName}
+            designation={designation}
+            setDesignation={setDesignation}
+            department={department}
+            setDepartment={setDepartment}
+            photoUrl={photoUrl}
+            setPhotoUrl={setPhotoUrl}
+            uploadingTarget={uploadingTarget}
+            handlePhotoUploadFor={handlePhotoUploadFor}
+          />
         )}
 
         <label style={{ marginTop: '12px' }}>
@@ -1692,105 +1026,13 @@ export default function IDCardStudio({
         </label>
 
         {/* Authorised Signatory customizer */}
-        <div
-          style={{
-            marginTop: '14px',
-            padding: '12px',
-            background: '#f8fafc',
-            borderRadius: '10px',
-            border: '1px solid #e2e8f0',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '8px',
-            }}
-          >
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 800,
-                color: '#334155',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}
-            >
-              <PenTool size={13} color="var(--blue)" />
-              Authorised Signatory Image
-            </span>
-            {signaturePreview && (
-              <button
-                type="button"
-                onClick={resetSignature}
-                style={{
-                  height: '24px',
-                  padding: '0 8px',
-                  fontSize: '10px',
-                  background: '#fff',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <RefreshCw size={10} /> Reset
-              </button>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div
-              style={{
-                height: '36px',
-                width: '90px',
-                background: '#fff',
-                border: '1px solid #cbd5e1',
-                borderRadius: '6px',
-                display: 'grid',
-                placeItems: 'center',
-                padding: '2px',
-                overflow: 'hidden',
-              }}
-            >
-              {isCustomSignature ? (
-                <img
-                  src={visibleSignature}
-                  alt="Signatory preview"
-                  style={{
-                    maxHeight: '100%',
-                    maxWidth: '100%',
-                    objectFit: 'contain',
-                  }}
-                />
-              ) : (
-                <AuthorisedSignatureSvg className="id-signature-svg" />
-              )}
-            </div>
-            <label style={{ margin: 0, flex: 1, cursor: 'pointer' }}>
-              <span
-                style={{
-                  fontSize: '11px',
-                  color: 'var(--blue)',
-                  fontWeight: 700,
-                  textDecoration: 'underline',
-                }}
-              >
-                Replace Signature
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={handleSignatureUpload}
-              />
-            </label>
-          </div>
-        </div>
+        <SignatoryCustomizer
+          signaturePreview={signaturePreview}
+          visibleSignature={visibleSignature}
+          isCustomSignature={isCustomSignature}
+          handleSignatureUpload={handleSignatureUpload}
+          resetSignature={resetSignature}
+        />
 
         <div className="studio-actions">
           <button
@@ -1842,383 +1084,45 @@ export default function IDCardStudio({
 
       <section className="preview-stage">
         {cardType === 'escort' ? (
-          /* =======================================================
-             ESCORT IDENTITY CARD (Student, Father & Mother Details)
-             ======================================================= */
-          <div
-            className="id-card id-card-portrait id-card-escort"
-            ref={cardRef}
-          >
-            <header>
-              <img src={logo} alt="School Crest" crossOrigin="anonymous" />
-              <div>
-                <b>ST. JOHN'S ENGLISH SCHOOL</b>
-                <span>T.N. Mukherjee Road Dankuni, Hooghly · W.B. 712311</span>
-              </div>
-            </header>
-
-            <div className="id-type-strip id-type-strip-escort">
-              <span>PARENT / GUARDIAN ESCORT CARD</span>
-              <small>SESSION 2026-27</small>
-            </div>
-
-            <div className="id-body-escort">
-              {/* Student Section */}
-              <div className="escort-student-box">
-                <div
-                  className="escort-student-photo-wrap"
-                  onClick={() => studentFileRef.current?.click()}
-                  style={{ cursor: 'pointer' }}
-                  title="Click to change or upload Student photo"
-                >
-                  {visibleStudentPhoto ? (
-                    <img
-                      src={formatImageUrl(visibleStudentPhoto)}
-                      alt="Student Photo"
-                      crossOrigin="anonymous"
-                      referrerPolicy="no-referrer"
-                      onError={handleImageError}
-                    />
-                  ) : (
-                    <div className="escort-photo-placeholder">
-                      <GraduationCap size={28} />
-                      <span>STUDENT</span>
-                      <span>PHOTO</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="escort-student-info">
-                  <div className="escort-label-row">
-                    <span className="escort-field-lbl">STUDENT NAME:</span>
-                    <b className="escort-student-name" title={studentName || selected?.fullName || 'STUDENT NAME'}>
-                      {studentName || selected?.fullName || 'STUDENT NAME'}
-                    </b>
-                  </div>
-                  <div className="escort-meta-row">
-                    <div className="escort-meta-col">
-                      <span className="escort-field-lbl">CLASS:</span>
-                      <b className="escort-val-highlight">
-                        {className || 'PG'}
-                      </b>
-                    </div>
-                    <div className="escort-meta-col">
-                      <span className="escort-field-lbl">ROLL:</span>
-                      <b className="escort-val-highlight">
-                        {rollNo || selected?.rollNo || '1'}
-                      </b>
-                    </div>
-                  </div>
-                  {selected?.code && (
-                    <div className="escort-adm-tag">
-                      <span>ADM NO: {selected.code}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Prominent Authorized Escorts Heading */}
-              <div className="escort-section-divider">
-                <div className="escort-divider-line" />
-                <span className="escort-divider-pill">AUTHORIZED ESCORTS</span>
-                <div className="escort-divider-line" />
-              </div>
-
-              {/* Parents 2-Column Grid */}
-              <div className="escort-parents-grid">
-                {/* 1. Father Section */}
-                <div className="escort-parent-card">
-                  <div
-                    className="escort-parent-photo-wrap"
-                    onClick={() => fatherFileRef.current?.click()}
-                    style={{ cursor: 'pointer' }}
-                    title="Click to upload or change Father photo"
-                  >
-                    {visibleFatherPhoto ? (
-                      <img
-                        src={formatImageUrl(visibleFatherPhoto)}
-                        alt="Father Photo"
-                        crossOrigin="anonymous"
-                        referrerPolicy="no-referrer"
-                        onError={handleImageError}
-                      />
-                    ) : (
-                      <div className="escort-photo-placeholder parent-placeholder">
-                        <User size={28} />
-                        <span>FATHER</span>
-                        <span>PHOTO</span>
-                      </div>
-                    )}
-                    <span className="escort-badge-tag father-badge">
-                      FATHER
-                    </span>
-                  </div>
-
-                  <div className="escort-parent-details">
-                    <div className="escort-detail-item">
-                      <span className="escort-field-lbl">FATHER NAME:</span>
-                      <b className="escort-parent-name" title={fatherName}>
-                        {fatherName || 'FATHER NAME'}
-                      </b>
-                    </div>
-                    <div className="escort-detail-item">
-                      <span className="escort-field-lbl">FATHER CONTACT:</span>
-                      <div className="escort-contact-pill">
-                        <b className="escort-parent-contact" title={fatherContact}>
-                          {fatherContact || 'NOT PROVIDED'}
-                        </b>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Mother Section */}
-                <div className="escort-parent-card">
-                  <div
-                    className="escort-parent-photo-wrap"
-                    onClick={() => motherFileRef.current?.click()}
-                    style={{ cursor: 'pointer' }}
-                    title="Click to upload or change Mother photo"
-                  >
-                    {visibleMotherPhoto ? (
-                      <img
-                        src={formatImageUrl(visibleMotherPhoto)}
-                        alt="Mother Photo"
-                        crossOrigin="anonymous"
-                        referrerPolicy="no-referrer"
-                        onError={handleImageError}
-                      />
-                    ) : (
-                      <div className="escort-photo-placeholder parent-placeholder">
-                        <User size={28} />
-                        <span>MOTHER</span>
-                        <span>PHOTO</span>
-                      </div>
-                    )}
-                    <span className="escort-badge-tag mother-badge">
-                      MOTHER
-                    </span>
-                  </div>
-
-                  <div className="escort-parent-details">
-                    <div className="escort-detail-item">
-                      <span className="escort-field-lbl">MOTHER NAME:</span>
-                      <b className="escort-parent-name" title={motherName}>
-                        {motherName || 'MOTHER NAME'}
-                      </b>
-                    </div>
-                    <div className="escort-detail-item">
-                      <span className="escort-field-lbl">MOTHER CONTACT:</span>
-                      <div className="escort-contact-pill mother">
-                        <b className="escort-parent-contact" title={motherContact}>
-                          {motherContact || 'NOT PROVIDED'}
-                        </b>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Escort Card Footer */}
-            <footer className="id-footer-portrait escort-footer">
-              <div className="id-footer-left">
-                <div
-                  className="id-qr-box"
-                  onClick={openVerificationModal}
-                  title="Click to test / view live digital QR certificate"
-                >
-                  {qr ? (
-                    <img
-                      className="id-qr-img"
-                      src={qr}
-                      alt="Card Verification QR"
-                      crossOrigin="anonymous"
-                    />
-                  ) : (
-                    <div className="id-qr-placeholder">
-                      <QrCodeIcon size={22} />
-                    </div>
-                  )}
-                  <span className="id-qr-tag">VERIFY</span>
-                </div>
-
-                <div className="id-emergency-text">
-                  <span>Emergency:</span>
-                  <b>9674368297</b>
-                  <div
-                    style={{
-                      fontSize: '8px',
-                      fontWeight: 700,
-                      color: '#475569',
-                      marginTop: '1px',
-                    }}
-                  >
-                    Valid: {expiry || '31-03-2027'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="id-signatory-block">
-                <div className="id-signatory-wrap">
-                  {isCustomSignature ? (
-                    <img
-                      src={visibleSignature}
-                      alt="Authorised Signatory"
-                      className="id-signature-img"
-                      crossOrigin="anonymous"
-                    />
-                  ) : (
-                    <AuthorisedSignatureSvg className="id-signature-svg" />
-                  )}
-                </div>
-                <div className="id-signatory-line">
-                  <span className="id-signatory-title">
-                    AUTHORISED SIGNATORY
-                  </span>
-                </div>
-              </div>
-            </footer>
-          </div>
+          /* ESCORT IDENTITY CARD PREVIEW */
+          <EscortCardPreview
+            cardRef={cardRef}
+            studentFileRef={studentFileRef}
+            fatherFileRef={fatherFileRef}
+            motherFileRef={motherFileRef}
+            studentName={studentName}
+            selected={selected}
+            className={className}
+            rollNo={rollNo}
+            fatherName={fatherName}
+            fatherContact={fatherContact}
+            motherName={motherName}
+            motherContact={motherContact}
+            visibleStudentPhoto={visibleStudentPhoto}
+            visibleFatherPhoto={visibleFatherPhoto}
+            visibleMotherPhoto={visibleMotherPhoto}
+            qr={qr}
+            openVerificationModal={openVerificationModal}
+            expiry={expiry}
+            isCustomSignature={isCustomSignature}
+            visibleSignature={visibleSignature}
+          />
         ) : (
-          /* =======================================================
-             STANDARD PORTRAIT STUDENT / STAFF ID CARD
-             ======================================================= */
-          <div className="id-card id-card-portrait" ref={cardRef}>
-            <header>
-              <img src={logo} alt="School Crest" crossOrigin="anonymous" />
-              <div>
-                <b>ST. JOHN'S ENGLISH SCHOOL</b>
-                <span>T.N. Mukherjee Road Dankuni, Hooghly · W.B. 712311</span>
-              </div>
-            </header>
-
-            <div className="id-type-strip">
-              {cardType === 'student'
-                ? 'STUDENT IDENTITY CARD'
-                : 'STAFF IDENTITY CARD'}
-            </div>
-
-            <div className="id-body-portrait">
-              <div className="student-photo-portrait">
-                {visibleStudentPhoto ? (
-                  <img
-                    src={formatImageUrl(visibleStudentPhoto)}
-                    alt="Portrait"
-                    crossOrigin="anonymous"
-                    referrerPolicy="no-referrer"
-                    onError={handleImageError}
-                  />
-                ) : (
-                  <span>
-                    {selected
-                      ? selected.fullName
-                          .split(' ')
-                          .slice(0, 2)
-                          .map((part) => part[0])
-                          .join('')
-                      : 'PHOTO'}
-                  </span>
-                )}
-              </div>
-
-              <h3 className="id-name-portrait">
-                {selected?.fullName ||
-                  (cardType === 'student' ? 'Student Name' : 'Person Name')}
-              </h3>
-
-              <div className="id-role-tag">
-                {cardType === 'student'
-                  ? className
-                    ? `Class: ${className}`
-                    : selected?.code || 'STUDENT'
-                  : designation || 'FACULTY / STAFF'}
-              </div>
-
-              <div className="id-details-portrait">
-                <dl>
-                  <dt>{cardType === 'student' ? 'Adm No.' : 'Emp Code'}</dt>
-                  <dd>
-                    {selected?.code ||
-                      (cardType === 'student' ? 'ADM-2024-001' : 'EMP-013')}
-                  </dd>
-
-                  {cardType === 'student' ? (
-                    <>
-                      <dt>Class</dt>
-                      <dd>{className || 'Class X - A'}</dd>
-                      <dt>Roll No.</dt>
-                      <dd>{selected?.rollNo || '12'}</dd>
-                      <dt>DOB</dt>
-                      <dd>{selected?.dateOfBirth || '2010-05-14'}</dd>
-                    </>
-                  ) : (
-                    <>
-                      <dt>Designation</dt>
-                      <dd>{designation || 'Senior Faculty'}</dd>
-                      <dt>Department</dt>
-                      <dd>{department || 'Academic Affairs'}</dd>
-                    </>
-                  )}
-
-                  <dt>Mobile</dt>
-                  <dd>{selected?.mobile || '9876543210'}</dd>
-                  <dt>Valid Until</dt>
-                  <dd>{expiry}</dd>
-                </dl>
-              </div>
-            </div>
-
-            {/* Portrait Footer with QR Code, Emergency Contact & Authorised Signatory */}
-            <footer className="id-footer-portrait">
-              <div className="id-footer-left">
-                <div
-                  className="id-qr-box"
-                  onClick={openVerificationModal}
-                  title="Click to test / view live digital QR certificate"
-                >
-                  {qr ? (
-                    <img
-                      className="id-qr-img"
-                      src={qr}
-                      alt="Card Verification QR"
-                      crossOrigin="anonymous"
-                    />
-                  ) : (
-                    <div className="id-qr-placeholder">
-                      <QrCodeIcon size={22} />
-                    </div>
-                  )}
-                  <span className="id-qr-tag">SCAN TO VERIFY</span>
-                </div>
-
-                <div className="id-emergency-text">
-                  Emergency:
-                  <b>9674368297</b>
-                </div>
-              </div>
-
-              <div className="id-signatory-block">
-                <div className="id-signatory-wrap">
-                  {isCustomSignature ? (
-                    <img
-                      src={visibleSignature}
-                      alt="Authorised Signatory"
-                      className="id-signature-img"
-                      crossOrigin="anonymous"
-                    />
-                  ) : (
-                    <AuthorisedSignatureSvg className="id-signature-svg" />
-                  )}
-                </div>
-                <div className="id-signatory-line">
-                  <span className="id-signatory-title">
-                    AUTHORISED SIGNATORY
-                  </span>
-                </div>
-              </div>
-            </footer>
-          </div>
+          /* STANDARD PORTRAIT STUDENT / STAFF ID CARD PREVIEW */
+          <StandardCardPreview
+            cardRef={cardRef}
+            cardType={cardType}
+            selected={selected}
+            className={className}
+            designation={designation}
+            department={department}
+            visibleStudentPhoto={visibleStudentPhoto}
+            expiry={expiry}
+            qr={qr}
+            openVerificationModal={openVerificationModal}
+            isCustomSignature={isCustomSignature}
+            visibleSignature={visibleSignature}
+          />
         )}
 
         <p className="preview-note">
