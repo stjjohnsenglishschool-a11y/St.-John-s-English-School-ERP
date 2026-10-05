@@ -100,7 +100,7 @@ export const TABLE_KNOWN_COLUMNS: Record<string, string[]> = {
     'outstanding_amount', 'rating', 'is_active', 'created_at', 'updated_at'
   ],
   user_master: [
-    'user_id', 'user_full_name', 'user_name', 'password', 'department', 'active_module', 'allowed_modules',
+    'user_id', 'user_full_name', 'user_name', 'password', 'department', 'active_module',
     'status', 'role', 'last_login_at', 'is_active', 'created_at', 'updated_at'
   ],
   teacher_idcard: [
@@ -191,7 +191,7 @@ export function sanitizePayload(record: Record<string, any>, tableName?: string)
 
   // Special preservation and normalization for user_master module permissions
   if (tableName === 'user_master') {
-    const rawMod = record.allowed_modules ?? record.active_module
+    const rawMod = record.active_module ?? record.allowed_modules
     let cleanArr: string[] = []
     if (Array.isArray(rawMod)) {
       cleanArr = rawMod.map(String)
@@ -204,8 +204,8 @@ export function sanitizePayload(record: Record<string, any>, tableName?: string)
         cleanArr = rawMod.split(',').map((s) => s.trim()).filter(Boolean)
       }
     }
-    clean.active_module = JSON.stringify(cleanArr)
-    clean.allowed_modules = JSON.stringify(cleanArr)
+    // In PostgreSQL, user_master.active_module is a native text[] array
+    clean.active_module = cleanArr
   }
 
   for (const key of Object.keys(record)) {
@@ -454,36 +454,83 @@ export async function saveSupabaseRecord(
 
       // Step B: If user exists in Supabase, update using the exact database user_id or user_name
       if (dbTargetUser) {
+        const payloadToUpdate = {
+          ...record,
+          user_id: dbTargetUser.user_id,
+        }
         if (dbTargetUser.user_id && isUUID(dbTargetUser.user_id)) {
-          const updateRes = await resilientUpdate(tableName, record, 'user_id', dbTargetUser.user_id)
-          if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
-            resData = updateRes.data[0]
+          const { data: upData, error: upError } = await supabase
+            .from('user_master')
+            .update(payloadToUpdate)
+            .eq('user_id', dbTargetUser.user_id)
+            .select()
+
+          if (!upError && upData && upData.length > 0) {
+            resData = upData[0]
             isSaved = true
+          } else if (upError) {
+            console.error('Direct user update error by user_id:', upError)
+            const updateRes = await resilientUpdate(tableName, payloadToUpdate, 'user_id', dbTargetUser.user_id)
+            if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+              resData = updateRes.data[0]
+              isSaved = true
+            }
           }
         }
         if (!isSaved && dbTargetUser.user_name) {
-          const updateRes = await resilientUpdate(tableName, record, 'user_name', dbTargetUser.user_name)
-          if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
-            resData = updateRes.data[0]
+          const { data: upData, error: upError } = await supabase
+            .from('user_master')
+            .update(payloadToUpdate)
+            .eq('user_name', dbTargetUser.user_name)
+            .select()
+
+          if (!upError && upData && upData.length > 0) {
+            resData = upData[0]
             isSaved = true
+          } else {
+            const updateRes = await resilientUpdate(tableName, payloadToUpdate, 'user_name', dbTargetUser.user_name)
+            if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+              resData = updateRes.data[0]
+              isSaved = true
+            }
           }
         }
       }
 
       // Step C: If not updated yet and targetUserId or targetUsername is present, try direct resilientUpdate
       if (!isSaved && targetUserId) {
-        const updateRes = await resilientUpdate(tableName, record, 'user_id', targetUserId)
-        if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
-          resData = updateRes.data[0]
+        const { data: upData, error: upError } = await supabase
+          .from('user_master')
+          .update(record)
+          .eq('user_id', targetUserId)
+          .select()
+        if (!upError && upData && upData.length > 0) {
+          resData = upData[0]
           isSaved = true
+        } else {
+          const updateRes = await resilientUpdate(tableName, record, 'user_id', targetUserId)
+          if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+            resData = updateRes.data[0]
+            isSaved = true
+          }
         }
       }
 
       if (!isSaved && targetUsername) {
-        const updateRes = await resilientUpdate(tableName, record, 'user_name', targetUsername)
-        if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
-          resData = updateRes.data[0]
+        const { data: upData, error: upError } = await supabase
+          .from('user_master')
+          .update(record)
+          .ilike('user_name', targetUsername)
+          .select()
+        if (!upError && upData && upData.length > 0) {
+          resData = upData[0]
           isSaved = true
+        } else {
+          const updateRes = await resilientUpdate(tableName, record, 'user_name', targetUsername)
+          if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+            resData = updateRes.data[0]
+            isSaved = true
+          }
         }
       }
 
@@ -493,12 +540,22 @@ export async function saveSupabaseRecord(
         if (!insertPayload.user_id || !isUUID(insertPayload.user_id)) {
           delete insertPayload.user_id
         }
-        const upsertRes = await resilientUpsert(tableName, [insertPayload])
-        if (!upsertRes.error && upsertRes.data && upsertRes.data.length > 0) {
-          resData = upsertRes.data[0]
+        const { data: insData, error: insError } = await supabase
+          .from(tableName)
+          .insert([insertPayload])
+          .select()
+
+        if (!insError && insData && insData.length > 0) {
+          resData = insData[0]
           isSaved = true
-        } else if (upsertRes.error) {
-          resError = upsertRes.error.message
+        } else {
+          const upsertRes = await resilientUpsert(tableName, [insertPayload])
+          if (!upsertRes.error && upsertRes.data && upsertRes.data.length > 0) {
+            resData = upsertRes.data[0]
+            isSaved = true
+          } else if (upsertRes.error) {
+            resError = upsertRes.error.message || insError?.message
+          }
         }
       }
     } else if (record.emp_code) {

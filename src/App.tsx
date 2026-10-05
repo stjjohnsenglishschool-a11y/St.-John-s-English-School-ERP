@@ -857,7 +857,7 @@ function App() {
           ? payload.active_module
           : [];
         payload.allowed_modules = modulesList;
-        payload.active_module = JSON.stringify(modulesList);
+        payload.active_module = modulesList;
         if (!payload.password && !isEdit) {
           payload.password = "User@123";
         }
@@ -884,24 +884,7 @@ function App() {
 
       const saveRes = await saveDocument(mod.table, mod.primaryKey, payload);
       if (!saveRes.success) {
-        console.warn("Database save warning, persisting locally:", saveRes.error);
-        const tableKey = `sjes_table_${mod.table}`;
-        const existingStr = localStorage.getItem(tableKey);
-        let currentRows: Row[] = existingStr ? JSON.parse(existingStr) : rows;
-        if (isEdit) {
-          currentRows = currentRows.map((r) =>
-            r[mod.primaryKey] === rowId ? { ...r, ...payload, [mod.primaryKey]: rowId } : r
-          );
-        } else {
-          const genId = crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}`;
-          currentRows = [{ ...payload, [mod.primaryKey]: genId }, ...currentRows];
-        }
-        localStorage.setItem(tableKey, JSON.stringify(currentRows));
-        setRows(currentRows);
-        setModal(null);
-        setToast(isEdit ? "Record updated" : "Record created successfully");
-        setLoading(false);
-        return;
+        throw new Error(saveRes.error || "Failed to save record to database");
       }
 
       await logActivity({
