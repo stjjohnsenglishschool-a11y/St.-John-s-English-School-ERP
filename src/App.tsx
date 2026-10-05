@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   Activity,
+  AlertTriangle,
   ArrowUpDown,
   Bell,
   BookOpenCheck,
@@ -221,32 +222,40 @@ function App() {
   }, []);
 
   const currentEmployeeRecord = useMemo(() => {
-    if (!currentUser || !employeeList.length) return null;
+    if (!currentUser) return null;
     const uName = (currentUser.user_full_name || "").toLowerCase().trim();
     const uUser = (currentUser.user_name || "").toLowerCase().trim();
 
-    return (
-      employeeList.find((e: any) => {
-        const eFull = String(
-          e.full_name || `${e.first_name || ""} ${e.last_name || ""}`
-        )
-          .toLowerCase()
-          .trim();
-        const eCode = String(e.emp_code || e.emp_id || "")
-          .toLowerCase()
-          .trim();
-        const eEmail = String(e.official_email || e.personal_email || "")
-          .toLowerCase()
-          .trim();
-        return (
-          (uName && eFull === uName) ||
-          (uName && eFull.includes(uName)) ||
-          (uName && uName.includes(eFull)) ||
-          (uUser && eCode === uUser) ||
-          (uUser && eEmail.startsWith(uUser))
-        );
-      }) || null
-    );
+    const match = employeeList.find((e: any) => {
+      const eFull = String(
+        e.full_name || `${e.first_name || ""} ${e.last_name || ""}`
+      )
+        .toLowerCase()
+        .trim();
+      const eCode = String(e.emp_code || e.emp_id || "")
+        .toLowerCase()
+        .trim();
+      const eEmail = String(e.official_email || e.personal_email || "")
+        .toLowerCase()
+        .trim();
+      return (
+        (uName && eFull === uName) ||
+        (uName && eFull.includes(uName)) ||
+        (uName && uName.includes(eFull)) ||
+        (uUser && eCode === uUser) ||
+        (uUser && eEmail.startsWith(uUser)) ||
+        (uUser && eFull.includes(uUser))
+      );
+    });
+
+    if (match) return match;
+
+    return {
+      full_name: currentUser.user_full_name || currentUser.user_name,
+      emp_id: currentUser.user_name,
+      emp_code: currentUser.user_name,
+      department: currentUser.department || "General",
+    };
   }, [currentUser, employeeList]);
 
   const allowedModuleKeys = useMemo(() => {
@@ -537,9 +546,18 @@ function App() {
   const filtered = useMemo(() => {
     let list = rows;
 
-    // Strict Data Privacy: If a Teacher / Staff is logged in, restrict leave applications and leave balances to their own records only
+    // Strict Data Privacy: If a Teacher / Staff is logged in, restrict HR records, letters, documents, salary slips, and leave records to their own profile only
     if (isStaffOrTeacher && mod) {
-      if (mod.table === "leave_application" || mod.table === "leave_balance") {
+      const personalTables = [
+        "leave_application",
+        "leave_balance",
+        "warning_letter",
+        "offer_letter",
+        "employee_document",
+        "salary_slip",
+        "employee_attendance",
+      ];
+      if (personalTables.includes(mod.table)) {
         const myName = String(
           currentEmployeeRecord?.full_name ||
             `${currentEmployeeRecord?.first_name || ""} ${currentEmployeeRecord?.last_name || ""}`.trim() ||
@@ -550,7 +568,13 @@ function App() {
         const myId = String(currentEmployeeRecord?.emp_id || currentEmployeeRecord?.emp_code || "").toLowerCase().trim();
 
         list = list.filter((r) => {
-          const rName = String(r.employee_name || "").toLowerCase().trim();
+          const rName = String(
+            r.employee_name ||
+            r.candidate_name ||
+            r.staff_name ||
+            r.name ||
+            ""
+          ).toLowerCase().trim();
           const rId = String(r.emp_id || r.emp_code || "").toLowerCase().trim();
           return (
             (myId && rId === myId) ||
@@ -588,7 +612,7 @@ function App() {
       });
     }
     return list;
-  }, [rows, query, sortCol, sortAsc]);
+  }, [rows, query, sortCol, sortAsc, isStaffOrTeacher, mod, currentEmployeeRecord, currentUser]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginatedRows = useMemo(() => {
@@ -1389,50 +1413,219 @@ function App() {
             {mod.table === "leave_balance" && (
               <div
                 style={{
-                  background: "#eff6ff",
-                  border: "1px solid #bfdbfe",
+                  background: isStaffOrTeacher ? "#f0fdf4" : "#eff6ff",
+                  border: `1px solid ${isStaffOrTeacher ? "#bbf7d0" : "#bfdbfe"}`,
                   borderRadius: "10px",
-                  padding: "12px 18px",
+                  padding: "14px 18px",
                   marginBottom: "14px",
                   fontSize: "13px",
                   display: "flex",
                   flexWrap: "wrap",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  gap: "10px",
+                  gap: "12px",
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 800, color: "#1e40af", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <ShieldCheck size={18} color="#2563eb" />
-                    <span>Annual Employee Leave Balances ({getCurrentAcademicYear()})</span>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      color: isStaffOrTeacher ? "#166534" : "#1e40af",
+                      fontSize: "14px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <ShieldCheck size={18} color={isStaffOrTeacher ? "#16a34a" : "#2563eb"} />
+                    <span>
+                      {isStaffOrTeacher
+                        ? `My Official Leave Entitlements & Balances (${getCurrentAcademicYear()})`
+                        : `Annual Staff Leave Balance Register (${getCurrentAcademicYear()})`}
+                    </span>
                   </div>
-                  <div style={{ color: "#3b82f6", fontSize: "12px", marginTop: "3px" }}>
-                    • Casual Leave (CL: 12d) • Sick Leave (ML: 10d) • Privilege / Earned Leave (PL/EL: 15d) • Remaining = Entitled − Taken
+                  <div style={{ color: isStaffOrTeacher ? "#15803d" : "#3b82f6", fontSize: "12px", marginTop: "3px" }}>
+                    • Casual Leave (CL: 12d) • Medical Leave (ML: 10d) • Earned Leave (PL/EL: 15d) • Remaining = Entitled − Taken
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button
-                    onClick={handleAutoInitLeaveBalances}
-                    title="Automatically create annual leave balances for all active staff in Employee Master"
+                  {isStaffOrTeacher ? (
+                    <button
+                      onClick={() => {
+                        setActive("leave_application");
+                        setModal({ mode: "create" });
+                      }}
+                      title="Apply for a new leave request"
+                      style={{
+                        background: "linear-gradient(135deg, #16a34a, #15803d)",
+                        color: "#fff",
+                        border: "none",
+                        padding: "7px 16px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        boxShadow: "0 2px 4px rgba(22,163,74,0.25)",
+                      }}
+                    >
+                      <Plus size={14} />
+                      Apply for Leave
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleAutoInitLeaveBalances}
+                      title="Automatically create annual leave balances for all active staff in Employee Master"
+                      style={{
+                        background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
+                        color: "#fff",
+                        border: "none",
+                        padding: "7px 14px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        boxShadow: "0 2px 4px rgba(37,99,235,0.2)",
+                      }}
+                    >
+                      <Sparkles size={14} />
+                      Initialize All Staff Balances
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {mod.table === "warning_letter" && (
+              <div
+                style={{
+                  background: isStaffOrTeacher ? "#fef2f2" : "#fff7ed",
+                  border: `1px solid ${isStaffOrTeacher ? "#fecaca" : "#fed7aa"}`,
+                  borderRadius: "10px",
+                  padding: "14px 18px",
+                  marginBottom: "14px",
+                  fontSize: "13px",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                }}
+              >
+                <div>
+                  <div
                     style={{
-                      background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-                      color: "#fff",
-                      border: "none",
-                      padding: "7px 14px",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      cursor: "pointer",
+                      fontWeight: 800,
+                      color: isStaffOrTeacher ? "#991b1b" : "#9a3412",
+                      fontSize: "14px",
                       display: "flex",
                       alignItems: "center",
-                      gap: "6px",
-                      boxShadow: "0 2px 4px rgba(37,99,235,0.2)",
+                      gap: "8px",
                     }}
                   >
-                    <Sparkles size={14} />
-                    Initialize All Staff Balances
-                  </button>
+                    <AlertTriangle size={18} color={isStaffOrTeacher ? "#dc2626" : "#ea580c"} />
+                    <span>
+                      {isStaffOrTeacher
+                        ? "Official Warning Letters & Notices"
+                        : "Staff Warning Letters & Memorandums"}
+                    </span>
+                  </div>
+                  <div style={{ color: isStaffOrTeacher ? "#b91c1c" : "#c2410c", fontSize: "12px", marginTop: "3px" }}>
+                    {isStaffOrTeacher
+                      ? "Official notices issued by Principal / Administration. Click 'Download / Print' to view and print your copy."
+                      : "Official disciplinary notices issued by Principal with acknowledgement records."}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {mod.table === "offer_letter" && (
+              <div
+                style={{
+                  background: isStaffOrTeacher ? "#eff6ff" : "#f0fdf4",
+                  border: `1px solid ${isStaffOrTeacher ? "#bfdbfe" : "#bbf7d0"}`,
+                  borderRadius: "10px",
+                  padding: "14px 18px",
+                  marginBottom: "14px",
+                  fontSize: "13px",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      color: isStaffOrTeacher ? "#1e40af" : "#166534",
+                      fontSize: "14px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <FileText size={18} color={isStaffOrTeacher ? "#2563eb" : "#16a34a"} />
+                    <span>
+                      {isStaffOrTeacher
+                        ? "Official Employment Offer & Appointment Letters"
+                        : "Candidate Offer & Appointment Letter Register"}
+                    </span>
+                  </div>
+                  <div style={{ color: isStaffOrTeacher ? "#3b82f6" : "#15803d", fontSize: "12px", marginTop: "3px" }}>
+                    {isStaffOrTeacher
+                      ? "Official appointment and employment terms issued by Administration. Click 'Download / Print' to view your letter."
+                      : "Issue and track signed offer letters, joining dates, and employment terms."}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {mod.table === "employee_document" && (
+              <div
+                style={{
+                  background: isStaffOrTeacher ? "#f8fafc" : "#eff6ff",
+                  border: `1px solid ${isStaffOrTeacher ? "#e2e8f0" : "#bfdbfe"}`,
+                  borderRadius: "10px",
+                  padding: "14px 18px",
+                  marginBottom: "14px",
+                  fontSize: "13px",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      color: isStaffOrTeacher ? "#334155" : "#1e40af",
+                      fontSize: "14px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <ShieldCheck size={18} color={isStaffOrTeacher ? "#475569" : "#2563eb"} />
+                    <span>
+                      {isStaffOrTeacher
+                        ? "My Official Staff Documents & Certificates"
+                        : "Employee Document & Verification Repository"}
+                    </span>
+                  </div>
+                  <div style={{ color: isStaffOrTeacher ? "#64748b" : "#3b82f6", fontSize: "12px", marginTop: "3px" }}>
+                    {isStaffOrTeacher
+                      ? "Official employee certificates and records verified by Administration. Click 'Download' to view any file."
+                      : "Store and verify staff KYC documents, qualification proofs, and certificates."}
+                  </div>
                 </div>
               </div>
             )}
@@ -1455,19 +1648,40 @@ function App() {
                     placeholder={`Filter ${moduleName(mod.table)}... (${filtered.length} records)`}
                   />
                 </div>
-                <button
-                  onClick={() => downloadSampleCsv(mod)}
-                  title="Download pre-filled sample CSV template for bulk upload"
-                  style={{
-                    background: "#e0f2fe",
-                    color: "#0369a1",
-                    border: "1px solid #bae6fd",
-                    fontWeight: 600,
-                  }}
-                >
-                  <Download size={15} />
-                  Sample CSV
-                </button>
+                {!(
+                  isStaffOrTeacher &&
+                  [
+                    "leave_balance",
+                    "warning_letter",
+                    "offer_letter",
+                    "employee_document",
+                    "salary_slip",
+                  ].includes(mod.table)
+                )}
+                {!(
+                  isStaffOrTeacher &&
+                  [
+                    "leave_balance",
+                    "warning_letter",
+                    "offer_letter",
+                    "employee_document",
+                    "salary_slip",
+                  ].includes(mod.table)
+                ) && (
+                  <button
+                    onClick={() => downloadSampleCsv(mod)}
+                    title="Download pre-filled sample CSV template for bulk upload"
+                    style={{
+                      background: "#e0f2fe",
+                      color: "#0369a1",
+                      border: "1px solid #bae6fd",
+                      fontWeight: 600,
+                    }}
+                  >
+                    <Download size={15} />
+                    Sample CSV
+                  </button>
+                )}
                 {mod.table === "income_head_master" && (
                   <button
                     onClick={() => setIncomeHeadUploadOpen(true)}
@@ -1505,27 +1719,67 @@ function App() {
                     Income Heads Master
                   </button>
                 )}
-                {mod.fields.length > 0 && (
+                {mod.fields.length > 0 &&
+                  !(
+                    isStaffOrTeacher &&
+                    [
+                      "leave_balance",
+                      "warning_letter",
+                      "offer_letter",
+                      "employee_document",
+                      "salary_slip",
+                    ].includes(mod.table)
+                  ) && (
+                    <button
+                      onClick={() => setCsvModalOpen(true)}
+                      title="Import records from CSV"
+                    >
+                      <Upload size={15} />
+                      Import CSV
+                    </button>
+                  )}
+                {mod.fields.length > 0 &&
+                  !(
+                    isStaffOrTeacher &&
+                    [
+                      "leave_balance",
+                      "warning_letter",
+                      "offer_letter",
+                      "employee_document",
+                      "salary_slip",
+                    ].includes(mod.table)
+                  ) && (
+                    <button
+                      onClick={() => setModal({ mode: "create" })}
+                      style={{
+                        background: "var(--blue)",
+                        color: "#fff",
+                        border: "none",
+                        fontWeight: 600,
+                      }}
+                    >
+                      <Plus size={15} />
+                      Add Entry
+                    </button>
+                  )}
+                {isStaffOrTeacher && mod.table === "leave_balance" && (
                   <button
-                    onClick={() => setCsvModalOpen(true)}
-                    title="Import records from CSV"
-                  >
-                    <Upload size={15} />
-                    Import CSV
-                  </button>
-                )}
-                {mod.fields.length > 0 && (
-                  <button
-                    onClick={() => setModal({ mode: "create" })}
+                    onClick={() => {
+                      setActive("leave_application");
+                      setModal({ mode: "create" });
+                    }}
                     style={{
-                      background: "var(--blue)",
+                      background: "#16a34a",
                       color: "#fff",
                       border: "none",
-                      fontWeight: 600,
+                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
                     }}
                   >
                     <Plus size={15} />
-                    Add Entry
+                    Apply for Leave
                   </button>
                 )}
               </div>
@@ -1536,6 +1790,7 @@ function App() {
                 loading={loading}
                 sortCol={sortCol}
                 sortAsc={sortAsc}
+                isStaffOrTeacher={isStaffOrTeacher}
                 onSort={handleSort}
                 view={(row) => setModal({ mode: "view", row })}
                 edit={(row) => setModal({ mode: "edit", row })}
@@ -1806,6 +2061,7 @@ function DataTable({
   mod,
   rows,
   loading,
+  isStaffOrTeacher,
   sortCol,
   sortAsc,
   onSort,
@@ -1820,6 +2076,7 @@ function DataTable({
   mod: (typeof modules)[string];
   rows: Row[];
   loading: boolean;
+  isStaffOrTeacher?: boolean;
   sortCol: string | null;
   sortAsc: boolean;
   onSort: (col: string) => void;
@@ -2091,38 +2348,108 @@ function DataTable({
                   {mod.table === "warning_letter" && printLetter && (
                     <button
                       onClick={() => printLetter("warning", r)}
-                      title="Print Warning Letter"
-                      style={{ color: "#d9534f" }}
+                      title="View, Download & Print Warning Letter"
+                      style={{
+                        color: "#b91c1c",
+                        background: "#fef2f2",
+                        border: "1px solid #fecaca",
+                        padding: "3px 8px",
+                        borderRadius: "5px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
                     >
-                      <Printer />
+                      <Printer size={13} color="#dc2626" />
+                      <span>{isStaffOrTeacher ? "Download / Print" : "Print"}</span>
                     </button>
                   )}
                   {mod.table === "offer_letter" && printLetter && (
                     <button
                       onClick={() => printLetter("offer", r)}
-                      title="Print Offer Letter"
-                      style={{ color: "var(--blue)" }}
+                      title="View, Download & Print Offer Letter"
+                      style={{
+                        color: "#1e40af",
+                        background: "#eff6ff",
+                        border: "1px solid #bfdbfe",
+                        padding: "3px 8px",
+                        borderRadius: "5px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
                     >
-                      <Printer />
+                      <Printer size={13} color="#2563eb" />
+                      <span>{isStaffOrTeacher ? "Download / Print" : "Print"}</span>
                     </button>
+                  )}
+                  {mod.table === "employee_document" && r.file_url && (
+                    <a
+                      href={formatImageUrl(String(r.file_url))}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Download / View Verified Document"
+                      style={{
+                        color: "#0369a1",
+                        background: "#e0f2fe",
+                        border: "1px solid #bae6fd",
+                        padding: "3px 8px",
+                        borderRadius: "5px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        textDecoration: "none",
+                      }}
+                    >
+                      <Download size={13} color="#0284c7" />
+                      <span>Download</span>
+                    </a>
                   )}
                   <button onClick={() => view(r)} title="View details">
                     <Eye />
                   </button>
-                  {mod.fields.length > 0 && (
-                    <button onClick={() => edit(r)} title="Edit record">
-                      <Edit3 />
-                    </button>
-                  )}
-                  {mod.fields.length > 0 && (
-                    <button
-                      className="danger"
-                      onClick={() => remove(r)}
-                      title="Delete record"
-                    >
-                      <Trash2 />
-                    </button>
-                  )}
+                  {mod.fields.length > 0 &&
+                    !(
+                      isStaffOrTeacher &&
+                      [
+                        "leave_balance",
+                        "warning_letter",
+                        "offer_letter",
+                        "employee_document",
+                        "salary_slip",
+                      ].includes(mod.table)
+                    ) && (
+                      <button onClick={() => edit(r)} title="Edit record">
+                        <Edit3 />
+                      </button>
+                    )}
+                  {mod.fields.length > 0 &&
+                    !(
+                      isStaffOrTeacher &&
+                      [
+                        "leave_balance",
+                        "warning_letter",
+                        "offer_letter",
+                        "employee_document",
+                        "salary_slip",
+                      ].includes(mod.table)
+                    ) && (
+                      <button
+                        className="danger"
+                        onClick={() => remove(r)}
+                        title="Delete record"
+                      >
+                        <Trash2 />
+                      </button>
+                    )}
                 </div>
               </td>
             </tr>
@@ -2800,8 +3127,8 @@ function FormField({
     );
   }
 
-  // Leave Application: Lock Applicant to Logged In Teacher/Staff
-  if (tableName === "leave_application" && field.key === "emp_id" && isStaffOrTeacher) {
+  // Leave Application & Leave Balance: Lock Applicant to Logged In Teacher/Staff
+  if ((tableName === "leave_application" || tableName === "leave_balance") && field.key === "emp_id" && isStaffOrTeacher) {
     const empName =
       String(currentEmployeeRecord?.full_name || "") ||
       `${String(currentEmployeeRecord?.first_name || "")} ${String(currentEmployeeRecord?.last_name || "")}`.trim() ||
@@ -2812,7 +3139,7 @@ function FormField({
     return (
       <label>
         <span>
-          Applicant Employee <b>*</b>
+          Employee / Staff Member <b>*</b>
         </span>
         <div
           style={{
@@ -2841,8 +3168,8 @@ function FormField({
     );
   }
 
-  // Leave Application: Lock Employee Name to Logged In Teacher/Staff
-  if (tableName === "leave_application" && field.key === "employee_name" && isStaffOrTeacher) {
+  // Leave Application & Leave Balance: Lock Employee Name to Logged In Teacher/Staff
+  if ((tableName === "leave_application" || tableName === "leave_balance") && field.key === "employee_name" && isStaffOrTeacher) {
     const empName =
       String(value || "") ||
       String(currentEmployeeRecord?.full_name || "") ||
@@ -2865,43 +3192,47 @@ function FormField({
     );
   }
 
+  // Leave Balance: Balance Remaining Auto-calculated display
+  if (tableName === "leave_balance" && field.key === "balance_remaining") {
+    const bal = Number(value ?? 12);
+    return (
+      <label>
+        <span>
+          Balance Remaining (Auto Calculated) <b>*</b>
+        </span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "9px 14px",
+            background: bal > 0 ? "#f0fdf4" : "#fef2f2",
+            border: `1.5px solid ${bal > 0 ? "#86efac" : "#fca5a5"}`,
+            borderRadius: "8px",
+            minHeight: "38px",
+            boxSizing: "border-box",
+          }}
+        >
+          <span style={{ fontWeight: 800, fontSize: "13px", color: bal > 0 ? "#15803d" : "#b91c1c" }}>
+            {bal} Days Remaining
+          </span>
+          <span style={{ fontSize: "11px", color: bal > 0 ? "#166534" : "#991b1b", fontWeight: 600 }}>
+            (Entitled − Taken)
+          </span>
+        </div>
+      </label>
+    );
+  }
+
   // Leave Application Status field
   if (tableName === "leave_application" && field.key === "status") {
-    if (mode === "create") {
-      return (
-        <label>
-          <span>
-            Application Status <b>*</b>
-          </span>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "9px 12px",
-              background: "#fef3c7",
-              border: "1.5px solid #fcd34d",
-              borderRadius: "8px",
-              color: "#92400e",
-              fontSize: "12px",
-              fontWeight: 700,
-              minHeight: "38px",
-              boxSizing: "border-box",
-            }}
-          >
-            <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "#f59e0b" }} />
-            <span>Pending Principal Approval (Auto-submitted)</span>
-          </div>
-        </label>
-      );
-    }
-    if (disabled) {
+    if (mode === "create" || isStaffOrTeacher || disabled) {
       const st = String(value || "pending").toLowerCase();
       const isApp = st === "approved";
       const isRej = st === "rejected";
       return (
         <label>
-          <span>Application Status</span>
+          <span>Application Status <b>*</b></span>
           <div
             style={{
               display: "flex",
@@ -2919,8 +3250,20 @@ function FormField({
               textTransform: "uppercase",
             }}
           >
-            <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: isApp ? "#16a34a" : isRej ? "#dc2626" : "#f59e0b" }} />
-            <span>{st}</span>
+            <span
+              style={{
+                display: "inline-block",
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                background: isApp ? "#16a34a" : isRej ? "#dc2626" : "#f59e0b",
+              }}
+            />
+            <span>
+              {mode === "create"
+                ? "Pending Principal Approval (Auto-submitted)"
+                : st}
+            </span>
           </div>
         </label>
       );
@@ -2929,7 +3272,7 @@ function FormField({
 
   // Leave Application Approved By field
   if (tableName === "leave_application" && field.key === "approved_by") {
-    if (mode === "create") {
+    if (mode === "create" || isStaffOrTeacher || disabled || !value) {
       return (
         <label>
           <span>Approved By</span>
@@ -2939,42 +3282,22 @@ function FormField({
               alignItems: "center",
               gap: "8px",
               padding: "9px 12px",
-              background: "#f8fafc",
-              border: "1px dashed #cbd5e1",
+              background: value ? "#f0fdf4" : "#f8fafc",
+              border: `1.5px solid ${value ? "#86efac" : "#cbd5e1"}`,
               borderRadius: "8px",
-              color: "#64748b",
+              color: value ? "#15803d" : "#64748b",
               fontSize: "12px",
-              fontWeight: 600,
+              fontWeight: 700,
               minHeight: "38px",
               boxSizing: "border-box",
             }}
           >
-            <ShieldCheck size={16} color="#94a3b8" />
-            <span>Assigned automatically upon Principal review</span>
-          </div>
-        </label>
-      );
-    }
-    if (disabled && !value) {
-      return (
-        <label>
-          <span>Approved By</span>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "9px 12px",
-              background: "#f8fafc",
-              border: "1px solid #e2e8f0",
-              borderRadius: "8px",
-              color: "#94a3b8",
-              fontSize: "12px",
-              minHeight: "38px",
-              boxSizing: "border-box",
-            }}
-          >
-            <span>Awaiting Principal Approval</span>
+            <ShieldCheck size={16} color={value ? "#16a34a" : "#94a3b8"} />
+            <span>
+              {value
+                ? `Approved by: ${String(value)}`
+                : "Awaiting Principal Approval"}
+            </span>
           </div>
         </label>
       );

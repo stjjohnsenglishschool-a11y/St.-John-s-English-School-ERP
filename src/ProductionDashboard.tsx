@@ -906,7 +906,7 @@ export default function ProductionDashboard({
       </section>
 
       {/* Bottom Grid: Workflows & Audit Log */}
-      <section className="operations-grid">
+      <section className={`operations-grid ${isTeacher || isStaff ? 'single-column' : ''}`}>
         <article className="dashboard-panel attention-panel">
           <header>
             <div>
@@ -914,8 +914,8 @@ export default function ProductionDashboard({
                 <BellRing />
               </span>
               <div>
-                <h2>{isTeacher ? 'Academic Tasks' : 'Needs attention'}</h2>
-                <p>{isTeacher ? 'Current classroom deliverables' : 'Pending school workflows'}</p>
+                <h2>{isTeacher ? 'Academic & Classroom Deliverables' : 'Needs attention'}</h2>
+                <p>{isTeacher ? 'Active tasks, registers & classroom deliverables' : 'Pending school workflows'}</p>
               </div>
             </div>
           </header>
@@ -1023,48 +1023,48 @@ export default function ProductionDashboard({
           </div>
         </article>
 
-        {/* Recent Activity Audit Trail */}
-        <article className="dashboard-panel activity-panel">
-          <header>
-            <div>
-              <span className="panel-icon violet">
-                <Activity />
-              </span>
+        {/* Recent Activity Audit Trail: Only visible to Administrators and Principals */}
+        {!isTeacher && !isStaff && (
+          <article className="dashboard-panel activity-panel">
+            <header>
               <div>
-                <h2>Recent activity</h2>
-                <p>Live audit trail from database</p>
+                <span className="panel-icon violet">
+                  <Activity />
+                </span>
+                <div>
+                  <h2>Recent activity</h2>
+                  <p>Live audit trail from database</p>
+                </div>
               </div>
-            </div>
-            {!isTeacher && (
               <button onClick={() => choose('userlog_master')}>
                 View all
                 <ChevronRight />
               </button>
+            </header>
+            {visibleLogs.length > 0 ? (
+              <div className="dashboard-activity">
+                {visibleLogs.map((row, index) => (
+                  <div key={row.log_id || index}>
+                    <span className="activity-dot" />
+                    <span>
+                      <b>{row.action || 'Activity recorded'}</b>
+                      <small>
+                        {row.username || 'System'} · {showModule(row.module)} ·{' '}
+                        {formatLogTime(row.created_at)}
+                      </small>
+                    </span>
+                    <em>{row.status || 'complete'}</em>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="activity-empty">
+                <Activity />
+                <span>No activity has been recorded in the database yet.</span>
+              </div>
             )}
-          </header>
-          {visibleLogs.length > 0 ? (
-            <div className="dashboard-activity">
-              {visibleLogs.map((row, index) => (
-                <div key={row.log_id || index}>
-                  <span className="activity-dot" />
-                  <span>
-                    <b>{row.action || 'Activity recorded'}</b>
-                    <small>
-                      {row.username || 'System'} · {showModule(row.module)} ·{' '}
-                      {formatLogTime(row.created_at)}
-                    </small>
-                  </span>
-                  <em>{row.status || 'complete'}</em>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="activity-empty">
-              <Activity />
-              <span>No activity has been recorded in the database yet.</span>
-            </div>
-          )}
-        </article>
+          </article>
+        )}
       </section>
     </div>
   )
