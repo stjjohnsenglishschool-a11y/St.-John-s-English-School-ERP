@@ -2519,6 +2519,63 @@ function RecordModal({
       }
     }
 
+    // Auto-fill Assignments with logged in teacher name and current date
+    if (mod.table === "assignments_master" && mode === "create") {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const nextWeek = new Date();
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      const nextWeekStr = nextWeek.toISOString().slice(0, 10);
+
+      const staffName =
+        String(currentEmployeeRecord?.full_name || "") ||
+        `${String(currentEmployeeRecord?.first_name || "")} ${String(currentEmployeeRecord?.last_name || "")}`.trim() ||
+        currentUser?.user_full_name ||
+        currentUser?.user_name ||
+        "Faculty";
+
+      initial.assigned_by = initial.assigned_by || staffName;
+      initial.assigned_date = initial.assigned_date || todayStr;
+      initial.due_date = initial.due_date || nextWeekStr;
+      initial.status = initial.status || "active";
+      initial.class_name = initial.class_name || "CLASS I";
+    }
+
+    // Auto-fill Notices with logged in user and current date
+    if (mod.table === "notice_automation" && mode === "create") {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const authorName =
+        String(currentEmployeeRecord?.full_name || "") ||
+        currentUser?.user_full_name ||
+        currentUser?.user_name ||
+        "Administration";
+
+      initial.created_by = initial.created_by || authorName;
+      initial.scheduled_at = initial.scheduled_at || todayStr;
+      initial.send_via = initial.send_via || "Email";
+      initial.status = initial.status || "scheduled";
+    }
+
+    // Auto-fill Incomes & Expenses with logged in user
+    if (mod.table === "income_master" && mode === "create") {
+      initial.received_by =
+        initial.received_by ||
+        currentUser?.user_full_name ||
+        currentUser?.user_name ||
+        "Accounts";
+      initial.income_date = initial.income_date || new Date().toISOString().slice(0, 10);
+      initial.payment_mode = initial.payment_mode || "Cash";
+    }
+
+    if (mod.table === "expense_master" && mode === "create") {
+      initial.recorded_by =
+        initial.recorded_by ||
+        currentUser?.user_full_name ||
+        currentUser?.user_name ||
+        "Accounts";
+      initial.expense_date = initial.expense_date || new Date().toISOString().slice(0, 10);
+      initial.payment_mode = initial.payment_mode || "Cash";
+    }
+
     return initial;
   });
 
@@ -3322,6 +3379,95 @@ function FormField({
         <span style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
           Required before 'Fine Waived' can be applied.
         </span>
+      </label>
+    );
+  }
+
+  // Assignments: Auto-fill & Display Logged-in Faculty Name for Assigned by
+  if (tableName === "assignments_master" && field.key === "assigned_by") {
+    const authorName =
+      String(value || "") ||
+      String(currentEmployeeRecord?.full_name || "") ||
+      `${String(currentEmployeeRecord?.first_name || "")} ${String(currentEmployeeRecord?.last_name || "")}`.trim() ||
+      currentUser?.user_full_name ||
+      currentUser?.user_name ||
+      "Faculty Member";
+
+    return (
+      <label>
+        <span>
+          Assigned by <b>*</b>
+        </span>
+        <div style={{ position: "relative" }}>
+          <input
+            disabled={disabled}
+            type="text"
+            value={String(value || authorName)}
+            onChange={(e) => change(e.target.value)}
+            placeholder="Faculty name"
+            style={{
+              paddingLeft: "34px",
+              background: "#f0fdf4",
+              border: "1.5px solid #86efac",
+              color: "#15803d",
+              fontWeight: 700,
+            }}
+          />
+          <UserRoundCheck
+            size={16}
+            color="#16a34a"
+            style={{
+              position: "absolute",
+              left: "10px",
+              top: "50%",
+              transform: "translateY(-50%)",
+            }}
+          />
+        </div>
+      </label>
+    );
+  }
+
+  // Notices: Auto-fill & Display Author Name for Created by
+  if (tableName === "notice_automation" && field.key === "created_by") {
+    const authorName =
+      String(value || "") ||
+      String(currentEmployeeRecord?.full_name || "") ||
+      currentUser?.user_full_name ||
+      currentUser?.user_name ||
+      "Administration";
+
+    return (
+      <label>
+        <span>
+          Created by <b>*</b>
+        </span>
+        <div style={{ position: "relative" }}>
+          <input
+            disabled={disabled}
+            type="text"
+            value={String(value || authorName)}
+            onChange={(e) => change(e.target.value)}
+            placeholder="Author name"
+            style={{
+              paddingLeft: "34px",
+              background: "#f8fafc",
+              border: "1px solid #cbd5e1",
+              color: "#334155",
+              fontWeight: 600,
+            }}
+          />
+          <UserRoundCheck
+            size={16}
+            color="#0284c7"
+            style={{
+              position: "absolute",
+              left: "10px",
+              top: "50%",
+              transform: "translateY(-50%)",
+            }}
+          />
+        </div>
       </label>
     );
   }
