@@ -827,36 +827,15 @@ function App() {
       }
 
       if (mod.table === "user_master") {
-        const modulesList = Array.isArray(payload.allowed_modules)
-          ? payload.allowed_modules
-          : typeof payload.allowed_modules === "string"
-          ? payload.allowed_modules.split(",").map((s) => s.trim()).filter(Boolean)
-          : Array.isArray(payload.active_module)
-          ? payload.active_module
-          : [];
+        const rawMod = values.allowed_modules !== undefined ? values.allowed_modules : values.active_module;
+        const modulesList = normalizeUserModules({ active_module: rawMod });
         payload.allowed_modules = modulesList;
         payload.active_module = modulesList;
-        if (!payload.password && !isEdit) {
-          payload.password = "User@123";
+        if (modal?.row?.user_id || values.user_id) {
+          payload.user_id = modal?.row?.user_id || values.user_id;
         }
-
-        const editedUsername = String(payload.user_name || "").toLowerCase().trim();
-        const currentUsername = String(currentUser?.user_name || "").toLowerCase().trim();
-        if (editedUsername && editedUsername === currentUsername) {
-          setCurrentUser((prev) => {
-            if (!prev) return prev;
-            const updated = {
-              ...prev,
-              user_full_name: String(payload.user_full_name || prev.user_full_name),
-              role: String(payload.role || prev.role).toLowerCase(),
-              allowed_modules: modulesList,
-              department: payload.department ? String(payload.department) : prev.department,
-            };
-            try {
-              localStorage.setItem("sjes_logged_in_user", JSON.stringify(updated));
-            } catch {}
-            return updated;
-          });
+        if (!payload.password && !isEdit) {
+          payload.password = "User@1234";
         }
       }
 
@@ -871,22 +850,49 @@ function App() {
       });
 
       if (mod.table === "user_master") {
-        const tableKey = "sjes_table_user_master";
-        const existingStr = localStorage.getItem(tableKey);
-        let currentRows: Row[] = existingStr ? JSON.parse(existingStr) : rows;
-        const modulesList = payload.allowed_modules;
-        currentRows = currentRows.map((r) => {
-          const match =
-            (payload.user_id && r.user_id === payload.user_id) ||
-            (payload.user_name && String(r.user_name || "").toLowerCase() === String(payload.user_name).toLowerCase());
-          return match ? { ...r, ...payload, allowed_modules: modulesList, active_module: modulesList } : r;
-        });
-        localStorage.setItem(tableKey, JSON.stringify(currentRows));
-        setRows(currentRows);
+        // Immediate reload from database to verify and update UI strictly from database response
+        const freshUsers = await fetchCollectionData("user_master");
+        if (Array.isArray(freshUsers)) {
+          const freshMapped: Row[] = freshUsers.map((r: Record<string, any>) => ({
+            ...r,
+            allowed_modules: normalizeUserModules(r),
+            active_module: normalizeUserModules(r),
+          }));
+          setRows(freshMapped);
+          localStorage.setItem("sjes_table_user_master", JSON.stringify(freshMapped));
+
+          // If current logged-in user was updated, sync session state with the database response
+          const editedUsername = String(payload.user_name || "").toLowerCase().trim();
+          const editedUserId = payload.user_id;
+          const currentUsername = String(currentUser?.user_name || "").toLowerCase().trim();
+
+          const dbUser = freshMapped.find(
+            (u: Record<string, any>) =>
+              (editedUserId && u.user_id === editedUserId) ||
+              (editedUsername && String(u.user_name || "").toLowerCase().trim() === editedUsername)
+          ) as Record<string, any> | undefined;
+
+          if (dbUser && (editedUsername === currentUsername || (currentUser as Record<string, any> | null)?.user_id === dbUser.user_id)) {
+            setCurrentUser((prev) => {
+              if (!prev) return prev;
+              const updated = {
+                ...prev,
+                user_full_name: String(dbUser.user_full_name || prev.user_full_name),
+                role: String(dbUser.role || prev.role).toLowerCase(),
+                allowed_modules: normalizeUserModules(dbUser),
+                department: dbUser.department ? String(dbUser.department) : prev.department,
+              };
+              try {
+                localStorage.setItem("sjes_logged_in_user", JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
+          }
+        }
       }
 
       setModal(null);
-      setToast(isEdit ? "Record updated in database" : "Record created in database");
+      setToast(isEdit ? "Changes saved successfully to database" : "Record created successfully in database");
       await refresh();
     } catch (e) {
       console.error("Save caught error:", e);

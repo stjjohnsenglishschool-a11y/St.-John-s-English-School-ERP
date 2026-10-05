@@ -30,29 +30,39 @@ export function isUUID(str: any): boolean {
 export function normalizeUserModules(row: any): string[] {
   if (!row) return []
   // Check active_module or allowed_modules
-  const raw = row.active_module ?? row.allowed_modules
+  const raw = row.active_module !== undefined ? row.active_module : row.allowed_modules
   if (Array.isArray(raw)) {
-    return raw.map(String)
+    return raw.map(String).map((s) => s.trim()).filter(Boolean)
   }
-  if (typeof raw === 'string' && raw.trim().length > 0) {
+  if (typeof raw === 'string') {
+    const s = raw.trim()
+    if (!s || s === '{}' || s === '[]') return []
     try {
-      const p = JSON.parse(raw)
-      if (Array.isArray(p)) return p.map(String)
-      return raw.split(',').map((s) => s.replace(/["'[\]]/g, '').trim()).filter(Boolean)
-    } catch {
-      return raw.split(',').map((s) => s.replace(/["'[\]]/g, '').trim()).filter(Boolean)
-    }
+      const p = JSON.parse(s)
+      if (Array.isArray(p)) return p.map(String).map((item) => item.trim()).filter(Boolean)
+    } catch {}
+    return s
+      .replace(/^[{[]|[}\]]$/g, '')
+      .split(',')
+      .map((item) => item.replace(/["'\\]/g, '').trim())
+      .filter(Boolean)
   }
   const alt = row.allowed_modules
-  if (Array.isArray(alt)) return alt.map(String)
-  if (typeof alt === 'string' && alt.trim().length > 0) {
+  if (Array.isArray(alt)) {
+    return alt.map(String).map((s) => s.trim()).filter(Boolean)
+  }
+  if (typeof alt === 'string') {
+    const s = alt.trim()
+    if (!s || s === '{}' || s === '[]') return []
     try {
-      const p = JSON.parse(alt)
-      if (Array.isArray(p)) return p.map(String)
-      return alt.split(',').map((s) => s.replace(/["'[\]]/g, '').trim()).filter(Boolean)
-    } catch {
-      return alt.split(',').map((s) => s.replace(/["'[\]]/g, '').trim()).filter(Boolean)
-    }
+      const p = JSON.parse(s)
+      if (Array.isArray(p)) return p.map(String).map((item) => item.trim()).filter(Boolean)
+    } catch {}
+    return s
+      .replace(/^[{[]|[}\]]$/g, '')
+      .split(',')
+      .map((item) => item.replace(/["'\\]/g, '').trim())
+      .filter(Boolean)
   }
   return []
 }
@@ -191,21 +201,8 @@ export function sanitizePayload(record: Record<string, any>, tableName?: string)
 
   // Special preservation and normalization for user_master module permissions
   if (tableName === 'user_master') {
-    const rawMod = record.active_module ?? record.allowed_modules
-    let cleanArr: string[] = []
-    if (Array.isArray(rawMod)) {
-      cleanArr = rawMod.map(String)
-    } else if (typeof rawMod === 'string' && rawMod.trim().length > 0) {
-      try {
-        const p = JSON.parse(rawMod)
-        if (Array.isArray(p)) cleanArr = p.map(String)
-        else cleanArr = rawMod.split(',').map((s) => s.trim()).filter(Boolean)
-      } catch {
-        cleanArr = rawMod.split(',').map((s) => s.trim()).filter(Boolean)
-      }
-    }
-    // In PostgreSQL, user_master.active_module is a native text[] array
-    clean.active_module = cleanArr
+    const rawMod = record.allowed_modules !== undefined ? record.allowed_modules : record.active_module
+    clean.active_module = normalizeUserModules({ active_module: rawMod })
   }
 
   for (const key of Object.keys(record)) {
@@ -429,113 +426,109 @@ export async function saveSupabaseRecord(
     // Perform exact update query matching primary keys
     if (tableName === 'user_master') {
       let isSaved = false
-      const targetUsername = String(record.user_name || '').trim()
       const targetUserId = record.user_id && isUUID(record.user_id) ? record.user_id : null
+      const targetUsername = String(record.user_name || '').trim()
       const targetFullName = String(record.user_full_name || '').trim()
 
-      // Step A: Fetch existing database users to find exact record & primary key (UUID user_id)
-      let dbTargetUser: any = null
-      try {
-        const { data: dbUserRows } = await supabase
-          .from('user_master')
-          .select('*')
-        
-        if (dbUserRows && dbUserRows.length > 0) {
-          dbTargetUser = dbUserRows.find((u: any) => {
-            if (targetUserId && u.user_id === targetUserId) return true
-            if (targetUsername && String(u.user_name || '').toLowerCase() === targetUsername.toLowerCase()) return true
-            if (targetFullName && String(u.user_full_name || '').toLowerCase() === targetFullName.toLowerCase()) return true
-            return false
-          })
-        }
-      } catch (e) {
-        console.warn('User lookup before update warning:', e)
+      const payloadToUpdate: Record<string, any> = {
+        ...record,
+      }
+      if (targetUserId) {
+        payloadToUpdate.user_id = targetUserId
       }
 
-      // Step B: If user exists in Supabase, update using the exact database user_id or user_name
-      if (dbTargetUser) {
-        const payloadToUpdate = {
-          ...record,
-          user_id: dbTargetUser.user_id,
-        }
-        if (dbTargetUser.user_id && isUUID(dbTargetUser.user_id)) {
-          const { data: upData, error: upError } = await supabase
-            .from('user_master')
-            .update(payloadToUpdate)
-            .eq('user_id', dbTargetUser.user_id)
-            .select()
+      // Step A: If targetUserId (UUID) is present, update directly by user_id
+      if (targetUserId) {
+        const { data: upData, error: upError } = await supabase
+          .from('user_master')
+          .update(payloadToUpdate)
+          .eq('user_id', targetUserId)
+          .select()
 
-          if (!upError && upData && upData.length > 0) {
-            resData = upData[0]
+        if (!upError && upData && upData.length > 0) {
+          resData = upData[0]
+          isSaved = true
+        } else if (upError) {
+          console.error('Direct user update error by user_id:', upError)
+          const updateRes = await resilientUpdate(tableName, payloadToUpdate, 'user_id', targetUserId)
+          if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+            resData = updateRes.data[0]
             isSaved = true
-          } else if (upError) {
-            console.error('Direct user update error by user_id:', upError)
-            const updateRes = await resilientUpdate(tableName, payloadToUpdate, 'user_id', dbTargetUser.user_id)
-            if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
-              resData = updateRes.data[0]
-              isSaved = true
-            }
+          } else if (updateRes.error) {
+            resError = updateRes.error.message || upError.message
           }
         }
-        if (!isSaved && dbTargetUser.user_name) {
+      }
+
+      // Step B: If not saved yet, look up existing database user to resolve primary key (UUID user_id)
+      if (!isSaved) {
+        let dbTargetUser: any = null
+        try {
+          const { data: dbUserRows } = await supabase
+            .from('user_master')
+            .select('*')
+          
+          if (dbUserRows && dbUserRows.length > 0) {
+            dbTargetUser = dbUserRows.find((u: any) => {
+              if (targetUserId && u.user_id === targetUserId) return true
+              if (targetUsername && String(u.user_name || '').toLowerCase() === targetUsername.toLowerCase()) return true
+              if (targetFullName && String(u.user_full_name || '').toLowerCase() === targetFullName.toLowerCase()) return true
+              return false
+            })
+          }
+        } catch (e) {
+          console.warn('User lookup before update warning:', e)
+        }
+
+        if (dbTargetUser) {
+          payloadToUpdate.user_id = dbTargetUser.user_id
+          const userKey = dbTargetUser.user_id && isUUID(dbTargetUser.user_id) ? 'user_id' : 'user_name'
+          const userVal = userKey === 'user_id' ? dbTargetUser.user_id : dbTargetUser.user_name
+
           const { data: upData, error: upError } = await supabase
             .from('user_master')
             .update(payloadToUpdate)
-            .eq('user_name', dbTargetUser.user_name)
+            .eq(userKey, userVal)
             .select()
 
           if (!upError && upData && upData.length > 0) {
             resData = upData[0]
             isSaved = true
           } else {
-            const updateRes = await resilientUpdate(tableName, payloadToUpdate, 'user_name', dbTargetUser.user_name)
+            const updateRes = await resilientUpdate(tableName, payloadToUpdate, userKey, userVal)
             if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
               resData = updateRes.data[0]
               isSaved = true
+            } else if (updateRes.error) {
+              resError = updateRes.error.message
             }
           }
         }
       }
 
-      // Step C: If not updated yet and targetUserId or targetUsername is present, try direct resilientUpdate
-      if (!isSaved && targetUserId) {
-        const { data: upData, error: upError } = await supabase
-          .from('user_master')
-          .update(record)
-          .eq('user_id', targetUserId)
-          .select()
-        if (!upError && upData && upData.length > 0) {
-          resData = upData[0]
-          isSaved = true
-        } else {
-          const updateRes = await resilientUpdate(tableName, record, 'user_id', targetUserId)
-          if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
-            resData = updateRes.data[0]
-            isSaved = true
-          }
-        }
-      }
-
+      // Step C: If still not saved and targetUsername is present, try ilike match on user_name
       if (!isSaved && targetUsername) {
         const { data: upData, error: upError } = await supabase
           .from('user_master')
-          .update(record)
+          .update(payloadToUpdate)
           .ilike('user_name', targetUsername)
           .select()
         if (!upError && upData && upData.length > 0) {
           resData = upData[0]
           isSaved = true
         } else {
-          const updateRes = await resilientUpdate(tableName, record, 'user_name', targetUsername)
+          const updateRes = await resilientUpdate(tableName, payloadToUpdate, 'user_name', targetUsername)
           if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
             resData = updateRes.data[0]
             isSaved = true
+          } else if (updateRes.error) {
+            resError = updateRes.error.message
           }
         }
       }
 
       // Step D: If user truly does not exist in the database table yet, perform insert
-      if (!isSaved) {
+      if (!isSaved && !resError) {
         const insertPayload = { ...record }
         if (!insertPayload.user_id || !isUUID(insertPayload.user_id)) {
           delete insertPayload.user_id

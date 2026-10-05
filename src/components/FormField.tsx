@@ -11,7 +11,7 @@ import {
   UserRoundCheck,
   ShieldCheck,
 } from "lucide-react";
-import { fetchCollectionData, uploadToFirebaseStorage } from "../lib/supabase";
+import { fetchCollectionData, uploadToFirebaseStorage, normalizeUserModules } from "../lib/supabase";
 import { ALL_SUBMENU_MODULES, Field, moduleName } from "../modules";
 import { formatImageUrl } from "../lib/imageUtils";
 
@@ -106,18 +106,7 @@ export default function FormField({
 
   // Custom Multi-Select UI for Module Permission Option
   if (field.key === "allowed_modules" || field.key === "active_module") {
-    let selectedModules: string[] = [];
-    if (Array.isArray(value)) {
-      selectedModules = value.map(String);
-    } else if (typeof value === "string" && value.trim().length > 0) {
-      try {
-        const parsed = JSON.parse(value);
-        if (Array.isArray(parsed)) selectedModules = parsed.map(String);
-        else selectedModules = value.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
-      } catch {
-        selectedModules = value.split(",").map((s) => s.replace(/["'[\]]/g, "").trim()).filter(Boolean);
-      }
-    }
+    const selectedModules = normalizeUserModules({ active_module: value, allowed_modules: value });
 
     const toggleModule = (modKey: string) => {
       if (selectedModules.includes(modKey)) {

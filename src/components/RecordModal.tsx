@@ -55,6 +55,9 @@ export default function RecordModal({
       const parsedArr = normalizeUserModules(row);
       initial.allowed_modules = parsedArr;
       initial.active_module = parsedArr;
+      if (row?.user_id) {
+        initial.user_id = row.user_id;
+      }
     }
 
     if (mod.table === "leave_application" && mode === "create") {
@@ -159,6 +162,15 @@ export default function RecordModal({
   const updateField = (key: string, v: unknown) => {
     setValues((prev) => {
       const next = { ...prev, [key]: v };
+
+      // User Master module sync
+      if (mod.table === "user_master") {
+        if (key === "allowed_modules") {
+          next.active_module = v;
+        } else if (key === "active_module") {
+          next.allowed_modules = v;
+        }
+      }
 
       // Department Code auto generator
       if (mod.table === "department_master" && key === "department_name" && mode === "create") {
