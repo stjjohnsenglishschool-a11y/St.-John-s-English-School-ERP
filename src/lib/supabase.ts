@@ -204,6 +204,58 @@ export function sanitizePayload(record: Record<string, any>, tableName?: string)
 }
 
 /**
+ * Resilient update that automatically recovers if PostgreSQL reports an unmapped or non-existent column
+ */
+export async function resilientUpdate(
+  tableName: string,
+  record: Record<string, any>,
+  matchField: string,
+  matchValue: any
+): Promise<{ data: any; error: any }> {
+  let currentRecord = sanitizePayload(record, tableName)
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const { data, error } = await supabase
+      .from(tableName)
+      .update(currentRecord)
+      .eq(matchField, matchValue)
+      .select()
+
+    if (!error) {
+      return { data, error: null }
+    }
+
+    // Match "Could not find the 'xyz' column of 'table' in the schema cache"
+    const missingColMatch = error.message.match(/Could not find the '([^']+)' column/i)
+    if (missingColMatch && missingColMatch[1]) {
+      const badCol = missingColMatch[1]
+      console.warn(`[Supabase Resilient Update] Stripping missing column '${badCol}' from ${tableName} and retrying...`)
+      const copy = { ...currentRecord }
+      delete copy[badCol]
+      currentRecord = copy
+      continue
+    }
+
+    // Match "column table.xyz does not exist" or column "xyz" of relation "..." does not exist
+    const colNotExistMatch =
+      error.message.match(/column ([^\s.]+\.)?([^\s.]+) does not exist/i) ||
+      error.message.match(/column "([^"]+)" of relation "[^"]+" does not exist/i)
+    if (colNotExistMatch && (colNotExistMatch[2] || colNotExistMatch[1])) {
+      const badCol = colNotExistMatch[2] || colNotExistMatch[1]
+      console.warn(`[Supabase Resilient Update] Stripping non-existent column '${badCol}' from ${tableName} and retrying...`)
+      const copy = { ...currentRecord }
+      delete copy[badCol]
+      currentRecord = copy
+      continue
+    }
+
+    return { data: null, error }
+  }
+
+  return { data: null, error: new Error(`Failed to update records in ${tableName} after schema reconciliation.`) }
+}
+
+/**
  * Resilient upsert that automatically recovers if PostgreSQL reports an unmapped column in the schema cache
  */
 export async function resilientUpsert(
@@ -323,90 +375,58 @@ export async function saveSupabaseRecord(
 
       // 1. Try update by user_id if valid UUID
       if (record.user_id && isUUID(record.user_id)) {
-        const { data, error } = await supabase
-          .from(tableName)
-          .update(record)
-          .eq('user_id', record.user_id)
-          .select()
-
-        if (!error && data && data.length > 0) {
-          resData = data[0]
+        const updateRes = await resilientUpdate(tableName, record, 'user_id', record.user_id)
+        if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+          resData = updateRes.data[0]
           isSaved = true
         }
       }
 
       // 2. Try update by user_name
       if (!isSaved && record.user_name) {
-        const { data, error } = await supabase
-          .from(tableName)
-          .update(record)
-          .eq('user_name', record.user_name)
-          .select()
-
-        if (!error && data && data.length > 0) {
-          resData = data[0]
+        const updateRes = await resilientUpdate(tableName, record, 'user_name', record.user_name)
+        if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+          resData = updateRes.data[0]
           isSaved = true
         }
       }
 
-      // 3. If update returned 0 rows (user doesn't exist yet in Supabase), perform direct insert
+      // 3. If update returned 0 rows (user doesn't exist yet in Supabase), perform direct insert or upsert
       if (!isSaved) {
         const insertPayload = { ...record }
         if (!insertPayload.user_id || !isUUID(insertPayload.user_id)) {
           delete insertPayload.user_id
         }
-        const { data: insertData, error: insertError } = await supabase
-          .from(tableName)
-          .insert([insertPayload])
-          .select()
-
-        if (!insertError && insertData && insertData.length > 0) {
-          resData = insertData[0]
+        const upsertRes = await resilientUpsert(tableName, [insertPayload])
+        if (!upsertRes.error && upsertRes.data && upsertRes.data.length > 0) {
+          resData = upsertRes.data[0]
           isSaved = true
-        } else {
-          // Fallback to resilientUpsert
-          const upsertRes = await resilientUpsert(tableName, [record])
-          if (upsertRes.error) resError = upsertRes.error.message || insertError?.message
-          else resData = upsertRes.data?.[0]
+        } else if (upsertRes.error) {
+          resError = upsertRes.error.message
         }
       }
     } else if (record.emp_code) {
-      const { data, error } = await supabase
-        .from(tableName)
-        .update(record)
-        .eq('emp_code', record.emp_code)
-        .select()
-
-      if (!error && data && data.length > 0) {
-        resData = data[0]
+      const updateRes = await resilientUpdate(tableName, record, 'emp_code', record.emp_code)
+      if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+        resData = updateRes.data[0]
       } else {
         const upsertRes = await resilientUpsert(tableName, [record])
         if (upsertRes.error) resError = upsertRes.error.message
         else resData = upsertRes.data?.[0]
       }
     } else if (record.admission_no) {
-      const { data, error } = await supabase
-        .from(tableName)
-        .update(record)
-        .eq('admission_no', record.admission_no)
-        .select()
-
-      if (!error && data && data.length > 0) {
-        resData = data[0]
+      const updateRes = await resilientUpdate(tableName, record, 'admission_no', record.admission_no)
+      if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+        resData = updateRes.data[0]
       } else {
         const upsertRes = await resilientUpsert(tableName, [record])
         if (upsertRes.error) resError = upsertRes.error.message
         else resData = upsertRes.data?.[0]
       }
     } else if (record.id && isUUID(record.id)) {
-      const { data, error } = await supabase
-        .from(tableName)
-        .update(record)
-        .eq('id', record.id)
-        .select()
-
-      if (!error && data && data.length > 0) {
-        resData = data[0]
+      const updateRes = await resilientUpdate(tableName, record, 'id', record.id)
+      if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+        resData = updateRes.data[0]
       } else {
         const upsertRes = await resilientUpsert(tableName, [record])
         if (upsertRes.error) resError = upsertRes.error.message

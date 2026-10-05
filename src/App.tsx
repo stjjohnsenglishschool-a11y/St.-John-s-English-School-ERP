@@ -752,11 +752,30 @@ function App() {
     if (!mod) return;
     setLoading(true);
     try {
-      const isEdit = modal?.mode === "edit" && Boolean(modal?.row?.[mod.primaryKey]);
-      const rowId = modal?.row?.[mod.primaryKey];
+      const isEdit =
+        modal?.mode === "edit" &&
+        Boolean(
+          modal?.row?.[mod.primaryKey] ||
+          (mod.table === "user_master" && modal?.row?.user_name) ||
+          (mod.table === "employee_master" && (modal?.row?.emp_code || modal?.row?.emp_id)) ||
+          (mod.table === "student_master" && (modal?.row?.admission_no || modal?.row?.student_id))
+        );
+      const rowId =
+        modal?.row?.[mod.primaryKey] ||
+        (mod.table === "user_master" ? modal?.row?.user_name : undefined);
 
       // Build sanitized payload matching column types
       const payload: Record<string, unknown> = {};
+
+      if (isEdit && modal?.row) {
+        if (modal.row[mod.primaryKey]) {
+          payload[mod.primaryKey] = modal.row[mod.primaryKey];
+        }
+        if (mod.table === "user_master") {
+          if (modal.row.user_id) payload.user_id = modal.row.user_id;
+          if (modal.row.user_name) payload.user_name = modal.row.user_name;
+        }
+      }
 
       for (const field of mod.fields) {
         if (field.key === mod.primaryKey && !isEdit) {
