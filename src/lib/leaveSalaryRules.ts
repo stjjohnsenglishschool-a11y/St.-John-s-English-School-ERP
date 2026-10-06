@@ -398,9 +398,14 @@ export function generateStaffLeaveLedger(
   const fullName = `${employee.first_name || ""} ${employee.last_name || ""}`.trim() || employee.employee_name || employee.emp_code;
   const joiningDateStr = employee.date_of_joining || employee.joining_date || "";
   const isTerminated = employee.employment_status === "Terminated" || employee.employment_status === "Inactive";
+  const isPrincipal =
+    employee.emp_code === "EMP-006" ||
+    String(employee.designation || "").toLowerCase().includes("principal") ||
+    String(employee.employee_category || "").toLowerCase().includes("principal") ||
+    fullName.toLowerCase().includes("mandabi ganguly");
 
   const entries: any[] = [];
-  if (isTerminated || !joiningDateStr) return entries;
+  if (isTerminated || !joiningDateStr || isPrincipal) return entries;
 
   const joining = new Date(joiningDateStr);
   if (isNaN(joining.getTime())) return entries;
@@ -603,6 +608,18 @@ export async function syncAllStaffPLBalances(): Promise<{ updated: number; total
 
   for (const emp of emps || []) {
     const fullName = `${emp.first_name || ""} ${emp.last_name || ""}`.trim() || emp.emp_code;
+    const isPrincipal =
+      emp.emp_code === "EMP-006" ||
+      String(emp.designation || "").toLowerCase().includes("principal") ||
+      String(emp.employee_category || "").toLowerCase().includes("principal") ||
+      fullName.toLowerCase().includes("mandabi ganguly") ||
+      fullName.toLowerCase().includes("mandabi");
+
+    // Principal (Mandabi Ganguly) is not part of staff leave ledger/balances
+    if (isPrincipal) {
+      continue;
+    }
+
     const summary = calculateEmployeeLeaveSummary(emp, leaveApps);
     const isTerminated = emp.employment_status === "Terminated" || emp.employment_status === "Inactive";
     const entitled = isTerminated ? 0 : summary.plCreditedThisSession;
@@ -620,6 +637,7 @@ export async function syncAllStaffPLBalances(): Promise<{ updated: number; total
     const balancePayload = {
       user_id: emp.emp_id,
       emp_id: emp.emp_id,
+      emp_code: emp.emp_code,
       employee_name: fullName,
       current_pl_balance: remaining,
       balance_remaining: remaining,

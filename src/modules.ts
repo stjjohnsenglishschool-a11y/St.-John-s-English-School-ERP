@@ -679,7 +679,7 @@ export const modules: Record<string, Module> = {
     primaryKey: 'balance_id',
     description: 'Annual employee leave entitlement and current PL balance',
     fields: [
-      rel('user_id', 'User / Employee ID', 'employee_master', 'emp_id', 'emp_code'),
+      rel('user_id', 'Employee ID', 'employee_master', 'emp_id', 'emp_code'),
       f('employee_name', 'Employee name'),
       f('current_pl_balance', 'Current PL Balance', 'number', true),
       f('last_updated_date', 'Last Updated Date', 'date'),
@@ -701,7 +701,7 @@ export const modules: Record<string, Module> = {
     primaryKey: 'ledger_id',
     description: 'Privilege Leave audit ledger showing transaction date, type, amount, balance after, and reference',
     fields: [
-      rel('user_id', 'User / Employee ID', 'employee_master', 'emp_id', 'emp_code'),
+      rel('user_id', 'Employee ID', 'employee_master', 'emp_id', 'emp_code'),
       f('employee_name', 'Employee name'),
       f('transaction_date', 'Transaction Date', 'date', true),
       f('type', 'Type (Credit/Debit)', 'select', true, [
@@ -1045,6 +1045,7 @@ export const label = (key: string) => {
   if (key === 'assignments_master') return 'Assignments'
   if (key === 'notice_automation') return 'Notice Automation'
   if (key === 'userlog_master') return 'User Activity Logs'
+  if (key === 'user_id' || key === 'emp_id') return 'Employee ID'
 
   return key
     .split('_')

@@ -444,6 +444,15 @@ function App() {
   const filtered = useMemo(() => {
     let list = rows;
 
+    // "Mandabi Ganguly" (Principal) is not required in staff leave balances or leave ledger
+    if (mod && (mod.table === "leave_balance" || mod.table === "leave_ledger")) {
+      list = list.filter((r) => {
+        const name = String(r.employee_name || "").toLowerCase().trim();
+        const code = String(r.emp_code || r.user_id || "").toUpperCase().trim();
+        return !name.includes("mandabi ganguly") && !name.includes("mandabi") && code !== "EMP-006";
+      });
+    }
+
     // Strict Data Privacy: If a Teacher / Staff is logged in, restrict HR records, letters, documents, salary slips, and leave records to their own profile only
     if (isStaffOrTeacher && mod) {
       const personalTables = [

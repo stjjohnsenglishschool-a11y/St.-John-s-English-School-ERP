@@ -88,6 +88,79 @@ export default function DataTable({
       </div>
     );
 
+  // Filter out Principal (Mandabi Ganguly) from leave balance & leave ledger tables
+  const displayRows = rows.filter((r) => {
+    if (mod.table === "leave_balance" || mod.table === "leave_ledger") {
+      const name = String(r.employee_name || "").toLowerCase();
+      const code = String(r.emp_code || r.user_id || "").toUpperCase();
+      if (name.includes("mandabi ganguly") || name.includes("mandabi") || code === "EMP-006") {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const getColLabel = (col: string) => {
+    if (col === "user_id" || col === "emp_id") return "Employee ID";
+    const field = mod.fields.find((f) => f.key === col);
+    if (field?.label) return field.label;
+    return label(col);
+  };
+
+  const resolveEmployeeCode = (row: Row, col: string): string => {
+    if (row.emp_code && typeof row.emp_code === "string" && row.emp_code.trim()) {
+      return String(row.emp_code).trim().toUpperCase();
+    }
+    const val = String(row[col] ?? "").trim();
+    if (val.startsWith("EMP-") || val.startsWith("emp-")) {
+      return val.toUpperCase();
+    }
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem("sjes_table_employee_master") : null;
+      if (raw) {
+        const emps = JSON.parse(raw);
+        if (Array.isArray(emps)) {
+          const matched = emps.find(
+            (e: any) =>
+              (val && (e.emp_id === val || e.id === val)) ||
+              (row.emp_id && (e.emp_id === row.emp_id || e.id === row.emp_id)) ||
+              (row.employee_name &&
+                `${e.first_name || ""} ${e.last_name || ""}`.trim().toLowerCase() ===
+                  String(row.employee_name).trim().toLowerCase())
+          );
+          if (matched?.emp_code) return String(matched.emp_code).toUpperCase();
+        }
+      }
+    } catch {}
+
+    const staffName = String(row.employee_name || "").toLowerCase().trim();
+    const knownCodes: Record<string, string> = {
+      "samarpita seth": "EMP-003",
+      "avery mitra": "EMP-004",
+      "moumita biswas": "EMP-005",
+      "priti chakraborty": "EMP-007",
+      "usha mondal": "EMP-008",
+      "anushree pramanik": "EMP-009",
+      "simran singh": "EMP-010",
+      "asha hazra": "EMP-011",
+      "gita das": "EMP-012",
+      "ananya manna": "EMP-013",
+      "debjani roy": "EMP-002",
+      "lina ghoshal": "EMP-001",
+      "shilpi ghanti": "EMP-014",
+      "titli dey": "EMP-015",
+      "joyti shaw": "EMP-016",
+    };
+    for (const [name, code] of Object.entries(knownCodes)) {
+      if (staffName.includes(name)) return code;
+    }
+
+    if (val && val.length > 20) {
+      return "EMP-STAFF";
+    }
+    return val || "—";
+  };
+
   return (
     <div className="table-wrap">
       <table>
@@ -98,10 +171,10 @@ export default function DataTable({
                 key={c}
                 onClick={() => onSort(c)}
                 style={{ cursor: "pointer", userSelect: "none" }}
-                title={`Sort by ${label(c)}`}
+                title={`Sort by ${getColLabel(c)}`}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <span>{label(c)}</span>
+                  <span>{getColLabel(c)}</span>
                   <ArrowUpDown
                     size={12}
                     style={{
@@ -116,7 +189,7 @@ export default function DataTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
+          {displayRows.map((r, i) => (
             <tr key={String(r[mod.primaryKey] || i)}>
               {mod.columns.map((c) => (
                 <td key={c}>
@@ -398,6 +471,28 @@ export default function DataTable({
                     <span style={{ fontSize: "12px", color: "#64748b" }}>
                       {String(r.last_updated_date || r.updated_at || "—").split("T")[0]}
                     </span>
+                  ) : c === "user_id" || c === "emp_id" ? (
+                    (() => {
+                      const empCode = resolveEmployeeCode(r, c);
+                      return (
+                        <span
+                          style={{
+                            fontFamily: "monospace",
+                            fontWeight: 700,
+                            background: "#eff6ff",
+                            color: "#1e40af",
+                            border: "1px solid #bfdbfe",
+                            padding: "3px 8px",
+                            borderRadius: "5px",
+                            fontSize: "12px",
+                            display: "inline-block",
+                            letterSpacing: "0.5px",
+                          }}
+                        >
+                          {empCode}
+                        </span>
+                      );
+                    })()
                   ) : (
                     String(r[c] ?? "—")
                   )}

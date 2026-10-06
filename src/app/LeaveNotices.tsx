@@ -302,7 +302,7 @@ export const LeaveNotices: React.FC<LeaveNoticesProps> = ({
               </span>
             </div>
             <div style={{ color: isStaffOrTeacher ? "#15803d" : "#3b82f6", fontSize: "12px", marginTop: "3px" }}>
-              • Schema: user_id, current_pl_balance, last_updated_date • 6 Months Probation (0 PL) • 1 PL Monthly Credit for Eligible Staff • Persisted directly in Supabase
+              • Schema: Employee ID, current_pl_balance, last_updated_date • 6 Months Probation (0 PL) • 1 PL Monthly Credit for Eligible Staff • Persisted directly in Supabase
             </div>
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -451,7 +451,7 @@ export const LeaveNotices: React.FC<LeaveNoticesProps> = ({
               </span>
             </div>
             <div style={{ color: "#475569", fontSize: "12px", marginTop: "3px" }}>
-              • Schema: user_id, transaction_date, type (Credit/Debit), amount, balance_after, reference_id • Automatic Monthly PL Credits & Debits
+              • Schema: Employee ID, transaction_date, type (Credit/Debit), amount, balance_after, reference_id • Automatic Monthly PL Credits & Debits
             </div>
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
