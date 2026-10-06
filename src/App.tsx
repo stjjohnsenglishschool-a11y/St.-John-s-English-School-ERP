@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import {
+  BookOpen,
   Download,
   Plus,
   Search,
@@ -1029,7 +1030,7 @@ function App() {
               />
             )}
 
-            {(mod.table === "leave_application" || mod.table === "leave_balance" || mod.table === "leave_ledger") && (
+            {(mod.table === "leave_application" || mod.table === "leave_ledger") && (
               <LeaveNotices
                 modTable={mod.table as any}
                 rows={rows}
@@ -1052,10 +1053,12 @@ function App() {
               />
             )}
 
-            <PageHeader
-              mod={mod}
-              total={filtered.length}
-            />
+            {mod.table !== "leave_balance" && (
+              <PageHeader
+                mod={mod}
+                total={filtered.length}
+              />
+            )}
 
             <section className="data-card">
               <div className="toolbar">
@@ -1177,6 +1180,42 @@ function App() {
                       Add Entry
                     </button>
                   )}
+                {mod.table === "leave_balance" && !isStaffOrTeacher && (
+                  <>
+                    <button
+                      onClick={() => setActive("leave_ledger")}
+                      title="View Privilege Leave Ledger"
+                      style={{
+                        background: "#eff6ff",
+                        color: "#1e40af",
+                        border: "1px solid #bfdbfe",
+                        fontWeight: 600,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <BookOpen size={15} />
+                      Leave Ledger
+                    </button>
+                    <button
+                      onClick={handleAutoInitLeaveBalances}
+                      title="Sync & Auto-Credit Staff PL in Supabase"
+                      style={{
+                        background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
+                        color: "#fff",
+                        border: "none",
+                        fontWeight: 600,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <Sparkles size={15} color="#93c5fd" />
+                      Sync PL
+                    </button>
+                  </>
+                )}
                 {isStaffOrTeacher && mod.table === "leave_balance" && (
                   <button
                     onClick={() => {
