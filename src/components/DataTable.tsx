@@ -322,6 +322,82 @@ export default function DataTable({
                     >
                       {String(r[c] || "—")}
                     </span>
+                  ) : c === "current_pl_balance" || (mod.table === "leave_balance" && c === "balance_remaining") ? (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        background: "#ecfdf5",
+                        color: "#065f46",
+                        border: "1px solid #a7f3d0",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {String(r.current_pl_balance ?? r.balance_remaining ?? 0)} PL
+                    </span>
+                  ) : c === "type" && mod.table === "leave_ledger" ? (
+                    (() => {
+                      const t = String(r.type || r.transaction_type || "").toLowerCase();
+                      const isCredit = t.includes("credit");
+                      return (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            background: isCredit ? "#ecfdf5" : "#fef2f2",
+                            color: isCredit ? "#065f46" : "#991b1b",
+                            border: `1px solid ${isCredit ? "#a7f3d0" : "#fecaca"}`,
+                            padding: "2px 8px",
+                            borderRadius: "12px",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {isCredit ? "➕ Credit" : "➖ Debit"}
+                        </span>
+                      );
+                    })()
+                  ) : c === "amount" && mod.table === "leave_ledger" ? (
+                    <span style={{ fontWeight: 700, fontSize: "12px" }}>
+                      {Number(r.amount ?? (r.credit || r.debit || 0))} PL
+                    </span>
+                  ) : c === "balance_after" && mod.table === "leave_ledger" ? (
+                    <span
+                      style={{
+                        background: "#eff6ff",
+                        color: "#1e40af",
+                        border: "1px solid #bfdbfe",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {Number(r.balance_after ?? r.balance ?? 0)} PL
+                    </span>
+                  ) : c === "reference_id" && mod.table === "leave_ledger" ? (
+                    <span
+                      style={{
+                        fontFamily: "monospace",
+                        background: "#f1f5f9",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        fontSize: "11px",
+                        color: "#334155",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {String(r.reference_id || r.reference_no || "—")}
+                    </span>
+                  ) : c === "last_updated_date" && mod.table === "leave_balance" ? (
+                    <span style={{ fontSize: "12px", color: "#64748b" }}>
+                      {String(r.last_updated_date || r.updated_at || "—").split("T")[0]}
+                    </span>
                   ) : (
                     String(r[c] ?? "—")
                   )}

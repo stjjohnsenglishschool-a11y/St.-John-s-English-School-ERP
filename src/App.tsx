@@ -45,7 +45,7 @@ import CsvImportModal from "./components/CsvImportModal";
 import IncomeHeadUploadModal from "./components/IncomeHeadUploadModal";
 import DigitalVerificationModal, { VerificationData } from "./components/DigitalVerificationModal";
 import { downloadSampleCsv, sanitizeRecordForTable } from "./lib/csvUtils";
-import { getLeaveSession } from "./lib/leaveSalaryRules";
+import { getLeaveSession, syncAllStaffPLBalances } from "./lib/leaveSalaryRules";
 import RecordModal from "./components/RecordModal";
 import DataTable, { PageHeader } from "./components/DataTable";
 import LoginModal from "./components/LoginModal";
@@ -294,67 +294,16 @@ function App() {
     setAuthReady(true);
   }, []);
 
-  // Auto-initialize annual leave balances for all active school staff
+  // Auto-initialize & synchronize monthly PL balances for all school staff in Supabase
   const handleAutoInitLeaveBalances = async () => {
     try {
       setLoading(true);
-      const employees = await fetchCollectionData("employee_master");
-      if (!employees || employees.length === 0) {
-        setToast("No employees found in Employee Master. Please register staff records first.");
-        setLoading(false);
-        return;
-      }
-      const existing = await fetchCollectionData("leave_balance");
-      const currentYear = getCurrentAcademicYear();
-      const existingMap = new Set(
-        (existing || []).map((e: any) => `${e.emp_id || e.emp_code}_${e.leave_type}_${e.academic_year || currentYear}`)
-      );
-
-      let created = 0;
-      const standardLeaves = [
-        { type: "Casual Leave (CL)", entitled: 12 },
-        { type: "Medical / Sick Leave (ML)", entitled: 10 },
-        { type: "Privilege / Earned Leave (PL/EL)", entitled: 15 },
-      ];
-
-      for (const emp of employees) {
-        const empId = emp.emp_id || emp.emp_code || emp.id;
-        const empName =
-          emp.full_name ||
-          `${emp.first_name || ""} ${emp.last_name || ""}`.trim() ||
-          emp.name ||
-          "Staff";
-
-        for (const leave of standardLeaves) {
-          const key = `${empId}_${leave.type}_${currentYear}`;
-          if (!existingMap.has(key)) {
-            const balId = `BAL_${empId}_${leave.type.slice(0, 2)}_${currentYear.replace(/[^a-zA-Z0-9]/g, "_")}`;
-            await saveDocument("leave_balance", "balance_id", {
-              balance_id: balId,
-              emp_id: empId,
-              employee_name: empName,
-              academic_year: currentYear,
-              leave_type: leave.type,
-              total_entitled: leave.entitled,
-              total_taken: 0,
-              total_pending: 0,
-              balance_remaining: leave.entitled,
-              created_at: new Date().toISOString(),
-            });
-            created++;
-          }
-        }
-      }
-
-      setToast(
-        created > 0
-          ? `Successfully initialized ${created} leave balance records across ${employees.length} employees!`
-          : "Leave balances for all active employees are already initialized and up to date."
-      );
+      const res = await syncAllStaffPLBalances();
+      setToast(res.message);
       await refresh();
     } catch (err: any) {
-      console.error("Error initializing leave balances:", err);
-      setToast(err.message || "Failed to initialize leave balances");
+      console.error("Error synchronizing staff PL balances:", err);
+      setToast(err.message || "Failed to sync staff PL balances");
     } finally {
       setLoading(false);
     }
@@ -404,6 +353,7 @@ function App() {
         "class_master",
         "subject_master",
         "leave_balance",
+        "leave_ledger",
         "fees_collection",
       ];
       await Promise.all(
@@ -499,6 +449,7 @@ function App() {
       const personalTables = [
         "leave_application",
         "leave_balance",
+        "leave_ledger",
         "warning_letter",
         "offer_letter",
         "employee_document",
@@ -1069,9 +1020,9 @@ function App() {
               />
             )}
 
-            {(mod.table === "leave_application" || mod.table === "leave_balance") && (
+            {(mod.table === "leave_application" || mod.table === "leave_balance" || mod.table === "leave_ledger") && (
               <LeaveNotices
-                modTable={mod.table}
+                modTable={mod.table as any}
                 rows={rows}
                 isStaffOrTeacher={isStaffOrTeacher}
                 setQuery={setQuery}
@@ -1081,6 +1032,7 @@ function App() {
                 handleAutoInitLeaveBalances={handleAutoInitLeaveBalances}
                 getCurrentAcademicYear={getCurrentAcademicYear}
                 getLeaveSession={getLeaveSession}
+                setToast={setToast}
               />
             )}
 
@@ -1113,6 +1065,7 @@ function App() {
                   isStaffOrTeacher &&
                   [
                     "leave_balance",
+                    "leave_ledger",
                     "warning_letter",
                     "offer_letter",
                     "employee_document",
@@ -1175,6 +1128,7 @@ function App() {
                     isStaffOrTeacher &&
                     [
                       "leave_balance",
+                      "leave_ledger",
                       "warning_letter",
                       "offer_letter",
                       "employee_document",
@@ -1194,6 +1148,7 @@ function App() {
                     isStaffOrTeacher &&
                     [
                       "leave_balance",
+                      "leave_ledger",
                       "warning_letter",
                       "offer_letter",
                       "employee_document",

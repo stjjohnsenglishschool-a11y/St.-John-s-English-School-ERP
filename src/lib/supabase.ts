@@ -144,6 +144,20 @@ export const TABLE_KNOWN_COLUMNS: Record<string, string[]> = {
   income_master: [
     'income_id', 'income_date', 'income_category', 'income_type', 'description', 'amount',
     'payment_mode', 'received_from', 'receipt_number', 'status', 'remarks', 'created_at', 'updated_at'
+  ],
+  leave_application: [
+    'leave_app_id', 'emp_id', 'employee_name', 'leave_type', 'from_date', 'to_date',
+    'total_days', 'reason', 'status', 'approved_by', 'remarks', 'created_at', 'updated_at'
+  ],
+  leave_balance: [
+    'balance_id', 'user_id', 'emp_id', 'employee_name', 'current_pl_balance', 'balance_remaining',
+    'last_updated_date', 'academic_year', 'leave_type', 'total_entitled', 'total_taken',
+    'total_pending', 'created_at', 'updated_at'
+  ],
+  leave_ledger: [
+    'ledger_id', 'user_id', 'emp_id', 'employee_name', 'transaction_date', 'entry_date',
+    'type', 'transaction_type', 'amount', 'credit', 'debit', 'balance_after', 'balance',
+    'reference_id', 'reference_no', 'remarks', 'academic_year', 'created_at', 'updated_at'
   ]
 }
 
@@ -203,6 +217,46 @@ export function sanitizePayload(record: Record<string, any>, tableName?: string)
   if (tableName === 'user_master') {
     const rawMod = record.allowed_modules !== undefined ? record.allowed_modules : record.active_module
     clean.active_module = normalizeUserModules({ active_module: rawMod })
+  }
+
+  // Normalization for leave_balance: user_id, current_pl_balance, last_updated_date
+  if (tableName === 'leave_balance') {
+    if (record.user_id && !record.emp_id) record.emp_id = record.user_id
+    if (record.emp_id && !record.user_id) record.user_id = record.emp_id
+    if (record.current_pl_balance !== undefined && record.balance_remaining === undefined) {
+      record.balance_remaining = record.current_pl_balance
+    }
+    if (record.balance_remaining !== undefined && record.current_pl_balance === undefined) {
+      record.current_pl_balance = record.balance_remaining
+    }
+    if (!record.last_updated_date) {
+      record.last_updated_date = record.updated_at || new Date().toISOString()
+    }
+  }
+
+  // Normalization for leave_ledger: user_id, transaction_date, type, amount, balance_after, reference_id
+  if (tableName === 'leave_ledger') {
+    if (record.user_id && !record.emp_id) record.emp_id = record.user_id
+    if (record.emp_id && !record.user_id) record.user_id = record.emp_id
+    if (record.transaction_date && !record.entry_date) record.entry_date = record.transaction_date
+    if (record.entry_date && !record.transaction_date) record.transaction_date = record.entry_date
+    if (!record.type) {
+      record.type = Number(record.credit || 0) > 0 ? 'Credit' : 'Debit'
+    }
+    if (record.amount !== undefined) {
+      if (record.type === 'Credit' && record.credit === undefined) record.credit = record.amount
+      if (record.type === 'Debit' && record.debit === undefined) record.debit = record.amount
+    } else {
+      record.amount = Number(record.credit || record.debit || 0)
+    }
+    if (record.balance_after !== undefined && record.balance === undefined) {
+      record.balance = record.balance_after
+    }
+    if (record.balance !== undefined && record.balance_after === undefined) {
+      record.balance_after = record.balance
+    }
+    if (record.reference_id && !record.reference_no) record.reference_no = record.reference_id
+    if (record.reference_no && !record.reference_id) record.reference_id = record.reference_no
   }
 
   for (const key of Object.keys(record)) {
@@ -843,6 +897,39 @@ export async function fetchCollectionData<T = any>(collectionName: string): Prom
       row.allowed_modules = parsedMods
       row.active_module = parsedMods
     }
+    if (collectionName === 'leave_balance') {
+      if (!row.user_id && row.emp_id) row.user_id = row.emp_id
+      if (row.current_pl_balance === undefined && row.balance_remaining !== undefined) row.current_pl_balance = row.balance_remaining
+      if (!row.last_updated_date) row.last_updated_date = row.updated_at || row.created_at || new Date().toISOString()
+      if (row.balance_remaining === undefined && row.current_pl_balance !== undefined) row.balance_remaining = row.current_pl_balance
+      if (!row.emp_id && row.user_id) row.emp_id = row.user_id
+    }
+    if (collectionName === 'leave_ledger') {
+      if (!row.user_id && row.emp_id) row.user_id = row.emp_id
+      if (!row.emp_id && row.user_id) row.emp_id = row.user_id
+      if (!row.transaction_date && row.entry_date) row.transaction_date = row.entry_date
+      if (!row.entry_date && row.transaction_date) row.entry_date = row.transaction_date
+      if (!row.type) {
+        if (row.credit && Number(row.credit) > 0) row.type = 'Credit'
+        else if (row.debit && Number(row.debit) > 0) row.type = 'Debit'
+        else row.type = 'Credit'
+      }
+      if (row.amount === undefined) {
+        row.amount = Number(row.credit || row.debit || 0)
+      }
+      if (row.balance_after === undefined && row.balance !== undefined) {
+        row.balance_after = row.balance
+      }
+      if (row.balance === undefined && row.balance_after !== undefined) {
+        row.balance = row.balance_after
+      }
+      if (!row.reference_id && row.reference_no) {
+        row.reference_id = row.reference_no
+      }
+      if (!row.reference_no && row.reference_id) {
+        row.reference_no = row.reference_id
+      }
+    }
     return row
   }
 
@@ -972,6 +1059,105 @@ FROM (
 ) AS c(class_name, amount)
 WHERE NOT EXISTS (SELECT 1 FROM public.fees_structure);
 `;
+
+export const SUPABASE_LEAVE_MIGRATION_SQL = `-- Run this in Supabase Dashboard -> SQL Editor:
+-- https://supabase.com/dashboard/project/dbliogptcikqyzkbqnus/sql/new
+
+-- ============================================================================
+-- 1. TABLE: leave_balance
+-- Columns: user_id, current_pl_balance, last_updated_date (+ primary keys & meta)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.leave_balance (
+    balance_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID,
+    emp_id UUID,
+    employee_name VARCHAR(150),
+    current_pl_balance NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+    balance_remaining NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+    last_updated_date TIMESTAMPTZ DEFAULT NOW(),
+    total_entitled NUMERIC(5, 2) DEFAULT 0.00,
+    total_taken NUMERIC(5, 2) DEFAULT 0.00,
+    total_pending NUMERIC(5, 2) DEFAULT 0.00,
+    academic_year VARCHAR(20) DEFAULT '2026-27',
+    leave_type VARCHAR(50) DEFAULT 'PL',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Ensure user_id, current_pl_balance, and last_updated_date exist
+ALTER TABLE public.leave_balance ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE public.leave_balance ADD COLUMN IF NOT EXISTS current_pl_balance NUMERIC(5, 2) DEFAULT 0.00;
+ALTER TABLE public.leave_balance ADD COLUMN IF NOT EXISTS last_updated_date TIMESTAMPTZ DEFAULT NOW();
+
+-- Synchronize existing leave_balance values into user_id and current_pl_balance
+UPDATE public.leave_balance
+SET 
+    user_id = COALESCE(user_id, emp_id),
+    current_pl_balance = COALESCE(current_pl_balance, balance_remaining, 0.00),
+    last_updated_date = COALESCE(last_updated_date, updated_at, NOW())
+WHERE user_id IS NULL OR current_pl_balance = 0.00;
+
+ALTER TABLE public.leave_balance ENABLE ROW LEVEL SECURITY;
+
+DO $ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'leave_balance' AND policyname = 'Allow all access to leave_balance'
+    ) THEN
+        CREATE POLICY "Allow all access to leave_balance" ON public.leave_balance
+            FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+END $;
+
+-- ============================================================================
+-- 2. TABLE: leave_ledger
+-- Columns: user_id, transaction_date, type (Credit/Debit), amount, balance_after, reference_id
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.leave_ledger (
+    ledger_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID,
+    emp_id UUID,
+    employee_name VARCHAR(150),
+    transaction_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    entry_date DATE DEFAULT CURRENT_DATE,
+    type VARCHAR(50) NOT NULL CHECK (type IN ('Credit', 'Debit', 'Credit/Debit', 'Monthly PL Credit', 'PL Leave Approved', 'Opening PL Balance', 'PL Adjustment')),
+    transaction_type VARCHAR(100),
+    amount NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+    credit NUMERIC(5, 2) DEFAULT 0.00,
+    debit NUMERIC(5, 2) DEFAULT 0.00,
+    balance_after NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+    balance NUMERIC(5, 2) DEFAULT 0.00,
+    reference_id VARCHAR(100),
+    reference_no VARCHAR(100),
+    remarks TEXT,
+    academic_year VARCHAR(20) DEFAULT '2026-27',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.leave_ledger ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE public.leave_ledger ADD COLUMN IF NOT EXISTS transaction_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.leave_ledger ADD COLUMN IF NOT EXISTS type VARCHAR(50);
+ALTER TABLE public.leave_ledger ADD COLUMN IF NOT EXISTS amount NUMERIC(5, 2) DEFAULT 0.00;
+ALTER TABLE public.leave_ledger ADD COLUMN IF NOT EXISTS balance_after NUMERIC(5, 2) DEFAULT 0.00;
+ALTER TABLE public.leave_ledger ADD COLUMN IF NOT EXISTS reference_id VARCHAR(100);
+
+ALTER TABLE public.leave_ledger ENABLE ROW LEVEL SECURITY;
+
+DO $ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'leave_ledger' AND policyname = 'Allow all access to leave_ledger'
+    ) THEN
+        CREATE POLICY "Allow all access to leave_ledger" ON public.leave_ledger
+            FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+END $;
+`;
+
+export const SUPABASE_LEAVE_LEDGER_SQL = SUPABASE_LEAVE_MIGRATION_SQL;
 
 export const DEFAULT_FEE_STRUCTURES = [
   { fee_struct_id: 'fs_pg_tuition', class_name: 'PG', fee_type: 'Monthly Tuition Fee', amount: 800, frequency: 'Monthly', due_day: 10, academic_year: '2026-27', remarks: 'Playgroup monthly tuition' },

@@ -2,7 +2,8 @@ import React, { useState, FormEvent } from "react";
 import { X } from "lucide-react";
 import { modules, moduleName } from "../modules";
 import { getCurrentAcademicYear } from "../lib/academicYear";
-import { normalizeUserModules, DEFAULT_INCOME_HEADS } from "../lib/supabase";
+import { normalizeUserModules, DEFAULT_INCOME_HEADS, supabase } from "../lib/supabase";
+import { validateLeaveApplicationRule } from "../lib/leaveSalaryRules";
 import FeeCollectionModal from "./FeeCollectionModal";
 import FormField from "./FormField";
 
@@ -62,7 +63,7 @@ export default function RecordModal({
 
     if (mod.table === "leave_application" && mode === "create") {
       initial.status = "pending";
-      initial.leave_type = initial.leave_type || "Casual Leave (CL)";
+      initial.leave_type = "PL (Privilege Leave)";
       const todayStr = new Date().toISOString().slice(0, 10);
       initial.from_date = initial.from_date || todayStr;
       initial.to_date = initial.to_date || todayStr;
@@ -138,6 +139,17 @@ export default function RecordModal({
         "Accounts";
       initial.expense_date = initial.expense_date || new Date().toISOString().slice(0, 10);
       initial.payment_mode = initial.payment_mode || "Cash";
+    }
+
+    if ((mod.table === "salary_slip" || mod.fields.some((f) => f.key === "month")) && mode === "create") {
+      const currentMonthName = new Date().toLocaleString("en-US", { month: "long" });
+      initial.month = initial.month || currentMonthName;
+      if (mod.table === "salary_slip") {
+        initial.year = initial.year || new Date().getFullYear();
+        initial.status = initial.status || "generated";
+        initial.payment_mode = initial.payment_mode || "Bank Transfer";
+        initial.payment_date = initial.payment_date || new Date().toISOString().slice(0, 10);
+      }
     }
 
     return initial;
@@ -362,6 +374,7 @@ export default function RecordModal({
     // When employee is selected in HR / Employee modules
     if (
       mod.table === "leave_balance" ||
+      mod.table === "leave_ledger" ||
       mod.table === "leave_application" ||
       mod.table === "salary_slip" ||
       mod.table === "warning_letter" ||
@@ -371,8 +384,11 @@ export default function RecordModal({
     ) {
       setValues((prev) => {
         const fullBasic = Number(record.basic_salary || prev.basic_salary || 0);
+        const empIdentifier = (record.emp_id as string) || (record.id as string) || prev.user_id || prev.emp_id;
         const updated: Row = {
           ...prev,
+          user_id: empIdentifier,
+          emp_id: empIdentifier,
           employee_name: empFullName || prev.employee_name,
           emp_code: (record.emp_code as string) || prev.emp_code,
           department: (record.department as string) || prev.department,
@@ -385,7 +401,8 @@ export default function RecordModal({
           const empStatus = String(record.employment_status || (record.is_active === false ? "Inactive" : "Active"));
           const lastWorking = String(record.last_working_date || record.date_of_leaving || record.resignation_date || "");
 
-          const monthStr = String(prev.month || "September");
+          const currentMonthName = new Date().toLocaleString("en-US", { month: "long" });
+          const monthStr = String(prev.month || currentMonthName);
           const yearNum = Number(prev.year || new Date().getFullYear());
 
           const parseMonthIdx = (m: string | number) => {
@@ -425,19 +442,77 @@ export default function RecordModal({
               }
             }
           }
+
+          // Check for rejected leave applications in this month (automatic LOP deduction rule)
+          if (supabase && (record.emp_id || record.emp_code)) {
+            const empId = String(record.emp_id || record.emp_code);
+            Promise.resolve(
+              supabase
+                .from("leave_application")
+                .select("*")
+                .eq("emp_id", empId)
+                .eq("status", "rejected")
+            )
+              .then(({ data: rejectedLeaves }) => {
+                if (rejectedLeaves && rejectedLeaves.length > 0) {
+                  let rejDays = 0;
+                  for (const l of rejectedLeaves) {
+                    const fDate = new Date(l.from_date);
+                    if (fDate.getMonth() + 1 === slipMonthIdx && fDate.getFullYear() === yearNum) {
+                      rejDays += Number(l.total_days || 1);
+                    }
+                  }
+                  if (rejDays > 0) {
+                    setValues((curr) => {
+                      const curBasic = Number(curr.basic_salary || 0);
+                      const curLwp = rejDays;
+                      const curLwpDed = Math.round(curLwp * (curBasic / 30));
+                      const curGross = Number(curr.gross_salary || 0);
+                      const curDeds =
+                        Number(curr.pf_deduction || 0) +
+                        Number(curr.esi_deduction || 0) +
+                        Number(curr.tds || 0) +
+                        curLwpDed +
+                        Number(curr.other_deductions || 0);
+                      return {
+                        ...curr,
+                        lwp_days: curLwp,
+                        lwp_deduction: curLwpDed,
+                        total_deductions: curDeds,
+                        net_salary: Math.max(0, curGross - curDeds),
+                        remarks:
+                          (curr.remarks ? curr.remarks + " • " : "") +
+                          `Auto-deducted ${curLwp} rejected absence / LOP day(s) (₹${curLwpDed}).`,
+                      };
+                    });
+                  }
+                }
+              })
+              .catch(() => {});
+          }
         }
 
         // For leave balance: initialize smart defaults
         if (mod.table === "leave_balance" && mode === "create") {
-          const entitled = Number(prev.total_entitled) || 12;
+          const entitled = Number(prev.total_entitled) || 7;
           const taken = Number(prev.total_taken) || 0;
+          const rem = Math.max(0, entitled - taken);
           updated.total_entitled = entitled;
           updated.total_taken = taken;
           updated.total_pending = Number(prev.total_pending) || 0;
-          updated.balance_remaining = Math.max(0, entitled - taken);
-          if (!prev.leave_type) {
-            updated.leave_type = "Casual Leave (CL)";
-          }
+          updated.balance_remaining = rem;
+          updated.current_pl_balance = rem;
+          updated.last_updated_date = new Date().toISOString().split("T")[0];
+          updated.leave_type = "PL";
+        }
+
+        // For leave ledger: initialize smart defaults
+        if (mod.table === "leave_ledger" && mode === "create") {
+          updated.transaction_date = prev.transaction_date || new Date().toISOString().split("T")[0];
+          updated.type = prev.type || "Credit";
+          updated.amount = Number(prev.amount) || 1;
+          updated.balance_after = Number(prev.balance_after) || 1;
+          updated.reference_id = prev.reference_id || `PL-${new Date().getFullYear()}`;
         }
 
         return updated;
@@ -445,8 +520,57 @@ export default function RecordModal({
     }
   };
 
-  const submit = (e: FormEvent) => {
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
+    setErrorMsg("");
+
+    if (mod.table === "leave_application" && mode === "create") {
+      const fromDate = String(values.from_date || "");
+      const toDate = String(values.to_date || fromDate);
+      const reqDays = Number(values.total_days || 1);
+
+      // Fetch employee record and available balance from Supabase
+      const empId = String(values.emp_id || currentEmployeeRecord?.emp_id || "");
+      let empRecord = currentEmployeeRecord;
+
+      if (!empRecord && empId && supabase) {
+        const { data: emps } = await supabase.from("employee_master").select("*").eq("emp_id", empId);
+        if (emps && emps.length > 0) empRecord = emps[0];
+      }
+
+      let plBalance = 0;
+      let balRecord: any = null;
+      if (empId && supabase) {
+        const { data: balRows } = await supabase.from("leave_balance").select("*").eq("emp_id", empId).eq("leave_type", "PL");
+        if (balRows && balRows.length > 0) {
+          balRecord = balRows[0];
+          plBalance = Number(balRecord.current_pl_balance ?? balRecord.balance_remaining ?? 0);
+        }
+      }
+
+      // Check probation & Supabase balance rule
+      if (empRecord?.date_of_joining) {
+        const check = validateLeaveApplicationRule({
+          employee: empRecord,
+          fromDate,
+          toDate,
+          leaveType: "PL",
+          savedLeaveBalance: balRecord,
+        });
+        if (!check.valid) {
+          setErrorMsg(check.error || "Leave application validation failed.");
+          return;
+        }
+      }
+
+      if (reqDays > plBalance) {
+        setErrorMsg(`Insufficient PL Balance. You have only ${plBalance} PL available.`);
+        return;
+      }
+    }
+
     save(values);
   };
 
@@ -467,6 +591,23 @@ export default function RecordModal({
             <X />
           </button>
         </header>
+
+        {errorMsg && (
+          <div
+            style={{
+              background: "#fef2f2",
+              color: "#991b1b",
+              border: "1px solid #fecaca",
+              padding: "10px 16px",
+              borderRadius: "8px",
+              margin: "12px 24px 0",
+              fontSize: "13px",
+              fontWeight: 700,
+            }}
+          >
+            ⚠️ {errorMsg}
+          </div>
+        )}
 
         <div className="form-grid">
           {mod.fields.map((field) => (

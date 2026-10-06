@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { CheckCircle2, XCircle, AlertTriangle, Calendar, Clock, User, FileText, ShieldCheck, X } from "lucide-react";
-import { calculateEmployeeLeaveSummary } from "../lib/leaveSalaryRules";
-import { saveDocument, logActivity } from "../lib/supabase";
+import { calculateEmployeeLeaveSummary, recordLeaveLedgerTransaction } from "../lib/leaveSalaryRules";
+import { saveDocument, logActivity, supabase } from "../lib/supabase";
 
 interface LeaveApprovalModalProps {
   leaveApp: Record<string, any>;
@@ -49,34 +49,83 @@ export default function LeaveApprovalModal({
         approved_by: decision === "approved" ? "Principal" : undefined,
         rejected_by: decision === "rejected" ? "Principal" : undefined,
         decision_date: new Date().toISOString().split("T")[0],
-        remarks: remarks || (decision === "approved" ? "Approved by Principal" : "Rejected by Principal"),
+        remarks: remarks || (decision === "approved" ? "Approved by Principal" : "Rejected by Principal (Unpaid Leave / LOP)"),
+        is_lwp: decision === "rejected",
+        lop_status: decision === "rejected" ? "LOP" : "N/A",
         updated_at: new Date().toISOString(),
       };
 
-      // 1. Save updated leave application to Firebase
+      // 1. Save updated leave application to Supabase
       await saveDocument("leave_application", "leave_app_id", updatedApp);
 
-      // 2. If approved and it's PL: Record deduction in leave_balance
-      if (decision === "approved" && isPL) {
-        const empId = employee.emp_id || employee.emp_code || leaveApp.emp_id || leaveApp.emp_code;
-        const balanceDoc = {
-          emp_id: empId,
-          employee_name:
-            (employee.first_name ? `${employee.first_name} ${employee.last_name || ""}`.trim() : null) ||
-            leaveApp.employee_name ||
-            employee.full_name ||
-            "Employee",
-          leave_type: "PL",
-          academic_year: summary.sessionName,
-          total_entitled: summary.plOpeningBalance + summary.plCreditedThisSession,
-          total_taken: summary.plTakenThisSession + requestedDays,
-          balance_remaining: Math.max(0, summary.plBalance - requestedDays),
-          updated_at: new Date().toISOString(),
-        };
-        await saveDocument("leave_balance", "balance_id", {
-          balance_id: `BAL_${empId}_PL`,
-          ...balanceDoc,
-        });
+      // 2. If approved: Record deduction in leave_balance in Supabase
+      if (decision === "approved") {
+        const empId = employee.emp_id || leaveApp.emp_id;
+        if (empId && supabase) {
+          const { data: existingRows } = await supabase
+            .from("leave_balance")
+            .select("*")
+            .eq("emp_id", empId);
+
+          if (existingRows && existingRows.length > 0) {
+            const balRow = existingRows[0];
+            const newTaken = Number(balRow.total_taken || 0) + requestedDays;
+            const newRemaining = Math.max(0, Number(balRow.total_entitled || 0) - newTaken);
+            try {
+              const { error } = await supabase
+                .from("leave_balance")
+                .update({
+                  user_id: balRow.user_id || empId,
+                  total_taken: newTaken,
+                  balance_remaining: newRemaining,
+                  current_pl_balance: newRemaining,
+                  last_updated_date: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("balance_id", balRow.balance_id);
+
+              if (error) {
+                await supabase
+                  .from("leave_balance")
+                  .update({
+                    total_taken: newTaken,
+                    balance_remaining: newRemaining,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("balance_id", balRow.balance_id);
+              }
+            } catch {
+              await supabase
+                .from("leave_balance")
+                .update({
+                  total_taken: newTaken,
+                  balance_remaining: newRemaining,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("balance_id", balRow.balance_id);
+            }
+
+            // Record PL Debit Transaction in Leave Ledger
+            await recordLeaveLedgerTransaction({
+              user_id: empId,
+              emp_id: empId,
+              employee_name: leaveApp.employee_name || balRow.employee_name,
+              entry_date: leaveApp.from_date || new Date().toISOString().split("T")[0],
+              transaction_date: leaveApp.from_date || new Date().toISOString().split("T")[0],
+              type: "Debit",
+              transaction_type: "PL Leave Approved",
+              amount: requestedDays,
+              credit: 0,
+              debit: requestedDays,
+              balance_after: newRemaining,
+              balance: newRemaining,
+              reference_id: leaveApp.leave_app_id ? `LV-${String(leaveApp.leave_app_id).slice(0, 8).toUpperCase()}` : "LV-APP",
+              reference_no: leaveApp.leave_app_id ? `LV-${String(leaveApp.leave_app_id).slice(0, 8).toUpperCase()}` : "LV-APP",
+              remarks: `Approved by Principal - ${leaveApp.reason || ""}`.trim(),
+              academic_year: balRow.academic_year || "2026-27",
+            });
+          }
+        }
       }
 
       // 3. Log audit activity

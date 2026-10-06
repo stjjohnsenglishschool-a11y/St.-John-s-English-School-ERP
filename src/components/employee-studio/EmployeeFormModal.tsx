@@ -686,10 +686,10 @@ export default function EmployeeFormModal({
                       )}
                     </div>
                     <div style={{ marginTop: '2px', fontSize: '11px' }}>
-                      {prob.hasCompletedSevenMonths ? (
-                        <span>✓ Initial 1 PL (Privilege Leave) credited after 7 months milestone ({prob.initialPLEffectiveDate}). Duplicate crediting strictly prevented.</span>
+                      {prob.isEligibleForPL ? (
+                        <span>✓ Eligible for Privilege Leave (1 PL/month automatic credit). Currently entitled to {prob.plEntitledMonths} PL in this session.</span>
                       ) : (
-                        <span>• Initial 1 PL will be automatically credited after completing 7 months ({prob.initialPLEffectiveDate}).</span>
+                        <span>• On probation (0 PL). Will become eligible for 1 PL/month credit after completing 6 months service on {prob.probationEndDate}.</span>
                       )}
                     </div>
                   </div>

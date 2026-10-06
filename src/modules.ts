@@ -33,6 +33,21 @@ export type Module = {
   initialRows?: Record<string, any>[]
 }
 
+export const MONTH_OPTIONS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
 export type NavSection = { label: string; items: string[] }
 export type NavGroup = { label: string; items: string[]; sections?: NavSection[] }
 
@@ -73,6 +88,7 @@ export const ALL_SUBMENU_MODULES = [
   { key: 'salary_slip', label: 'Salary / Payroll', group: 'Finance' },
   { key: 'leave_application', label: 'Leave Application', group: 'HR' },
   { key: 'leave_balance', label: 'Leave Balance', group: 'HR' },
+  { key: 'leave_ledger', label: 'Leave Ledger', group: 'HR' },
   { key: 'warning_letter', label: 'Warning Letters', group: 'HR' },
   { key: 'offer_letter', label: 'Offer Letters', group: 'HR' },
   { key: 'employee_document', label: 'Employee Documents', group: 'HR' },
@@ -611,7 +627,7 @@ export const modules: Record<string, Module> = {
     fields: [
       rel('emp_id', 'Employee', 'employee_master', 'emp_id', 'emp_code'),
       f('employee_name', 'Employee name'),
-      f('month', 'Month'),
+      f('month', 'Month', 'select', true, MONTH_OPTIONS),
       f('year', 'Year', 'number'),
       f('basic_salary', 'Basic salary', 'number'),
       f('hra', 'HRA', 'number'),
@@ -644,11 +660,7 @@ export const modules: Record<string, Module> = {
       rel('emp_id', 'Employee', 'employee_master', 'emp_id', 'emp_code'),
       f('employee_name', 'Employee name', 'text', true),
       f('leave_type', 'Leave type', 'select', true, [
-        'Casual Leave (CL)',
-        'Medical / Sick Leave (ML)',
-        'Privilege / Earned Leave (PL/EL)',
-        'Maternity Leave',
-        'Special Leave / Unpaid (LWP)',
+        'PL (Privilege Leave)',
       ]),
       f('from_date', 'From date', 'date', true),
       f('to_date', 'To date', 'date', true),
@@ -665,26 +677,44 @@ export const modules: Record<string, Module> = {
     group: 'HR',
     table: 'leave_balance',
     primaryKey: 'balance_id',
-    description: 'Annual employee leave entitlement and remaining balance',
+    description: 'Annual employee leave entitlement and current PL balance',
     fields: [
-      rel('emp_id', 'Employee', 'employee_master', 'emp_id', 'emp_code'),
+      rel('user_id', 'User / Employee ID', 'employee_master', 'emp_id', 'emp_code'),
       f('employee_name', 'Employee name'),
+      f('current_pl_balance', 'Current PL Balance', 'number', true),
+      f('last_updated_date', 'Last Updated Date', 'date'),
       f('academic_year', 'Academic year', 'select', false, ACADEMIC_YEAR_OPTIONS),
       f('leave_type', 'Leave type', 'select', false, [
-        'Casual Leave (CL)',
-        'Medical / Sick Leave (ML)',
-        'Privilege / Earned Leave (PL/EL)',
-        'Maternity Leave',
-        'Duty Leave',
-        'Paternity Leave',
-        'Loss of Pay (LWP)',
+        'PL',
+        'PL (Privilege Leave)',
       ]),
       f('total_entitled', 'Total entitled', 'number'),
       f('total_taken', 'Total taken', 'number'),
-      f('total_pending', 'Total pending', 'number'),
       f('balance_remaining', 'Balance remaining', 'number'),
     ],
-    columns: ['employee_name', 'academic_year', 'leave_type', 'total_entitled', 'total_taken', 'balance_remaining'],
+    columns: ['user_id', 'employee_name', 'current_pl_balance', 'last_updated_date', 'academic_year'],
+  },
+  'leave_ledger': {
+    title: 'leave_ledger',
+    group: 'HR',
+    table: 'leave_ledger',
+    primaryKey: 'ledger_id',
+    description: 'Privilege Leave audit ledger showing transaction date, type, amount, balance after, and reference',
+    fields: [
+      rel('user_id', 'User / Employee ID', 'employee_master', 'emp_id', 'emp_code'),
+      f('employee_name', 'Employee name'),
+      f('transaction_date', 'Transaction Date', 'date', true),
+      f('type', 'Type (Credit/Debit)', 'select', true, [
+        'Credit',
+        'Debit',
+      ]),
+      f('amount', 'Amount (PL)', 'number', true),
+      f('balance_after', 'Balance After (PL)', 'number', true),
+      f('reference_id', 'Reference ID', 'text'),
+      f('remarks', 'Remarks / Description', 'textarea'),
+      f('academic_year', 'Academic year', 'select', false, ACADEMIC_YEAR_OPTIONS),
+    ],
+    columns: ['transaction_date', 'user_id', 'employee_name', 'type', 'amount', 'balance_after', 'reference_id', 'remarks'],
   },
   'warning_letter': {
     title: 'warning_letter',
@@ -949,7 +979,7 @@ export const navGroups: NavGroup[] = [
   group('HR', [
     {
       label: 'Human Resources',
-      items: ['leave_application', 'leave_balance', 'warning_letter', 'offer_letter', 'employee_document'],
+      items: ['leave_application', 'leave_balance', 'leave_ledger', 'warning_letter', 'offer_letter', 'employee_document'],
     },
   ]),
   group('Assets & Inventory', [
@@ -1003,6 +1033,7 @@ export const label = (key: string) => {
   if (key === 'salary_slip') return 'Salary / Payroll'
   if (key === 'leave_application') return 'Leave Application'
   if (key === 'leave_balance') return 'Leave Balance'
+  if (key === 'leave_ledger') return 'Leave Ledger'
   if (key === 'warning_letter') return 'Warning Letters'
   if (key === 'offer_letter') return 'Offer Letters'
   if (key === 'employee_document') return 'Employee Documents'

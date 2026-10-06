@@ -27,9 +27,10 @@ export default function SalarySlipModal({ slip, onClose }: SalarySlipProps) {
     async function loadData() {
       try {
         const empId = slip.emp_id || slip.emp_code || slip.id;
-        const [empRecords, leaveRecords] = await Promise.all([
+        const [empRecords, leaveRecords, balanceRecords] = await Promise.all([
           fetchCollectionData("employee_master"),
           fetchCollectionData("leave_application"),
+          fetchCollectionData("leave_balance"),
         ]);
 
         if (!isMounted) return;
@@ -47,11 +48,19 @@ export default function SalarySlipModal({ slip, onClose }: SalarySlipProps) {
             matchedEmp = { ...found, ...slip };
           }
         }
+
+        const matchedBal = balanceRecords?.find(
+          (b: any) =>
+            (matchedEmp.emp_id && b.emp_id === matchedEmp.emp_id) ||
+            (empId && b.emp_id === empId) ||
+            (slip.employee_name && String(b.employee_name || "").toLowerCase() === String(slip.employee_name).toLowerCase())
+        );
+
         setEmployeeData(matchedEmp);
         setAllLeaves(leaveRecords || []);
 
-        // Calculate leave summary
-        const summary = calculateEmployeeLeaveSummary(matchedEmp, leaveRecords || [], slipMonth, slipYear);
+        // Calculate leave summary with Supabase balance record
+        const summary = calculateEmployeeLeaveSummary(matchedEmp, leaveRecords || [], slipMonth, slipYear, matchedBal);
         setLeaveSummary(summary);
       } catch (err) {
         console.warn("Failed to load employee/leave data for salary slip:", err);

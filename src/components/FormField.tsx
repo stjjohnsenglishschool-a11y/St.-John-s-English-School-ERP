@@ -569,7 +569,7 @@ export default function FormField({
   }
 
   // Leave Application & Leave Balance: Lock Applicant to Logged In Teacher/Staff
-  if ((tableName === "leave_application" || tableName === "leave_balance") && field.key === "emp_id" && isStaffOrTeacher) {
+  if ((tableName === "leave_application" || tableName === "leave_balance" || tableName === "leave_ledger") && (field.key === "emp_id" || field.key === "user_id") && isStaffOrTeacher) {
     const empName =
       String(currentEmployeeRecord?.full_name || "") ||
       `${String(currentEmployeeRecord?.first_name || "")} ${String(currentEmployeeRecord?.last_name || "")}`.trim() ||
@@ -610,7 +610,7 @@ export default function FormField({
   }
 
   // Leave Application & Leave Balance: Lock Employee Name to Logged In Teacher/Staff
-  if ((tableName === "leave_application" || tableName === "leave_balance") && field.key === "employee_name" && isStaffOrTeacher) {
+  if ((tableName === "leave_application" || tableName === "leave_balance" || tableName === "leave_ledger") && field.key === "employee_name" && isStaffOrTeacher) {
     const empName =
       String(value || "") ||
       String(currentEmployeeRecord?.full_name || "") ||
@@ -633,13 +633,13 @@ export default function FormField({
     );
   }
 
-  // Leave Balance: Balance Remaining Auto-calculated display
-  if (tableName === "leave_balance" && field.key === "balance_remaining") {
-    const bal = Number(value ?? 12);
+  // Leave Balance: Balance Remaining & Current PL Balance Auto-calculated display
+  if (tableName === "leave_balance" && (field.key === "balance_remaining" || field.key === "current_pl_balance")) {
+    const bal = Number(value ?? 0);
     return (
       <label>
         <span>
-          Balance Remaining (Auto Calculated) <b>*</b>
+          {field.label} (Privilege Leave) <b>*</b>
         </span>
         <div
           style={{
@@ -655,10 +655,10 @@ export default function FormField({
           }}
         >
           <span style={{ fontWeight: 800, fontSize: "13px", color: bal > 0 ? "#15803d" : "#b91c1c" }}>
-            {bal} Days Remaining
+            {bal} PL Available
           </span>
           <span style={{ fontSize: "11px", color: bal > 0 ? "#166534" : "#991b1b", fontWeight: 600 }}>
-            (Entitled − Taken)
+            {bal > 0 ? "✓ Eligible for Leave" : "⚠️ Insufficient Balance"}
           </span>
         </div>
       </label>
